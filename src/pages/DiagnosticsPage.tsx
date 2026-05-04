@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { testEndpoint, testRouterHealth, testWebuiEndpoint, getSettings } from '../services/api';
+import { testEndpointWithError, testRouterHealthWithError, testWebuiEndpointWithError, getSettings } from '../services/api';
 import { ENDPOINTS } from '../config/endpoints';
 import StatusBar from '../components/StatusBar';
 import {
@@ -34,57 +34,57 @@ const DiagnosticsPage: React.FC = () => {
   const initialLoadRef = useRef(true);
 
   const performAllChecks = useCallback(async () => {
-    setIsChecking(true);
-    const checks: Array<{ name: string; fn: () => Promise<boolean> }> = [
-      { name: 'gateway', fn: () => testEndpoint('gateway') },
-      { name: 'llama', fn: () => testEndpoint('llama') },
-      { name: 'router', fn: () => testRouterHealth() },
-      { name: 'webui', fn: () => testWebuiEndpoint() },
-    ];
-
-    const newResults: CheckResult[] = [];
-
-    for (const check of checks) {
-       const startTime = performance.now();
-       try {
-         const ok = await check.fn();
-         const elapsed = Math.round(performance.now() - startTime);
-         newResults.push({
-           service: check.name,
-           endpoint: ENDPOINTS[check.name as keyof typeof ENDPOINTS]?.local || '',
-           status: ok ? 'online' : 'offline',
-           latency: ok ? elapsed : null,
-           error: ok ? null : 'No response',
-         });
-       } catch (err) {
-         newResults.push({
-           service: check.name,
-           endpoint: ENDPOINTS[check.name as keyof typeof ENDPOINTS]?.local || '',
-           status: 'offline',
-           latency: null,
-           error: err instanceof Error ? err.message : 'Connection failed',
-         });
-       }
-     }
-
-    setResults(newResults);
-    setLastCheck(new Date());
-
-    // Track consecutive failures
-    setConsecutiveFailures((prev) => {
-      const next = { ...prev };
-      for (const r of newResults) {
-        if (r.status === 'offline') {
-          next[r.service] = (next[r.service] || 0) + 1;
-        } else {
-          next[r.service] = 0;
+     setIsChecking(true);
+     const checks: Array<{ name: string; fn: () => Promise<{ ok: boolean; status?: number; error?: string }> }> = [
+       { name: 'gateway', fn: () => testEndpointWithError('gateway') },
+       { name: 'llama', fn: () => testEndpointWithError('llama') },
+       { name: 'router', fn: () => testRouterHealthWithError() },
+       { name: 'webui', fn: () => testWebuiEndpointWithError() },
+     ];
+ 
+     const newResults: CheckResult[] = [];
+ 
+     for (const check of checks) {
+        const startTime = performance.now();
+        try {
+          const result = await check.fn();
+          const elapsed = Math.round(performance.now() - startTime);
+          newResults.push({
+            service: check.name,
+            endpoint: ENDPOINTS[check.name as keyof typeof ENDPOINTS]?.local || '',
+            status: result.ok ? 'online' : 'offline',
+            latency: result.ok ? elapsed : null,
+            error: result.error || (result.ok ? null : 'No response'),
+          });
+        } catch (err) {
+          newResults.push({
+            service: check.name,
+            endpoint: ENDPOINTS[check.name as keyof typeof ENDPOINTS]?.local || '',
+            status: 'offline',
+            latency: null,
+            error: err instanceof Error ? err.message : 'Connection failed',
+          });
         }
       }
-      return next;
-    });
-
-    setIsChecking(false);
-  }, []);
+ 
+     setResults(newResults);
+     setLastCheck(new Date());
+ 
+     // Track consecutive failures
+     setConsecutiveFailures((prev) => {
+       const next = { ...prev };
+       for (const r of newResults) {
+         if (r.status === 'offline') {
+           next[r.service] = (next[r.service] || 0) + 1;
+         } else {
+           next[r.service] = 0;
+         }
+       }
+       return next;
+     });
+ 
+     setIsChecking(false);
+   }, []);
 
   // Initial test on mount
   useEffect(() => {

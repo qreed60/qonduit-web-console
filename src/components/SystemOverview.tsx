@@ -13,10 +13,12 @@ interface SystemOverviewProps {
     gateway: boolean | null;
     llama: boolean | null;
     router: boolean | null;
+    webui?: boolean | null;
   };
   healthLoading: boolean;
   routerStatus: { running: boolean; exists: boolean } | null;
   selectedModel: string;
+  endpointErrors?: Record<string, string | null>;
   onRefresh: () => void;
 }
 
@@ -25,6 +27,7 @@ const SystemOverview: React.FC<SystemOverviewProps> = ({
   healthLoading,
   routerStatus,
   selectedModel,
+  endpointErrors,
   onRefresh,
 }) => {
   const isRunning = routerStatus?.running;
@@ -124,23 +127,39 @@ const SystemOverview: React.FC<SystemOverviewProps> = ({
         ))}
       </div>
 
-      {/* Model Info Bar */}
-      {selectedModel && (
-        <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary/50 rounded-lg border border-border-subtle">
-          <div className="flex items-center gap-2">
-            <Server className="w-3.5 h-3.5 text-text-tertiary" />
-            <span className="text-xs text-text-secondary">Selected:</span>
-            <span className="text-xs font-mono text-text-primary truncate max-w-[200px]" title={selectedModel}>
-              {selectedModel}
-            </span>
-          </div>
-          <span className="text-[10px] text-text-tertiary">
-            Last checked: {new Date(lastChecked).toLocaleTimeString()}
-          </span>
-        </div>
-      )}
-    </div>
-  );
-};
+      {/* Error Details */}
+       {endpointErrors && Object.values(endpointErrors).some((e) => e) && (
+         <div className="bg-status-error/5 border border-status-error/15 rounded-lg p-3">
+           <h4 className="text-[10px] font-medium text-status-error mb-1.5 uppercase tracking-wider">Health Check Errors</h4>
+           <div className="space-y-1">
+             {Object.entries(endpointErrors)
+               .filter(([, error]) => error)
+               .map(([key, error]) => (
+                 <p key={key} className="text-[10px] text-status-error/80 font-mono break-all leading-relaxed">
+                   <span className="font-medium text-status-error/90">{key}:</span> {error}
+                 </p>
+               ))}
+           </div>
+         </div>
+       )}
+ 
+       {/* Model Info Bar */}
+       {selectedModel && (
+         <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary/50 rounded-lg border border-border-subtle">
+           <div className="flex items-center gap-2">
+             <Server className="w-3.5 h-3.5 text-text-tertiary" />
+             <span className="text-xs text-text-secondary">Selected:</span>
+             <span className="text-xs font-mono text-text-primary truncate max-w-[200px]" title={selectedModel}>
+               {selectedModel}
+             </span>
+           </div>
+           <span className="text-[10px] text-text-tertiary">
+             Last checked: {new Date(lastChecked).toLocaleTimeString()}
+           </span>
+         </div>
+       )}
+     </div>
+   );
+ };
 
 export default SystemOverview;

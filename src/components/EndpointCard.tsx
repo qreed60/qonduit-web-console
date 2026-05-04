@@ -16,6 +16,7 @@ interface EndpointCardProps {
   onTest: () => void;
   testLoading: boolean;
   externalUrl?: string; // URL to open in new tab (e.g., WebUI UI)
+  error?: string | null; // Detailed error message from health check
 }
 
 const EndpointCard: React.FC<EndpointCardProps> = ({
@@ -27,6 +28,7 @@ const EndpointCard: React.FC<EndpointCardProps> = ({
   onTest,
   testLoading,
   externalUrl,
+  error,
 }) => {
   const [copied, setCopied] = useState(false);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
@@ -103,29 +105,36 @@ const EndpointCard: React.FC<EndpointCardProps> = ({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <StatusBadge status={status} label={statusLabel} />
-          {checkedAt && (
-            <span className="flex items-center gap-1 text-[10px] text-text-tertiary">
-              <Clock className="w-2.5 h-2.5" />
-              {(() => {
-                const diff = Math.floor((Date.now() - checkedAt.getTime()) / 1000);
-                return diff < 60 ? `${diff}s ago` : `${Math.floor(diff / 60)}m ago`;
-              })()}
-            </span>
-          )}
-        </div>
-        <button
-          onClick={handleTest}
-          disabled={testLoading}
-          className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border-primary text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-        >
-          {testLoading ? 'Testing...' : 'Test'}
-        </button>
-      </div>
-    </div>
-  );
-};
+       <div className="flex items-center justify-between">
+         <div className="flex items-center gap-2">
+           <StatusBadge status={status} label={statusLabel} />
+           {checkedAt && (
+             <span className="flex items-center gap-1 text-[10px] text-text-tertiary">
+               <Clock className="w-2.5 h-2.5" />
+               {(() => {
+                 const diff = Math.floor((Date.now() - checkedAt.getTime()) / 1000);
+                 return diff < 60 ? `${diff}s ago` : `${Math.floor(diff / 60)}m ago`;
+               })()}
+             </span>
+           )}
+         </div>
+         <button
+           onClick={handleTest}
+           disabled={testLoading}
+           className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border-primary text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+         >
+           {testLoading ? 'Testing...' : 'Test'}
+         </button>
+       </div>
+ 
+       {/* Error Detail */}
+       {error && (
+         <div className="mt-3 p-2.5 bg-status-error/5 border border-status-error/15 rounded-lg">
+           <p className="text-[10px] text-status-error font-mono break-all leading-relaxed">{error}</p>
+         </div>
+       )}
+     </div>
+   );
+ };
 
 export default EndpointCard;

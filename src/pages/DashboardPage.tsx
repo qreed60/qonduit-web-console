@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getSettings, fetchProviderModels, launchModel as apiLaunchModel, stopModel as apiStopModel, testEndpoint, testRouterHealth, testWebuiEndpoint, getRouterStatus } from '../services/api';
+import { getSettings, fetchProviderModels, launchModel as apiLaunchModel, stopModel as apiStopModel, testEndpointWithError, testRouterHealthWithError, testWebuiEndpointWithError, getRouterStatus } from '../services/api';
 import { Settings, ProviderType, SelectableModel, Model } from '../types';
 import { ENDPOINTS } from '../config/endpoints';
 import StatusBar from '../components/StatusBar';
@@ -21,12 +21,18 @@ import {
 const DashboardPage: React.FC = () => {
   const [settings] = useState<Settings>(getSettings());
   const [endpointHealth, setEndpointHealth] = useState<{
-    gateway: boolean | null;
-    llama: boolean | null;
-    router: boolean | null;
-    webui: boolean | null;
-  }>({ gateway: null, llama: null, router: null, webui: null });
-  const [healthLoading, setHealthLoading] = useState(false);
+     gateway: boolean | null;
+     llama: boolean | null;
+     router: boolean | null;
+     webui: boolean | null;
+   }>({ gateway: null, llama: null, router: null, webui: null });
+   const [endpointErrors, setEndpointErrors] = useState<Record<string, string | null>>({
+     gateway: null,
+     llama: null,
+     router: null,
+     webui: null,
+   });
+   const [healthLoading, setHealthLoading] = useState(false);
   const [routerStatus, setRouterStatus] = useState<{
     running: boolean;
     exists: boolean;
@@ -118,19 +124,32 @@ const DashboardPage: React.FC = () => {
   }, [settings.defaultProvider]);
 
   const testAllEndpoints = async () => {
-     setHealthLoading(true);
-     try {
-       const [gateway, llama, router, webui] = await Promise.all([
-         testEndpoint('gateway').catch(() => false),
-         testEndpoint('llama').catch(() => false),
-         testRouterHealth().catch(() => false),
-         testWebuiEndpoint().catch(() => false),
-       ]);
-       setEndpointHealth({ gateway, llama, router, webui });
-     } finally {
-       setHealthLoading(false);
-     }
-   };
+      setHealthLoading(true);
+      try {
+        const [gatewayResult, llamaResult, routerResult, webuiResult] = await Promise.all([
+          testEndpointWithError('gateway').catch(() => ({ ok: false, error: 'Connection failed' })),
+          testEndpointWithError('llama').catch(() => ({ ok: false, error: 'Connection failed' })),
+          testRouterHealthWithError().catch(() => ({ ok: false, error: 'Connection failed' })),
+          testWebuiEndpointWithError().catch(() => ({ ok: false, error: 'Connection failed' })),
+        ]);
+ 
+        setEndpointHealth({
+          gateway: gatewayResult.ok,
+          llama: llamaResult.ok,
+          router: routerResult.ok,
+          webui: webuiResult.ok,
+        });
+ 
+        setEndpointErrors({
+          gateway: gatewayResult.error || null,
+          llama: llamaResult.error || null,
+          router: routerResult.error || null,
+          webui: webuiResult.error || null,
+        });
+      } finally {
+        setHealthLoading(false);
+      }
+    };
 
   const handleLaunch = async () => {
     if (!selectedModel) return;
@@ -263,77 +282,94 @@ const DashboardPage: React.FC = () => {
 
         {/* System Overview */}
          <div className="mb-6">
-           <SystemOverview
-             endpointHealth={endpointHealth}
-             healthLoading={healthLoading}
-             routerStatus={routerStatus}
-             selectedModel={selectedModel}
-             onRefresh={testAllEndpoints}
-           />
-         </div>
+            <SystemOverview
+              endpointHealth={endpointHealth}
+              healthLoading={healthLoading}
+              routerStatus={routerStatus}
+              selectedModel={selectedModel}
+              endpointErrors={endpointErrors}
+              onRefresh={testAllEndpoints}
+            />
+          </div>
 
         {/* Endpoint Cards */}
          <div className="mb-6">
            <h2 className="text-lg font-semibold text-text-primary mb-4">Endpoints</h2>
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              <EndpointCard
-               name="Memory Gateway"
-               icon="🌐"
-               description="Chat completions & memory"
-               url={ENDPOINTS.gateway[mode]}
-               status={endpointHealth.gateway === true ? 'online' : endpointHealth.gateway === false ? 'offline' : healthLoading ? 'loading' : 'unknown'}
-               onTest={() => {
-                 setHealthLoading(true);
-                 testEndpoint('gateway')
-                   .then((result) => setEndpointHealth((prev) => ({ ...prev, gateway: result })))
-                   .finally(() => setHealthLoading(false));
-               }}
-               testLoading={healthLoading}
-             />
+                name="Memory Gateway"
+                icon="🌐"
+                description="Chat completions & memory"
+                url={ENDPOINTS.gateway[mode]}
+                status={endpointHealth.gateway === true ? 'online' : endpointHealth.gateway === false ? 'offline' : healthLoading ? 'loading' : 'unknown'}
+                error={endpointErrors.gateway}
+                onTest={() => {
+                  setHealthLoading(true);
+                  testEndpointWithError('gateway')
+                    .then((result) => {
+                      setEndpointHealth((prev) => ({ ...prev, gateway: result.ok }));
+                      setEndpointErrors((prev) => ({ ...prev, gateway: result.error || null }));
+                    })
+                    .finally(() => setHealthLoading(false));
+                }}
+                testLoading={healthLoading}
+              />
              <EndpointCard
-                name="Direct (llama.cpp)"
-                icon="⚡"
-                description="Direct inference server"
-                url={ENDPOINTS.llama[mode]}
-                status={endpointHealth.llama === true ? 'online' : endpointHealth.llama === false ? 'offline' : healthLoading ? 'loading' : 'unknown'}
-                externalUrl={ENDPOINTS.llama[mode]}
-                onTest={() => {
-                  setHealthLoading(true);
-                  testEndpoint('llama')
-                    .then((result) => setEndpointHealth((prev) => ({ ...prev, llama: result })))
-                    .finally(() => setHealthLoading(false));
-                }}
-                testLoading={healthLoading}
-              />
+                 name="Direct (llama.cpp)"
+                 icon="⚡"
+                 description="Direct inference server"
+                 url={ENDPOINTS.llama[mode]}
+                 status={endpointHealth.llama === true ? 'online' : endpointHealth.llama === false ? 'offline' : healthLoading ? 'loading' : 'unknown'}
+                 error={endpointErrors.llama}
+                 externalUrl={ENDPOINTS.llama[mode]}
+                 onTest={() => {
+                   setHealthLoading(true);
+                   testEndpointWithError('llama')
+                     .then((result) => {
+                       setEndpointHealth((prev) => ({ ...prev, llama: result.ok }));
+                       setEndpointErrors((prev) => ({ ...prev, llama: result.error || null }));
+                     })
+                     .finally(() => setHealthLoading(false));
+                 }}
+                 testLoading={healthLoading}
+               />
               <EndpointCard
-                name="Router API"
-                icon="🔀"
-                description="Model router & container manager"
-                url={ENDPOINTS.router[mode]}
-                status={endpointHealth.router === true ? 'online' : endpointHealth.router === false ? 'offline' : healthLoading ? 'loading' : 'unknown'}
-                onTest={() => {
-                  setHealthLoading(true);
-                  testRouterHealth()
-                    .then((result) => setEndpointHealth((prev) => ({ ...prev, router: result })))
-                    .finally(() => setHealthLoading(false));
-                }}
-                testLoading={healthLoading}
-              />
+                  name="Router API"
+                  icon="🔀"
+                  description="Model router & container manager"
+                  url={ENDPOINTS.router[mode]}
+                  status={endpointHealth.router === true ? 'online' : endpointHealth.router === false ? 'offline' : healthLoading ? 'loading' : 'unknown'}
+                  error={endpointErrors.router}
+                  onTest={() => {
+                    setHealthLoading(true);
+                    testRouterHealthWithError()
+                      .then((result) => {
+                        setEndpointHealth((prev) => ({ ...prev, router: result.ok }));
+                        setEndpointErrors((prev) => ({ ...prev, router: result.error || null }));
+                      })
+                      .finally(() => setHealthLoading(false));
+                  }}
+                  testLoading={healthLoading}
+                />
               <EndpointCard
-                name="Open WebUI"
-                icon="💬"
-                description="Web-based chat interface"
-                url={ENDPOINTS.webui[mode]}
-                status={endpointHealth.webui === true ? 'online' : endpointHealth.webui === false ? 'offline' : healthLoading ? 'loading' : 'unknown'}
-                externalUrl={ENDPOINTS.webui[mode]}
-                onTest={() => {
-                  setHealthLoading(true);
-                  testWebuiEndpoint()
-                    .then((result) => setEndpointHealth((prev) => ({ ...prev, webui: result })))
-                    .finally(() => setHealthLoading(false));
-                }}
-                testLoading={healthLoading}
-              />
+                   name="Open WebUI"
+                   icon="💬"
+                   description="Web-based chat interface"
+                   url={ENDPOINTS.webui[mode]}
+                   status={endpointHealth.webui === true ? 'online' : endpointHealth.webui === false ? 'offline' : healthLoading ? 'loading' : 'unknown'}
+                   error={endpointErrors.webui}
+                   externalUrl={ENDPOINTS.webui[mode]}
+                   onTest={() => {
+                     setHealthLoading(true);
+                     testWebuiEndpointWithError()
+                       .then((result) => {
+                         setEndpointHealth((prev) => ({ ...prev, webui: result.ok }));
+                         setEndpointErrors((prev) => ({ ...prev, webui: result.error || null }));
+                       })
+                       .finally(() => setHealthLoading(false));
+                   }}
+                   testLoading={healthLoading}
+                 />
            </div>
          </div>
 

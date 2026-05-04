@@ -185,14 +185,23 @@ export async function fetchChatCompletions(
   return response.json();
 }
 
+// ── Health check result type ────────────────────────────────────────────────
+
+export interface HealthCheckResult {
+  ok: boolean;
+  status?: number;
+  error?: string;
+}
+
 // ── Health checks ───────────────────────────────────────────────────────────
 
 /**
  * Test whether an endpoint is reachable by hitting its /health path.
+ * Uses GET (not HEAD) to avoid 405 Method Not Allowed errors.
  */
 export async function testEndpoint(key: 'gateway' | 'llama' | 'router' | 'webui'): Promise<boolean> {
   try {
-    const response = await fetch(apiPath(key, '/health'), { method: 'HEAD' });
+    const response = await fetch(apiPath(key, '/health'), { method: 'GET' });
     return response.ok;
   } catch {
     return false;
@@ -201,10 +210,11 @@ export async function testEndpoint(key: 'gateway' | 'llama' | 'router' | 'webui'
 
 /**
  * Test the WebUI health endpoint (Open WebUI typically uses /health).
+ * Uses GET (not HEAD) to avoid 405 Method Not Allowed errors.
  */
 export async function testWebuiEndpoint(): Promise<boolean> {
   try {
-    const response = await fetch(apiPath('webui', '/health'), { method: 'HEAD' });
+    const response = await fetch(apiPath('webui', '/health'), { method: 'GET' });
     return response.ok;
   } catch {
     return false;
@@ -212,7 +222,7 @@ export async function testWebuiEndpoint(): Promise<boolean> {
 }
 
 /**
- * Test the router health endpoint (POST /health on the Flask router API).
+ * Test the router health endpoint (GET /api/v1/qonduit-router/health on the Flask router API).
  */
 export async function testRouterHealth(): Promise<boolean> {
   try {
@@ -220,6 +230,92 @@ export async function testRouterHealth(): Promise<boolean> {
     return response.ok;
   } catch {
     return false;
+  }
+}
+
+// ── Detailed health checks with error reporting ─────────────────────────────
+
+/**
+ * Test an endpoint and return detailed error information.
+ * Detects 405 errors and suggests the correct HTTP method.
+ */
+export async function testEndpointWithError(key: 'gateway' | 'llama' | 'router' | 'webui'): Promise<HealthCheckResult> {
+  const url = apiPath(key, '/health');
+  try {
+    const response = await fetch(url, { method: 'GET' });
+    if (response.ok) {
+      return { ok: true, status: response.status };
+    }
+    if (response.status === 405) {
+      const allow = response.headers.get('allow');
+      return {
+        ok: false,
+        status: response.status,
+        error: `HTTP 405 Method Not Allowed. Endpoint only allows: ${allow || 'unknown'}. Try GET instead of HEAD.`,
+      };
+    }
+    return { ok: false, status: response.status, error: `HTTP ${response.status}: ${response.statusText}` };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Connection failed';
+    return { ok: false, error: `${message} (URL: ${url})` };
+  }
+}
+
+/**
+ * Test the WebUI health endpoint with detailed error reporting.
+ */
+export async function testWebuiEndpointWithError(): Promise<HealthCheckResult> {
+  const url = apiPath('webui', '/health');
+  try {
+    const response = await fetch(url, { method: 'GET' });
+    if (response.ok) {
+      return { ok: true, status: response.status };
+    }
+    if (response.status === 405) {
+      const allow = response.headers.get('allow');
+      return {
+        ok: false,
+        status: response.status,
+        error: `HTTP 405 Method Not Allowed. Endpoint only allows: ${allow || 'unknown'}.`,
+      };
+    }
+    return { ok: false, status: response.status, error: `HTTP ${response.status}: ${response.statusText}` };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Connection failed';
+    return { ok: false, error: `${message} (URL: ${url})` };
+  }
+}
+
+/**
+ * Test the router health endpoint with detailed error reporting.
+ * Detects CORS errors and suggests a server-side fix.
+ */
+export async function testRouterHealthWithError(): Promise<HealthCheckResult> {
+  const url = apiPath('router', '/api/v1/qonduit-router/health');
+  try {
+    const response = await fetch(url, { method: 'GET' });
+    if (response.ok) {
+      return { ok: true, status: response.status };
+    }
+    if (response.status === 405) {
+      const allow = response.headers.get('allow');
+      return {
+        ok: false,
+        status: response.status,
+        error: `HTTP 405 Method Not Allowed. Endpoint only allows: ${allow || 'unknown'}.`,
+      };
+    }
+    return { ok: false, status: response.status, error: `HTTP ${response.status}: ${response.statusText}` };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Connection failed';
+    // Detect CORS errors — curl works but browser blocks
+    if (message.includes('Failed to fetch') || message.includes('NetworkError') || message.includes('CORS')) {
+      return {
+        ok: false,
+        error: `Router API reachable by curl but likely blocked by CORS. Add CORS headers to router API at ${url}.`,
+      };
+    }
+    return { ok: false, error: `${message} (URL: ${url})` };
   }
 }
 
