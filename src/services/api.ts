@@ -54,8 +54,22 @@ function migrateSettings(): Settings {
   return { ...DEFAULT_SETTINGS, ...saved, endpointMode: getMode() };
 }
 
+/**
+ * Migrate invalid provider values from old settings.
+ * Router and WebUI are no longer valid chat providers.
+ */
+function migrateProvider(settings: Settings): Settings {
+  const provider = settings.defaultProvider as string;
+  if (provider === 'Router' || provider === 'WebUI') {
+    const migrated: Settings = { ...settings, defaultProvider: 'Direct' };
+    localStorage.setItem('qonduit-settings', JSON.stringify(migrated));
+    return migrated;
+  }
+  return settings;
+}
+
 export function getSettings(): Settings {
-  return migrateSettings();
+  return migrateProvider(migrateSettings());
 }
 
 export function saveSettings(settings: Settings): void {
@@ -254,27 +268,21 @@ export async function fetchRouterModels(): Promise<{ models: NormalizedModel[]; 
 
 /**
  * Fetch models from the correct endpoint based on the provider type.
- * Returns NormalizedModel[] for all providers (including Router).
+ * Returns NormalizedModel[] for chat providers (Gateway/Direct).
  *
  * | Provider | Endpoint                              | Response shape       |
  * |----------|---------------------------------------|----------------------|
  * | Gateway  | gatewayBase + /v1/models              | NormalizedModel[]    |
- * | Router   | routerBase + /api/v1/qonduit-router/models | { models: NormalizedModel[], suggestedCtx: number } |
  * | Direct   | llamaBase + /v1/models                | NormalizedModel[]    |
- * | WebUI    | N/A — external link only              | Empty array          |
  */
-export async function fetchProviderModels(provider: ProviderType): Promise<NormalizedModel[] | { models: NormalizedModel[]; suggestedCtx: number }> {
+export async function fetchProviderModels(provider: ProviderType): Promise<NormalizedModel[]> {
   switch (provider) {
     case 'Gateway':
       return fetchGatewayModels();
     case 'Direct':
       return fetchDirectModels();
-    case 'Router':
-      return fetchRouterModels();
-    case 'WebUI':
-      return { models: [], suggestedCtx: 8192 };
     default:
-      return { models: [], suggestedCtx: 8192 };
+      return [];
   }
 }
 
@@ -326,22 +334,9 @@ export interface HealthCheckResult {
  * Test whether an endpoint is reachable by hitting its /health path.
  * Uses GET (not HEAD) to avoid 405 Method Not Allowed errors.
  */
-export async function testEndpoint(key: 'gateway' | 'llama' | 'router' | 'webui'): Promise<boolean> {
+export async function testEndpoint(key: 'gateway' | 'llama' | 'router'): Promise<boolean> {
   try {
     const response = await fetch(apiPath(key, '/health'), { method: 'GET' });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Test the WebUI health endpoint (Open WebUI typically uses /health).
- * Uses GET (not HEAD) to avoid 405 Method Not Allowed errors.
- */
-export async function testWebuiEndpoint(): Promise<boolean> {
-  try {
-    const response = await fetch(apiPath('webui', '/health'), { method: 'GET' });
     return response.ok;
   } catch {
     return false;
@@ -366,7 +361,7 @@ export async function testRouterHealth(): Promise<boolean> {
  * Test an endpoint and return detailed error information.
  * Detects 405 errors and suggests the correct HTTP method.
  */
-export async function testEndpointWithError(key: 'gateway' | 'llama' | 'router' | 'webui'): Promise<HealthCheckResult> {
+export async function testEndpointWithError(key: 'gateway' | 'llama' | 'router'): Promise<HealthCheckResult> {
   const url = apiPath(key, '/health');
   try {
     const response = await fetch(url, { method: 'GET' });
@@ -379,31 +374,6 @@ export async function testEndpointWithError(key: 'gateway' | 'llama' | 'router' 
         ok: false,
         status: response.status,
         error: `HTTP 405 Method Not Allowed. Endpoint only allows: ${allow || 'unknown'}. Try GET instead of HEAD.`,
-      };
-    }
-    return { ok: false, status: response.status, error: `HTTP ${response.status}: ${response.statusText}` };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Connection failed';
-    return { ok: false, error: `${message} (URL: ${url})` };
-  }
-}
-
-/**
- * Test the WebUI health endpoint with detailed error reporting.
- */
-export async function testWebuiEndpointWithError(): Promise<HealthCheckResult> {
-  const url = apiPath('webui', '/health');
-  try {
-    const response = await fetch(url, { method: 'GET' });
-    if (response.ok) {
-      return { ok: true, status: response.status };
-    }
-    if (response.status === 405) {
-      const allow = response.headers.get('allow');
-      return {
-        ok: false,
-        status: response.status,
-        error: `HTTP 405 Method Not Allowed. Endpoint only allows: ${allow || 'unknown'}.`,
       };
     }
     return { ok: false, status: response.status, error: `HTTP ${response.status}: ${response.statusText}` };

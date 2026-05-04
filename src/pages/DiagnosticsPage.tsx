@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { testEndpointWithError, testRouterHealthWithError, testWebuiEndpointWithError, getSettings } from '../services/api';
+import { testEndpointWithError, testRouterHealthWithError, getSettings } from '../services/api';
 import { ENDPOINTS } from '../config/endpoints';
 import StatusBar from '../components/StatusBar';
 import {
@@ -25,22 +25,20 @@ const DiagnosticsPage: React.FC = () => {
   const [isChecking, setIsChecking] = useState(false);
   const [lastCheck, setLastCheck] = useState<Date | null>(null);
   const [consecutiveFailures, setConsecutiveFailures] = useState<Record<string, number>>({
-    gateway: 0,
-    llama: 0,
-    router: 0,
-    webui: 0,
-  });
+     gateway: 0,
+     llama: 0,
+     router: 0,
+   });
 
   const initialLoadRef = useRef(true);
 
   const performAllChecks = useCallback(async () => {
      setIsChecking(true);
      const checks: Array<{ name: string; fn: () => Promise<{ ok: boolean; status?: number; error?: string }> }> = [
-       { name: 'gateway', fn: () => testEndpointWithError('gateway') },
-       { name: 'llama', fn: () => testEndpointWithError('llama') },
-       { name: 'router', fn: () => testRouterHealthWithError() },
-       { name: 'webui', fn: () => testWebuiEndpointWithError() },
-     ];
+        { name: 'gateway', fn: () => testEndpointWithError('gateway') },
+        { name: 'llama', fn: () => testEndpointWithError('llama') },
+        { name: 'router', fn: () => testRouterHealthWithError() },
+      ];
  
      const newResults: CheckResult[] = [];
  
@@ -112,14 +110,13 @@ const DiagnosticsPage: React.FC = () => {
   };
 
   const getServiceLabel = (name: string) => {
-    const labels: Record<string, string> = {
-      gateway: 'Memory Gateway',
-      llama: 'Direct (llama.cpp)',
-      router: 'Router API',
-      webui: 'Open WebUI',
-    };
-    return labels[name] || name;
-  };
+     const labels: Record<string, string> = {
+       gateway: 'Memory Gateway',
+       llama: 'Direct (llama.cpp)',
+       router: 'Router API',
+     };
+     return labels[name] || name;
+   };
 
   return (
     <div className="flex flex-col h-screen bg-bg-primary text-text-primary">

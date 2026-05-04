@@ -143,38 +143,39 @@ const RouterPage: React.FC = () => {
         </div>
 
         {/* Launch Instructions */}
-        <div className="bg-bg-card rounded-xl border border-border-primary p-5">
-          <h3 className="text-sm font-semibold text-text-primary mb-3">How to Launch a Model</h3>
-          <div className="space-y-2">
-            <p className="text-xs text-text-secondary leading-relaxed">
-              Router models are local GGUF files that can be launched and stopped via the Router API.
-              They are separate from Gateway and Direct models which are used for chat inference.
-            </p>
-            <ol className="text-xs text-text-secondary space-y-1.5 list-decimal list-inside">
-              <li>Go to the <span className="text-accent-primary font-medium">Dashboard</span></li>
-              <li>Set <span className="text-accent-primary font-medium">Default Provider</span> to "Router" in Settings</li>
-              <li>Select a model from the dropdown and click <span className="text-accent-primary font-medium">Launch Model</span></li>
-            </ol>
-            <a
-              href="#/dashboard"
-              className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-accent-primary/10 text-accent-primary border border-accent-primary/20 rounded-lg text-xs font-medium hover:bg-accent-primary/20 transition-colors"
-            >
-              <ExternalLink className="w-3 h-3" />
-              Go to Dashboard
-            </a>
-          </div>
-        </div>
-
-        {/* Info */}
-        <div className="bg-bg-card rounded-xl border border-border-primary p-5">
-          <h3 className="text-sm font-semibold text-text-primary mb-3">About the Router</h3>
-          <p className="text-xs text-text-secondary leading-relaxed">
-            The Qonduit Router manages model lifecycle, handles intelligent request routing,
-            and provides a unified API for chat completions. It runs as a containerized service
-            on your local network. Router models are GGUF files that are launched/stopped via the
-            Flask API, while Gateway and Direct models are used for inference through their respective endpoints.
-          </p>
-        </div>
+         <div className="bg-bg-card rounded-xl border border-border-primary p-5">
+           <h3 className="text-sm font-semibold text-text-primary mb-3">How to Launch a Model</h3>
+           <div className="space-y-2">
+             <p className="text-xs text-text-secondary leading-relaxed">
+               Router models are local GGUF files that can be launched and stopped via the Router API.
+               The Router is a control-plane service — it manages model lifecycle independently of your chat provider setting.
+             </p>
+             <ol className="text-xs text-text-secondary space-y-1.5 list-decimal list-inside">
+               <li>Go to the <span className="text-accent-primary font-medium">Dashboard</span></li>
+               <li>Select a model from the <span className="text-accent-primary font-medium">Router Model Control</span> dropdown</li>
+               <li>Set the context size (or use the suggested value)</li>
+               <li>Click <span className="text-accent-primary font-medium">Launch Model</span></li>
+             </ol>
+             <a
+               href="#/dashboard"
+               className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-accent-primary/10 text-accent-primary border border-accent-primary/20 rounded-lg text-xs font-medium hover:bg-accent-primary/20 transition-colors"
+             >
+               <ExternalLink className="w-3 h-3" />
+               Go to Dashboard
+             </a>
+           </div>
+         </div>
+ 
+         {/* Info */}
+         <div className="bg-bg-card rounded-xl border border-border-primary p-5">
+           <h3 className="text-sm font-semibold text-text-primary mb-3">About the Router</h3>
+           <p className="text-xs text-text-secondary leading-relaxed">
+             The Qonduit Router is a control-plane service that manages model lifecycle.
+             It launches and stops llama.cpp servers that serve GGUF models via the Direct endpoint.
+             Router operation is independent of your chat provider setting (Gateway or Direct) —
+             you can launch models from the Dashboard at any time.
+           </p>
+         </div>
       </div>
     </div>
   );

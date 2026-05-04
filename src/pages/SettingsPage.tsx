@@ -69,7 +69,7 @@ const SettingsPage: React.FC = () => {
            setTimeout(() => setToastMessage(null), 4000);
            return;
          }
-         setEndpointOverride(key as 'gateway' | 'router' | 'llama' | 'webui', value);
+         setEndpointOverride(key as 'gateway' | 'router' | 'llama', value);
        }
      }
      setToastMessage('Endpoint overrides applied — page will refresh');
@@ -197,16 +197,14 @@ const SettingsPage: React.FC = () => {
                     Default Provider
                   </label>
                   <select
-                    name="defaultProvider"
-                    value={formData.defaultProvider}
-                    onChange={handleChange}
-                    className="w-full px-5 py-3 bg-bg-secondary border border-border-primary rounded-xl text-text-primary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 transition-all duration-200"
-                  >
-                    <option value="Direct">Direct</option>
-                    <option value="Gateway">Gateway</option>
-                    <option value="Router">Router</option>
-                    <option value="WebUI">WebUI</option>
-                  </select>
+                     name="defaultProvider"
+                     value={formData.defaultProvider}
+                     onChange={handleChange}
+                     className="w-full px-5 py-3 bg-bg-secondary border border-border-primary rounded-xl text-text-primary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 transition-all duration-200"
+                   >
+                     <option value="Direct">Direct</option>
+                     <option value="Gateway">Gateway</option>
+                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-text-secondary mb-2">

@@ -12,7 +12,7 @@
  */
 
 export type EndpointMode = 'local' | 'public';
-export type EndpointKey = 'gateway' | 'router' | 'llama' | 'webui';
+export type EndpointKey = 'gateway' | 'router' | 'llama';
 
 // ── Local LAN defaults ──────────────────────────────────────────────────────
 
@@ -20,7 +20,6 @@ const LOCAL_DEFAULTS: Record<EndpointKey, string> = {
   gateway: 'http://192.168.5.5:8090',
   router: 'http://192.168.5.5:5001',
   llama: 'http://192.168.5.5:8080',
-  webui: 'http://192.168.5.5:3000',
 };
 
 // ── Public / reverse-proxy defaults ─────────────────────────────────────────
@@ -29,7 +28,6 @@ const PUBLIC_DEFAULTS: Record<EndpointKey, string> = {
   gateway: 'https://memory.qneural.org',
   router: 'https://router.qneural.org',
   llama: 'https://llama.qneural.org',
-  webui: 'https://openai.qneural.org',
 };
 
 // ── URL Validation ──────────────────────────────────────────────────────────
@@ -69,7 +67,6 @@ interface EndpointOverrides {
   gateway?: string;
   router?: string;
   llama?: string;
-  webui?: string;
 }
 
 function getOverrides(): EndpointOverrides {
@@ -150,7 +147,6 @@ export const ENDPOINTS: Record<EndpointKey, { local: string; public: string }> =
 export const GATEWAY_BASE = ENDPOINTS.gateway;
 export const ROUTER_BASE = ENDPOINTS.router;
 export const LLAMA_BASE = ENDPOINTS.llama;
-export const WEBUI_BASE = ENDPOINTS.webui;
 
 /**
  * Resolve the active base URL for a given endpoint based on the current mode.

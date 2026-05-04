@@ -1,20 +1,20 @@
 export type EndpointMode = 'local' | 'public';
 
 /**
- * The four providers the app can route requests through.
+ * The chat providers the app can route requests through.
  * Each has a distinct responsibility:
  *   Gateway  — OpenAI-compatible chat & model listing
- *   Router   — Launch/stop local GGUF models via Flask API
  *   Direct   — Raw llama.cpp inference
- *   WebUI    — External Open WebUI link (no API calls)
+ *
+ * Router is a control-plane service (not a chat provider) —
+ * it manages model lifecycle via the Flask API.
  */
-export type ProviderType = 'Gateway' | 'Router' | 'Direct' | 'WebUI';
+export type ProviderType = 'Gateway' | 'Direct';
 
 export interface EndpointOverrides {
   gateway?: string;
   router?: string;
   llama?: string;
-  webui?: string;
 }
 
 export interface Settings {

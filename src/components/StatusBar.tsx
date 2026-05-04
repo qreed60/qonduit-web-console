@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Settings } from '../types';
 import { ENDPOINTS, getMode } from '../config/endpoints';
 import {
-  Monitor,
   ChevronDown,
   Globe,
   Server,
@@ -37,11 +36,10 @@ const StatusBar: React.FC<StatusBarProps> = ({ settings, onGoToDashboard }) => {
     : 'bg-bg-tertiary text-text-tertiary border-border-subtle';
 
   const endpointList = [
-    { key: 'gateway' as const, label: 'Gateway', icon: Globe, color: 'text-status-success' },
-    { key: 'llama' as const, label: 'Direct', icon: Zap, color: 'text-status-success' },
-    { key: 'router' as const, label: 'Router', icon: Router, color: 'text-status-success' },
-    { key: 'webui' as const, label: 'WebUI', icon: Monitor, color: 'text-text-tertiary' },
-  ];
+     { key: 'gateway' as const, label: 'Gateway', icon: Globe, color: 'text-status-success' },
+     { key: 'llama' as const, label: 'Direct', icon: Zap, color: 'text-status-success' },
+     { key: 'router' as const, label: 'Router', icon: Router, color: 'text-status-success' },
+   ];
 
   return (
     <header className="h-14 bg-bg-secondary border-b border-border-subtle flex items-center px-4 space-x-3 flex-shrink-0">
@@ -124,18 +122,6 @@ const StatusBar: React.FC<StatusBarProps> = ({ settings, onGoToDashboard }) => {
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Quick Actions */}
-      <div className="flex items-center gap-2 flex-shrink-0">
-        <a
-          href={ENDPOINTS.webui[mode]}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200"
-          title="Open WebUI"
-        >
-          <Globe className="w-4 h-4" />
-        </a>
-      </div>
     </header>
   );
 };

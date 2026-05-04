@@ -13,7 +13,6 @@ interface SystemOverviewProps {
     gateway: boolean | null;
     llama: boolean | null;
     router: boolean | null;
-    webui?: boolean | null;
   };
   healthLoading: boolean;
   routerStatus: { running: boolean; exists: boolean } | null;
