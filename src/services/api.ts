@@ -46,17 +46,50 @@ export function saveSettings(settings: Settings): void {
   localStorage.setItem('qonduit-settings', JSON.stringify(settings));
 }
 
-// ── Internal helpers (kept for backward compatibility) ──────────────────────
+// ── Internal helpers ────────────────────────────────────────────────────────
+
+/**
+ * Parse a JSON response safely. Throws descriptive errors for non-JSON responses.
+ */
+async function parseJsonSafe<T>(response: Response, context: string): Promise<T> {
+  if (!response.ok) {
+    const url = response.url;
+    const contentType = response.headers.get('content-type') || '';
+
+    if (contentType.includes('text/html')) {
+      const body = await response.text().catch(() => '[unable to read body]');
+      const preview = body.length > 200 ? body.substring(0, 200) + '...' : body;
+      throw new Error(
+        `${context} returned HTML instead of JSON (HTTP ${response.status}). ` +
+        `This usually means the endpoint URL is wrong or a proxy is intercepting. ` +
+        `URL: ${url}\nResponse preview: ${preview}`
+      );
+    }
+
+    throw new Error(`${context} failed (HTTP ${response.status}): ${response.statusText}`);
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const body = await response.text().catch(() => '[unable to read body]');
+    const preview = body.length > 200 ? body.substring(0, 200) + '...' : body;
+    throw new Error(
+      `${context} returned ${contentType} instead of application/json. ` +
+      `URL: ${response.url}\nResponse preview: ${preview}`
+    );
+  }
+
+  return response.json() as Promise<T>;
+}
 
 /**
  * Fetch models from the Memory Gateway (OpenAI-compatible /v1/models).
  */
 export async function fetchGatewayModels(): Promise<Model[]> {
-  const response = await fetch(apiPath('gateway', '/v1/models'));
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-  const data: ModelsResponse = await response.json();
+  const data = await parseJsonSafe<ModelsResponse>(
+    await fetch(apiPath('gateway', '/v1/models')),
+    'Gateway /v1/models'
+  );
   return data.data;
 }
 
@@ -64,11 +97,10 @@ export async function fetchGatewayModels(): Promise<Model[]> {
  * Fetch models from the direct llama.cpp endpoint (OpenAI-compatible /v1/models).
  */
 export async function fetchDirectModels(): Promise<Model[]> {
-  const response = await fetch(apiPath('llama', '/v1/models'));
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-  const data: ModelsResponse = await response.json();
+  const data = await parseJsonSafe<ModelsResponse>(
+    await fetch(apiPath('llama', '/v1/models')),
+    'Direct /v1/models'
+  );
   return data.data;
 }
 
@@ -77,11 +109,10 @@ export async function fetchDirectModels(): Promise<Model[]> {
  * Returns raw shape — not a standard OpenAI /v1/models response.
  */
 export async function fetchRouterModels(): Promise<{ models: Array<{ name: string; path: string }>; suggested_ctx: number }> {
-  const response = await fetch(apiPath('router', '/api/v1/qonduit-router/models'));
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-  const data = await response.json();
+  const data = await parseJsonSafe<RouterModelsResponse>(
+    await fetch(apiPath('router', '/api/v1/qonduit-router/models')),
+    'Router /api/v1/qonduit-router/models'
+  );
   return { models: data.models ?? [], suggested_ctx: data.suggested_ctx ?? 8192 };
 }
 

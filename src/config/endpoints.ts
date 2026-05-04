@@ -123,20 +123,20 @@ function envOverride(key: string): string | undefined {
 
 function resolveEndpoints(): Record<EndpointKey, { local: string; public: string }> {
   const overrides = getOverrides();
-
-  const local: Record<EndpointKey, string> = {} as Record<EndpointKey, string>;
-  const pub: Record<EndpointKey, string> = {} as Record<EndpointKey, string>;
+  const result: Record<EndpointKey, { local: string; public: string }> = {} as Record<EndpointKey, { local: string; public: string }>;
 
   for (const key of Object.keys(LOCAL_DEFAULTS) as EndpointKey[]) {
-    local[key] = envOverride(`VITE_QONDUIT_${key.toUpperCase()}_BASE`)
-      ?? overrides[key]
-      ?? LOCAL_DEFAULTS[key];
-    pub[key] = envOverride(`VITE_QONDUIT_${key.toUpperCase()}_BASE`)
-      ?? overrides[key]
-      ?? PUBLIC_DEFAULTS[key];
+    result[key] = {
+      local: envOverride(`VITE_QONDUIT_${key.toUpperCase()}_BASE`)
+        ?? overrides[key]
+        ?? LOCAL_DEFAULTS[key],
+      public: envOverride(`VITE_QONDUIT_${key.toUpperCase()}_BASE`)
+        ?? overrides[key]
+        ?? PUBLIC_DEFAULTS[key],
+    };
   }
 
-  return { gateway: local.gateway, router: local.router, llama: local.llama, webui: local.webui } as unknown as Record<EndpointKey, { local: string; public: string }>;
+  return result;
 }
 
 const RESOLVED = resolveEndpoints();

@@ -33,70 +33,72 @@ const ModelsPage: React.FC = () => {
   }, []);
 
   const loadModels = async () => {
-    setLoading(true);
-    setError(null);
-    setModels([]);
-
-    const allModels: ModelCardData[] = [];
-    let hasAnyModels = false;
-
-    // Fetch from gateway
-    try {
-      const gatewayModels = await fetchGatewayModels();
-      gatewayModels.forEach((m) => {
-        allModels.push({
-          id: `gateway:${m.id}`,
-          name: m.id,
-          provider: 'Gateway',
-          created: m.created,
-          owned_by: m.owned_by,
-        });
-        hasAnyModels = true;
-      });
-    } catch (err) {
-      console.log('Gateway models unavailable:', err);
-    }
-
-    // Fetch from direct
-    try {
-      const directModels = await fetchDirectModels();
-      directModels.forEach((m) => {
-        allModels.push({
-          id: `direct:${m.id}`,
-          name: m.id,
-          provider: 'Direct',
-          created: m.created,
-          owned_by: m.owned_by,
-        });
-        hasAnyModels = true;
-      });
-    } catch (err) {
-      console.log('Direct models unavailable:', err);
-    }
-
-    // Fetch from router
-    try {
-      const routerData = await fetchRouterModels();
-      if (routerData.models) {
-        routerData.models.forEach((m) => {
+     setLoading(true);
+     setError(null);
+     setModels([]);
+ 
+     const allModels: ModelCardData[] = [];
+      const errors: string[] = [];
+ 
+     // Fetch from gateway
+     try {
+       const gatewayModels = await fetchGatewayModels();
+        gatewayModels.forEach((m) => {
           allModels.push({
-            id: `router:${m.name}`,
-            name: m.name,
-            provider: 'Router',
-            path: m.path,
+            id: `gateway:${m.id}`,
+            name: m.id,
+            provider: 'Gateway',
+            created: m.created,
+            owned_by: m.owned_by,
           });
-          hasAnyModels = true;
         });
-      }
-    } catch (err) {
-      console.log('Router models unavailable:', err);
-    }
-
-    setModels(allModels);
-    if (!hasAnyModels && allModels.length === 0) {
-      setError('No models found from any endpoint (Gateway, Direct, or Router)');
-    }
-  };
+     } catch (err) {
+       const msg = err instanceof Error ? err.message : 'Unknown error';
+       errors.push(`Gateway: ${msg}`);
+     }
+ 
+     // Fetch from direct
+     try {
+       const directModels = await fetchDirectModels();
+        directModels.forEach((m) => {
+          allModels.push({
+            id: `direct:${m.id}`,
+            name: m.id,
+            provider: 'Direct',
+            created: m.created,
+            owned_by: m.owned_by,
+          });
+        });
+     } catch (err) {
+       const msg = err instanceof Error ? err.message : 'Unknown error';
+       errors.push(`Direct: ${msg}`);
+     }
+ 
+     // Fetch from router
+     try {
+       const routerData = await fetchRouterModels();
+         if (routerData.models) {
+           routerData.models.forEach((m) => {
+             allModels.push({
+               id: `router:${m.name}`,
+               name: m.name,
+               provider: 'Router',
+               path: m.path,
+             });
+           });
+         }
+     } catch (err) {
+       const msg = err instanceof Error ? err.message : 'Unknown error';
+       errors.push(`Router: ${msg}`);
+     }
+ 
+     setModels(allModels);
+     if (errors.length > 0 && allModels.length === 0) {
+       setError(`No models found. Errors:\n${errors.join('\n')}`);
+     } else if (allModels.length === 0) {
+       setError('No models found from any endpoint (Gateway, Direct, or Router)');
+     }
+   };
 
   const handleCopyId = async (id: string) => {
     try {

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "npm install --no-audit --no-fund && vite",
-    "build": "tsc && vite build",
+    "build": "npm install --no-audit --no-fund && tsc && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
