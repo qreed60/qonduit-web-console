@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { fetchGatewayModels, fetchChatCompletions, getSettings } from '../services/api';
-import { Model, ChatMessage } from '../types';
+import { fetchGatewayModels, fetchChatCompletions, getSettings, NormalizedModel } from '../services/api';
+import { ChatMessage } from '../types';
 import Toast from '../components/Toast';
 import {
   Send,
@@ -20,7 +20,7 @@ const ChatPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [models, setModels] = useState<Model[]>([]);
+  const [models, setModels] = useState<NormalizedModel[]>([]);
   const [modelLoading, setModelLoading] = useState(true);
   const [selectedModel, setSelectedModel] = useState('');
   const [showSettings, setShowSettings] = useState(false);

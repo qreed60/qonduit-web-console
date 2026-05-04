@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getSettings } from '../services/api';
-import { getRouterStatus, fetchRouterModels } from '../services/api';
+import { getSettings, getRouterStatus, fetchRouterModels, NormalizedModel } from '../services/api';
 import { ENDPOINTS } from '../config/endpoints';
 import {
   Cpu,
@@ -14,7 +13,7 @@ const RouterPage: React.FC = () => {
   const settings = getSettings();
   const mode = settings.endpointMode;
   const [routerStatus, setRouterStatus] = useState<{ running: boolean; exists: boolean } | null>(null);
-  const [routerModels, setRouterModels] = useState<Array<{ name: string; path: string }>>([]);
+  const [routerModels, setRouterModels] = useState<NormalizedModel[]>([]);
   const [suggestedCtx, setSuggestedCtx] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -28,7 +27,7 @@ const RouterPage: React.FC = () => {
         try {
           const data = await fetchRouterModels();
           setRouterModels(data.models || []);
-          if (data.suggested_ctx) setSuggestedCtx(data.suggested_ctx);
+          if (data.suggestedCtx) setSuggestedCtx(data.suggestedCtx);
         } catch { /* models may not be available */ }
       } catch {
         // Router may not be available

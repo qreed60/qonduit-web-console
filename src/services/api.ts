@@ -1,5 +1,21 @@
-import { Settings, ModelsResponse, Model, ProviderType, ChatMessage } from '../types';
+import { Settings, ProviderType, ChatMessage } from '../types';
 import { getMode, apiPath } from '../config/endpoints';
+
+// ── Normalized model shape ──────────────────────────────────────────────────
+
+/**
+ * Normalized model shape used throughout the UI.
+ * Works for Gateway, Direct, and Router models regardless of response format.
+ */
+export interface NormalizedModel {
+  id: string;
+  name: string;
+  provider: 'Gateway' | 'Direct' | 'Router';
+  sourceUrl: string;
+  created?: number;
+  ownedBy?: string;
+  path?: string;
+}
 
 const DEFAULT_SETTINGS: Settings = {
   apiKey: 'local',
@@ -83,60 +99,171 @@ async function parseJsonSafe<T>(response: Response, context: string): Promise<T>
 }
 
 /**
- * Fetch models from the Memory Gateway (OpenAI-compatible /v1/models).
+ * Parse any /v1/models response into a list of NormalizedModel objects.
+ * Handles:
+ *   - { data: [{ id: "x" }] }              — OpenAI standard
+ *   - { models: [{ name: "x", model: "x" }] } — alternative shape
+ *   - { models: ["x", "y"] }               — string array
  */
-export async function fetchGatewayModels(): Promise<Model[]> {
-  const data = await parseJsonSafe<ModelsResponse>(
-    await fetch(apiPath('gateway', '/v1/models')),
+function parseModelsResponse(raw: unknown, provider: 'Gateway' | 'Direct'): NormalizedModel[] {
+  if (!raw || typeof raw !== 'object') return [];
+  const obj = raw as Record<string, unknown>;
+  const results: NormalizedModel[] = [];
+
+  // Shape 1: { data: [{ id: "x", ... }] } — OpenAI standard
+  if (Array.isArray(obj.data)) {
+    for (const item of obj.data) {
+      if (item && typeof item === 'object') {
+        const o = item as Record<string, unknown>;
+        const id = String(o.id || o.name || 'unknown');
+        const name = String(o.name || o.model || o.id || 'unknown');
+        results.push({
+          id,
+          name,
+          provider,
+          sourceUrl: '',
+          created: typeof o.created === 'number' ? o.created : undefined,
+          ownedBy: typeof o.owned_by === 'string' ? o.owned_by : undefined,
+        });
+      }
+    }
+  }
+
+  // Shape 2: { models: [{ name: "x", model: "x" }] } — alternative object array
+  if (Array.isArray(obj.models)) {
+    for (const item of obj.models) {
+      if (item && typeof item === 'object') {
+        const o = item as Record<string, unknown>;
+        const id = String(o.id || o.name || 'unknown');
+        if (!results.some(m => m.id === id)) {
+          const name = String(o.name || o.model || o.id || 'unknown');
+          results.push({
+            id,
+            name,
+            provider,
+            sourceUrl: '',
+            created: typeof o.created === 'number' ? o.created : undefined,
+            ownedBy: typeof o.owned_by === 'string' ? o.owned_by : undefined,
+          });
+        }
+      }
+    }
+  }
+
+  // Shape 3: { models: ["x", "y"] } — string array
+  if (Array.isArray(obj.models) && obj.models.length > 0 && typeof obj.models[0] === 'string') {
+    for (const name of obj.models as string[]) {
+      const id = name;
+      if (!results.some(m => m.id === id)) {
+        results.push({ id, name, provider, sourceUrl: '' });
+      }
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Parse router models response.
+ * Handles:
+ *   - { ok: true, models: ["a.gguf", "b.gguf"], suggested_context: 32768 }
+ *   - { models: [{ name: "a.gguf", path: "/path/to/a.gguf" }] }
+ *   - { models: ["a.gguf"] }
+ */
+function parseRouterModelsResponse(raw: unknown, sourceUrl: string): { models: NormalizedModel[]; suggestedCtx: number } {
+  if (!raw || typeof raw !== 'object') return { models: [], suggestedCtx: 8192 };
+  const obj = raw as Record<string, unknown>;
+  const results: NormalizedModel[] = [];
+  let suggestedCtx = 8192;
+
+  // Extract context size — handle both field names
+  const ctx = obj.suggested_context ?? obj.suggested_ctx ?? 8192;
+  if (typeof ctx === 'number') suggestedCtx = ctx;
+
+  // Handle models array
+  if (Array.isArray(obj.models)) {
+    for (const item of obj.models) {
+      if (typeof item === 'string') {
+        results.push({
+          id: item,
+          name: item,
+          provider: 'Router',
+          sourceUrl,
+          path: item,
+        });
+      } else if (item && typeof item === 'object') {
+        const o = item as Record<string, unknown>;
+        const name = String(o.name || o.id || 'unknown');
+        results.push({
+          id: name,
+          name,
+          provider: 'Router',
+          sourceUrl,
+          path: typeof o.path === 'string' ? o.path : undefined,
+        });
+      }
+    }
+  }
+
+  return { models: results, suggestedCtx };
+}
+
+/**
+ * Fetch models from the Memory Gateway (OpenAI-compatible /v1/models).
+ * Handles multiple response shapes: { data: [...] }, { models: [...] }, { models: ["..."] }.
+ */
+export async function fetchGatewayModels(): Promise<NormalizedModel[]> {
+  const url = apiPath('gateway', '/v1/models');
+  const raw = await parseJsonSafe<unknown>(
+    await fetch(url),
     'Gateway /v1/models'
   );
-  return data.data;
+  const models = parseModelsResponse(raw, 'Gateway');
+  return models.map(m => ({ ...m, sourceUrl: url }));
 }
 
 /**
  * Fetch models from the direct llama.cpp endpoint (OpenAI-compatible /v1/models).
+ * Handles multiple response shapes: { data: [...] }, { models: [...] }, { models: ["..."] }.
  */
-export async function fetchDirectModels(): Promise<Model[]> {
-  const data = await parseJsonSafe<ModelsResponse>(
-    await fetch(apiPath('llama', '/v1/models')),
+export async function fetchDirectModels(): Promise<NormalizedModel[]> {
+  const url = apiPath('llama', '/v1/models');
+  const raw = await parseJsonSafe<unknown>(
+    await fetch(url),
     'Direct /v1/models'
   );
-  return data.data;
+  const models = parseModelsResponse(raw, 'Direct');
+  return models.map(m => ({ ...m, sourceUrl: url }));
 }
 
 /**
  * Fetch the list of GGUF models from the Flask router API.
- * Returns raw shape — not a standard OpenAI /v1/models response.
+ * Handles: { ok: true, models: ["a.gguf"], suggested_context: 32768 }
+ *          { models: [{ name: "a.gguf", path: "/path" }] }
  */
-export async function fetchRouterModels(): Promise<{ models: Array<{ name: string; path: string }>; suggested_ctx: number }> {
-  const data = await parseJsonSafe<RouterModelsResponse>(
-    await fetch(apiPath('router', '/api/v1/qonduit-router/models')),
+export async function fetchRouterModels(): Promise<{ models: NormalizedModel[]; suggestedCtx: number }> {
+  const url = apiPath('router', '/api/v1/qonduit-router/models');
+  const raw = await parseJsonSafe<unknown>(
+    await fetch(url),
     'Router /api/v1/qonduit-router/models'
   );
-  return { models: data.models ?? [], suggested_ctx: data.suggested_ctx ?? 8192 };
+  return parseRouterModelsResponse(raw, url);
 }
 
 // ── Unified provider model fetcher ──────────────────────────────────────────
 
 /**
- * Router models response shape — different from OpenAI /v1/models.
- */
-export interface RouterModelsResponse {
-  models: Array<{ name: string; path: string }>;
-  suggested_ctx: number;
-}
-
-/**
  * Fetch models from the correct endpoint based on the provider type.
+ * Returns NormalizedModel[] for all providers (including Router).
  *
  * | Provider | Endpoint                              | Response shape       |
  * |----------|---------------------------------------|----------------------|
- * | Gateway  | gatewayBase + /v1/models              | OpenAI ModelsResponse|
- * | Router   | routerBase + /api/v1/qonduit-router/models | RouterModelsResponse |
- * | Direct   | llamaBase + /v1/models                | OpenAI ModelsResponse|
+ * | Gateway  | gatewayBase + /v1/models              | NormalizedModel[]    |
+ * | Router   | routerBase + /api/v1/qonduit-router/models | { models: NormalizedModel[], suggestedCtx: number } |
+ * | Direct   | llamaBase + /v1/models                | NormalizedModel[]    |
  * | WebUI    | N/A — external link only              | Empty array          |
  */
-export async function fetchProviderModels(provider: ProviderType): Promise<Model[] | RouterModelsResponse> {
+export async function fetchProviderModels(provider: ProviderType): Promise<NormalizedModel[] | { models: NormalizedModel[]; suggestedCtx: number }> {
   switch (provider) {
     case 'Gateway':
       return fetchGatewayModels();
@@ -145,9 +272,9 @@ export async function fetchProviderModels(provider: ProviderType): Promise<Model
     case 'Router':
       return fetchRouterModels();
     case 'WebUI':
-      return { models: [], suggested_ctx: 8192 };
+      return { models: [], suggestedCtx: 8192 };
     default:
-      return { models: [], suggested_ctx: 8192 };
+      return { models: [], suggestedCtx: 8192 };
   }
 }
 

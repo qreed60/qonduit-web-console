@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { getSettings, fetchProviderModels, launchModel as apiLaunchModel, stopModel as apiStopModel, testEndpointWithError, testRouterHealthWithError, testWebuiEndpointWithError, getRouterStatus } from '../services/api';
-import { Settings, ProviderType, SelectableModel, Model } from '../types';
+import { getSettings, fetchProviderModels, launchModel as apiLaunchModel, stopModel as apiStopModel, testEndpointWithError, testRouterHealthWithError, testWebuiEndpointWithError, getRouterStatus, NormalizedModel } from '../services/api';
+import { Settings, ProviderType, SelectableModel } from '../types';
 import { ENDPOINTS } from '../config/endpoints';
 import StatusBar from '../components/StatusBar';
 import Toast from '../components/Toast';
@@ -37,7 +37,7 @@ const DashboardPage: React.FC = () => {
     running: boolean;
     exists: boolean;
   } | null>(null);
-  const [routerModels, setRouterModels] = useState<Array<{ name: string; path: string }>>([]);
+  const [routerModels, setRouterModels] = useState<NormalizedModel[]>([]);
   const [providerModels, setProviderModels] = useState<SelectableModel[]>([]);
   const [providerModelsError, setProviderModelsError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState('');
@@ -63,23 +63,23 @@ const DashboardPage: React.FC = () => {
     }
 
     // Fetch router models (for launch/stop when provider is Router)
-    try {
-      const data = await fetchProviderModels('Router');
-      if (Array.isArray(data)) {
-        // Gateway/Direct returned Model[] — not expected here
-        setRouterModels([]);
-      } else {
-        setRouterModels(data.models || []);
-        if (data.suggested_ctx) {
-          setSuggestedCtx(data.suggested_ctx);
-          if (!selectedModel) {
-            setCtxSize(data.suggested_ctx);
-          }
-        }
-      }
-    } catch (err) {
-      // Router models might not be available
-    }
+     try {
+       const data = await fetchProviderModels('Router');
+       if (Array.isArray(data)) {
+         // Unexpected: Router returned array instead of object
+         setRouterModels([]);
+       } else {
+         setRouterModels(data.models || []);
+         if (data.suggestedCtx) {
+           setSuggestedCtx(data.suggestedCtx);
+           if (!selectedModel) {
+             setCtxSize(data.suggestedCtx);
+           }
+         }
+       }
+     } catch (err) {
+       // Router models might not be available
+     }
 
     // Fetch provider models based on selected provider
     await fetchProviderModelsList(settings.defaultProvider);
@@ -89,34 +89,34 @@ const DashboardPage: React.FC = () => {
   };
 
   const fetchProviderModelsList = async (provider: ProviderType) => {
-      setProviderModelsError(null);
-      try {
-        const data = await fetchProviderModels(provider);
-  
-        if (provider === 'Router') {
-          // Router returns { models, suggested_ctx }
-          if (Array.isArray(data)) {
-            // Unexpected: Router returned array instead of object
-            setProviderModels([]);
-          } else {
-            setProviderModels(data.models.map((m) => ({ name: m.name, path: m.path })));
-            if (data.suggested_ctx) {
-              setSuggestedCtx(data.suggested_ctx);
-            }
-          }
-        } else if (provider === 'WebUI') {
-          setProviderModels([]);
-        } else {
-          // Gateway/Direct return Model[]
-          const models = data as Model[];
-          setProviderModels(models.map((m) => ({ name: m.id })));
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed to load models';
-        setProviderModelsError(`${provider} models unavailable: ${msg}`);
-        setProviderModels([]);
-      }
-    };
+       setProviderModelsError(null);
+       try {
+         const data = await fetchProviderModels(provider);
+ 
+         if (provider === 'Router') {
+           // Router returns { models, suggestedCtx }
+           if (Array.isArray(data)) {
+             // Unexpected: Router returned array instead of object
+             setProviderModels([]);
+           } else {
+             setProviderModels(data.models.map((m) => ({ name: m.name, path: m.path })));
+             if (data.suggestedCtx) {
+               setSuggestedCtx(data.suggestedCtx);
+             }
+           }
+         } else if (provider === 'WebUI') {
+           setProviderModels([]);
+         } else {
+           // Gateway/Direct return NormalizedModel[]
+           const models = data as NormalizedModel[];
+           setProviderModels(models.map((m) => ({ name: m.name })));
+         }
+       } catch (err) {
+         const msg = err instanceof Error ? err.message : 'Failed to load models';
+         setProviderModelsError(`${provider} models unavailable: ${msg}`);
+         setProviderModels([]);
+       }
+     };
 
   // Re-fetch provider models when provider changes
   useEffect(() => {
