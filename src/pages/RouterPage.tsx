@@ -1,13 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { getSettings, getRouterStatus, fetchRouterModels, NormalizedModel } from '../services/api';
+import { getSettings, getRouterStatus, fetchRouterModels, launchModel as apiLaunchModel, stopModel as apiStopModel, restartModel as apiRestartModel, NormalizedModel } from '../services/api';
 import { ENDPOINTS } from '../config/endpoints';
+import Toast from '../components/Toast';
 import {
   Cpu,
   AlertCircle,
   CheckCircle2,
   Loader2,
-  ExternalLink,
+  Play,
+  Square,
+  RotateCcw,
+  HardDrive,
 } from 'lucide-react';
+
+/**
+ * Context size presets supporting up to 262k context models.
+ */
+const PRESET_CTX = [4096, 8192, 16384, 32768, 65536, 131072, 262144];
 
 const RouterPage: React.FC = () => {
   const settings = getSettings();
@@ -16,6 +25,12 @@ const RouterPage: React.FC = () => {
   const [routerModels, setRouterModels] = useState<NormalizedModel[]>([]);
   const [suggestedCtx, setSuggestedCtx] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedModel, setSelectedModel] = useState('');
+  const [ctxSize, setCtxSize] = useState(4096);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionStatus, setActionStatus] = useState<'idle' | 'launching' | 'stopping' | 'restarting' | 'success' | 'error'>('idle');
+  const [actionMessage, setActionMessage] = useState('');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -42,143 +57,341 @@ const RouterPage: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  return (
-    <div className="p-6 h-full flex flex-col">
-      {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
-          Router
-        </h2>
-        <p className="text-sm text-text-secondary mt-1">
-          Launch and manage local GGUF models via the Qonduit Router
-        </p>
-      </div>
+  // Auto-select first model if none selected
+  useEffect(() => {
+    if (!selectedModel && routerModels.length > 0) {
+      setSelectedModel(routerModels[0].name);
+    }
+  }, [routerModels, selectedModel]);
 
-      {/* Main Content */}
-      <div className="flex-1 overflow-y-auto space-y-4">
-        {/* Router Status */}
-        <div className="bg-bg-card rounded-xl border border-border-primary p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-text-primary">Router Status</h3>
+  const handleLaunch = async () => {
+    if (!selectedModel) return;
+    setActionLoading(true);
+    setActionStatus('launching');
+    setActionMessage('');
+    try {
+      const result = await apiLaunchModel(selectedModel, ctxSize);
+      if (result.ok) {
+        setActionStatus('success');
+        setActionMessage(result.message || 'Model launched successfully');
+        setToastMessage('Model launched successfully');
+        setRouterStatus(prev => prev ? { ...prev, running: true } : null);
+      } else {
+        setActionStatus('error');
+        setActionMessage(result.message || 'Failed to launch model');
+      }
+    } catch (err) {
+      setActionStatus('error');
+      setActionMessage(err instanceof Error ? err.message : 'Failed to launch model');
+    } finally {
+      setActionLoading(false);
+      setTimeout(() => { setActionMessage(''); setActionStatus('idle'); }, 5000);
+    }
+  };
+
+  const handleStop = async () => {
+    setActionLoading(true);
+    setActionStatus('stopping');
+    setActionMessage('');
+    try {
+      const result = await apiStopModel();
+      if (result.ok) {
+        setActionStatus('success');
+        setActionMessage(result.message || 'Model stopped successfully');
+        setToastMessage('Model stopped successfully');
+        setRouterStatus(prev => prev ? { ...prev, running: false } : null);
+      } else {
+        setActionStatus('error');
+        setActionMessage(result.message || 'Failed to stop model');
+      }
+    } catch (err) {
+      setActionStatus('error');
+      setActionMessage(err instanceof Error ? err.message : 'Failed to stop model');
+    } finally {
+      setActionLoading(false);
+      setTimeout(() => { setActionMessage(''); setActionStatus('idle'); }, 5000);
+    }
+  };
+
+  const handleRestart = async () => {
+    if (!selectedModel) return;
+    setActionLoading(true);
+    setActionStatus('restarting');
+    setActionMessage('');
+    try {
+      const result = await apiRestartModel(selectedModel, ctxSize);
+      if (result.ok) {
+        setActionStatus('success');
+        setActionMessage(result.message || 'Model restarted successfully');
+        setToastMessage('Model restarted successfully');
+        setRouterStatus(prev => prev ? { ...prev, running: true } : null);
+      } else {
+        setActionStatus('error');
+        setActionMessage(result.message || 'Failed to restart model');
+      }
+    } catch (err) {
+      setActionStatus('error');
+      setActionMessage(err instanceof Error ? err.message : 'Failed to restart model');
+    } finally {
+      setActionLoading(false);
+      setTimeout(() => { setActionMessage(''); setActionStatus('idle'); }, 5000);
+    }
+  };
+
+  const isRunning = routerStatus?.running;
+  const canLaunch = !isRunning && !actionLoading && routerModels.length > 0 && !!selectedModel;
+  const canStop = isRunning && !actionLoading;
+  const canRestart = isRunning && !actionLoading && !!selectedModel;
+
+  const handlePresetClick = (ctx: number) => {
+    setCtxSize(ctx);
+  };
+
+  return (
+      <div className="p-6 h-full flex flex-col">
+        {/* Header */}
+        <div className="mb-6">
+          <h2 className="text-xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
+            Router
+          </h2>
+          <p className="text-sm text-text-secondary mt-1">
+            Launch and manage local GGUF models via the Qonduit Router
+          </p>
+        </div>
+  
+        {/* Main Content */}
+        <div className="flex-1 overflow-y-auto space-y-4">
+          {/* Router Status */}
+          <div className="bg-bg-card rounded-xl border border-border-primary p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-text-primary">Router Status</h3>
+              {loading ? (
+                <Loader2 className="w-4 h-4 text-text-tertiary animate-spin" />
+              ) : routerStatus ? (
+                <div className="flex items-center gap-2">
+                  {routerStatus.running ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-status-success" />
+                      <span className="text-xs font-medium text-status-success">Running</span>
+                    </>
+                  ) : routerStatus.exists ? (
+                    <>
+                      <AlertCircle className="w-4 h-4 text-status-warning" />
+                      <span className="text-xs font-medium text-status-warning">Stopped</span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="w-4 h-4 text-text-tertiary" />
+                      <span className="text-xs font-medium text-text-tertiary">Not Found</span>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <span className="text-xs text-text-tertiary">Unknown</span>
+              )}
+            </div>
+            <div className="bg-bg-secondary/50 rounded-lg p-3 border border-border-subtle">
+              <p className="text-xs text-text-secondary mb-1">Router Endpoint</p>
+              <p className="text-xs font-mono text-text-primary break-all">{ENDPOINTS.router[mode]}</p>
+            </div>
+          </div>
+  
+          {/* Model Cards */}
+          <div className="bg-bg-card rounded-xl border border-border-primary p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-text-primary">Launchable Models</h3>
+              {routerStatus?.running && (
+                <span className="flex items-center gap-1 text-[10px] font-medium text-status-success bg-status-success/10 px-2 py-0.5 rounded-full">
+                  <Cpu className="w-3 h-3" />
+                  Model Active
+                </span>
+              )}
+            </div>
             {loading ? (
-              <Loader2 className="w-4 h-4 text-text-tertiary animate-spin" />
-            ) : routerStatus ? (
-              <div className="flex items-center gap-2">
-                {routerStatus.running ? (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 text-status-success" />
-                    <span className="text-xs font-medium text-status-success">Running</span>
-                  </>
-                ) : routerStatus.exists ? (
-                  <>
-                    <AlertCircle className="w-4 h-4 text-status-warning" />
-                    <span className="text-xs font-medium text-status-warning">Stopped</span>
-                  </>
-                ) : (
-                  <>
-                    <AlertCircle className="w-4 h-4 text-text-tertiary" />
-                    <span className="text-xs font-medium text-text-tertiary">Not Found</span>
-                  </>
-                )}
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 text-text-tertiary animate-spin" />
+              </div>
+            ) : routerModels.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                {routerModels.map((model) => {
+                  const isSelected = model.name === selectedModel;
+                  const isThisRunning = isRunning && isSelected;
+                  return (
+                    <button
+                      key={model.name}
+                      onClick={() => setSelectedModel(model.name)}
+                      className={`text-left p-4 rounded-lg border-2 transition-all duration-200 ${
+                        isSelected
+                          ? 'border-accent-primary bg-accent-primary/5'
+                          : isThisRunning
+                          ? 'border-status-success bg-status-success/5'
+                          : 'border-border-subtle bg-bg-secondary/30 hover:border-border-primary'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <p className="text-xs font-mono text-text-primary truncate flex-1" title={model.name}>
+                          {model.name}
+                        </p>
+                        {isThisRunning && (
+                          <CheckCircle2 className="w-3.5 h-3.5 text-status-success flex-shrink-0 ml-2" />
+                        )}
+                      </div>
+                      {model.path && (
+                        <p className="text-[10px] font-mono text-text-tertiary truncate mb-2" title={model.path}>
+                          {model.path}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2 text-[10px] text-text-tertiary">
+                        {model.parameterSize && model.parameterSize !== 'unknown' && (
+                          <span className="flex items-center gap-1">
+                            <Cpu className="w-3 h-3" />
+                            {model.parameterSize}
+                          </span>
+                        )}
+                        {model.fileSize && model.fileSize !== 'unknown' && (
+                          <span className="flex items-center gap-1">
+                            <HardDrive className="w-3 h-3" />
+                            {model.fileSize}
+                          </span>
+                        )}
+                        {suggestedCtx && (
+                          <span className="text-accent-primary">ctx: {suggestedCtx}</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             ) : (
-              <span className="text-xs text-text-tertiary">Unknown</span>
+              <div className="text-center py-8">
+                <p className="text-text-tertiary text-sm">No models available</p>
+                <p className="text-text-tertiary/60 text-xs mt-1">Add GGUF files to the Router's model directory</p>
+              </div>
             )}
-          </div>
-          <div className="bg-bg-secondary/50 rounded-lg p-3 border border-border-subtle">
-            <p className="text-xs text-text-secondary mb-1">Router Endpoint</p>
-            <p className="text-xs font-mono text-text-primary break-all">{ENDPOINTS.router[mode]}</p>
-          </div>
-        </div>
-
-        {/* Model Info */}
-        <div className="bg-bg-card rounded-xl border border-border-primary p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-text-primary">Launchable Models</h3>
-            {routerStatus?.running && (
-              <span className="flex items-center gap-1 text-[10px] font-medium text-status-success bg-status-success/10 px-2 py-0.5 rounded-full">
-                <Cpu className="w-3 h-3" />
-                Model Active
-              </span>
-            )}
-          </div>
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 text-text-tertiary animate-spin" />
-            </div>
-          ) : routerModels.length > 0 ? (
-            <div className="space-y-2">
-              {routerModels.map((model) => (
-                <div
-                  key={model.name}
-                  className="flex items-center justify-between bg-bg-secondary/50 rounded-lg p-3 border border-border-subtle"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-mono text-text-primary truncate">{model.name}</p>
-                    <p className="text-[10px] text-text-tertiary truncate mt-0.5">{model.path}</p>
-                  </div>
-                  <div className="flex items-center gap-2 ml-3 flex-shrink-0">
-                    {suggestedCtx && (
-                      <span className="flex items-center gap-1 text-[10px] text-accent-primary">
-                        <Cpu className="w-3 h-3" />
-                        ctx: {suggestedCtx}
-                      </span>
-                    )}
-                    {routerStatus?.running && (
-                      <span className="flex items-center gap-1 text-[10px] text-status-success bg-status-success/10 px-2 py-0.5 rounded-full">
-                        <CheckCircle2 className="w-3 h-3" />
-                        Running
-                      </span>
-                    )}
-                  </div>
+  
+            {/* Context Size Selector */}
+            {routerModels.length > 0 && (
+              <div className="mb-4 pt-4 border-t border-border-subtle">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-medium text-text-secondary">Context Size</label>
+                  <span className="text-xs font-mono text-accent-primary font-semibold">{ctxSize.toLocaleString()}</span>
                 </div>
-              ))}
+                <div className="flex gap-1.5 mb-2">
+                  {PRESET_CTX.map((ctx) => (
+                    <button
+                      key={ctx}
+                      onClick={() => handlePresetClick(ctx)}
+                      disabled={actionLoading}
+                      className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
+                        ctxSize === ctx
+                          ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/30'
+                          : 'bg-bg-secondary border border-border-subtle text-text-tertiary hover:text-text-primary hover:border-border-primary disabled:opacity-50 disabled:cursor-not-allowed'
+                      }`}
+                    >
+                      {ctx >= 1000 ? `${ctx / 1000}k` : ctx}
+                    </button>
+                  ))}
+                </div>
+                {suggestedCtx && ctxSize !== suggestedCtx && (
+                  <p className="text-[10px] text-accent-primary">Suggested: {suggestedCtx}</p>
+                )}
+              </div>
+            )}
+  
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleLaunch}
+                disabled={!canLaunch}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
+                  canLaunch
+                    ? 'bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20'
+                    : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
+                }`}
+              >
+                {actionLoading && actionStatus === 'launching' ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Play className="w-4 h-4" />
+                )}
+                {actionLoading && actionStatus === 'launching' ? 'Launching...' : 'Start'}
+              </button>
+              <button
+                onClick={handleRestart}
+                disabled={!canRestart}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
+                  canRestart
+                    ? 'bg-accent-secondary/10 text-accent-secondary border border-accent-secondary/20 hover:bg-accent-secondary/20'
+                    : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
+                }`}
+              >
+                {actionLoading && actionStatus === 'restarting' ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-4 h-4" />
+                )}
+                {actionLoading && actionStatus === 'restarting' ? 'Restarting...' : 'Restart'}
+              </button>
+              <button
+                onClick={handleStop}
+                disabled={!canStop}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
+                  canStop
+                    ? 'bg-status-error/10 text-status-error border border-status-error/20 hover:bg-status-error/20'
+                    : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
+                }`}
+              >
+                {actionLoading && actionStatus === 'stopping' ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Square className="w-4 h-4" />
+                )}
+                {actionLoading && actionStatus === 'stopping' ? 'Stopping...' : 'Stop'}
+              </button>
             </div>
-          ) : (
-            <div className="text-center py-8">
-              <p className="text-text-tertiary text-sm">No models available</p>
-              <p className="text-text-tertiary/60 text-xs mt-1">Add GGUF files to the Router's model directory</p>
-            </div>
-          )}
+  
+            {/* Action Message */}
+            {actionMessage && (
+              <div className={`mt-3 flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs ${
+                actionStatus === 'success'
+                  ? 'bg-status-success/10 text-status-success border border-status-success/20'
+                  : actionStatus === 'error'
+                  ? 'bg-status-error/10 text-status-error border border-status-error/20'
+                  : 'bg-bg-secondary/50 text-text-secondary border border-border-subtle'
+              }`}>
+                {actionStatus === 'success' ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                ) : actionStatus === 'error' ? (
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                ) : null}
+                <span>{actionMessage}</span>
+              </div>
+            )}
+  
+            {/* Info note */}
+            <p className="text-[10px] text-text-tertiary mt-3 text-center">
+              Select a model card above, then use the action buttons. Context changes take effect on launch or restart.
+            </p>
+          </div>
+  
+          {/* About the Router */}
+          <div className="bg-bg-card rounded-xl border border-border-primary p-5">
+            <h3 className="text-sm font-semibold text-text-primary mb-3">About the Router</h3>
+            <p className="text-xs text-text-secondary leading-relaxed">
+              The Qonduit Router is a control-plane service that manages model lifecycle.
+              It launches and stops llama.cpp servers that serve GGUF models via the Direct endpoint.
+              Router operation is independent of your chat provider setting (Gateway or Direct) —
+              you can launch models from the Dashboard at any time.
+            </p>
+          </div>
         </div>
-
-        {/* Launch Instructions */}
-         <div className="bg-bg-card rounded-xl border border-border-primary p-5">
-           <h3 className="text-sm font-semibold text-text-primary mb-3">How to Launch a Model</h3>
-           <div className="space-y-2">
-             <p className="text-xs text-text-secondary leading-relaxed">
-               Router models are local GGUF files that can be launched and stopped via the Router API.
-               The Router is a control-plane service — it manages model lifecycle independently of your chat provider setting.
-             </p>
-             <ol className="text-xs text-text-secondary space-y-1.5 list-decimal list-inside">
-               <li>Go to the <span className="text-accent-primary font-medium">Dashboard</span></li>
-               <li>Select a model from the <span className="text-accent-primary font-medium">Router Model Control</span> dropdown</li>
-               <li>Set the context size (or use the suggested value)</li>
-               <li>Click <span className="text-accent-primary font-medium">Launch Model</span></li>
-             </ol>
-             <a
-               href="#/dashboard"
-               className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-accent-primary/10 text-accent-primary border border-accent-primary/20 rounded-lg text-xs font-medium hover:bg-accent-primary/20 transition-colors"
-             >
-               <ExternalLink className="w-3 h-3" />
-               Go to Dashboard
-             </a>
-           </div>
-         </div>
- 
-         {/* Info */}
-         <div className="bg-bg-card rounded-xl border border-border-primary p-5">
-           <h3 className="text-sm font-semibold text-text-primary mb-3">About the Router</h3>
-           <p className="text-xs text-text-secondary leading-relaxed">
-             The Qonduit Router is a control-plane service that manages model lifecycle.
-             It launches and stops llama.cpp servers that serve GGUF models via the Direct endpoint.
-             Router operation is independent of your chat provider setting (Gateway or Direct) —
-             you can launch models from the Dashboard at any time.
-           </p>
-         </div>
+  
+        {/* Toast */}
+        {toastMessage && (
+          <Toast message={toastMessage} type="success" onClose={() => setToastMessage(null)} />
+        )}
       </div>
-    </div>
-  );
-};
-
-export default RouterPage;
+    );
+  };
+  
+  export default RouterPage;

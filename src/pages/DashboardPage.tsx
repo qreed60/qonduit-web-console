@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getSettings, fetchRouterModels, launchModel as apiLaunchModel, stopModel as apiStopModel, testEndpointWithError, testRouterHealthWithError, getRouterStatus, NormalizedModel } from '../services/api';
+import { getSettings, fetchRouterModels, fetchProviderModels, launchModel as apiLaunchModel, stopModel as apiStopModel, restartModel as apiRestartModel, testEndpointWithError, testRouterHealthWithError, getRouterStatus, NormalizedModel } from '../services/api';
 import { Settings } from '../types';
 import { ENDPOINTS } from '../config/endpoints';
 import StatusBar from '../components/StatusBar';
@@ -36,45 +36,76 @@ const DashboardPage: React.FC = () => {
     exists: boolean;
   } | null>(null);
   const [routerModels, setRouterModels] = useState<NormalizedModel[]>([]);
-  const [selectedModel, setSelectedModel] = useState('');
+  const [selectedRouterModel, setSelectedRouterModel] = useState('');
   const [ctxSize, setCtxSize] = useState(4096);
   const [suggestedCtx, setSuggestedCtx] = useState<number | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [actionStatus, setActionStatus] = useState<'idle' | 'launching' | 'stopping' | 'success' | 'error'>('idle');
+  const [actionStatus, setActionStatus] = useState<'idle' | 'launching' | 'stopping' | 'restarting' | 'success' | 'error'>('idle');
   const [actionMessage, setActionMessage] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [chatModels, setChatModels] = useState<NormalizedModel[]>([]);
+  const [selectedChatModel, setSelectedChatModel] = useState('');
 
   // Fetch initial data
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
-    // Fetch router status (always, for health card and logs)
-    try {
-      const status = await getRouterStatus();
-      setRouterStatus({ running: status.running, exists: status.exists });
-    } catch {
-      // Router might not be available
-    }
-
-    // Fetch router models (for launch/stop — always available)
-    try {
-      const data = await fetchRouterModels();
-      setRouterModels(data.models || []);
-      if (data.suggestedCtx) {
-        setSuggestedCtx(data.suggestedCtx);
-        if (!selectedModel) {
-          setCtxSize(data.suggestedCtx);
-        }
+    useEffect(() => {
+      fetchDashboardData();
+    }, []);
+  
+    const fetchDashboardData = async () => {
+      // Fetch router status (always, for health card and logs)
+      try {
+        const status = await getRouterStatus();
+        setRouterStatus({ running: status.running, exists: status.exists });
+      } catch {
+        // Router might not be available
       }
-    } catch {
-      // Router models might not be available
-    }
-
-    // Test endpoint health
-    await testAllEndpoints();
-  };
+  
+      // Fetch router models (for launch/stop — always available)
+      try {
+        const data = await fetchRouterModels();
+        setRouterModels(data.models || []);
+        if (data.suggestedCtx) {
+          setSuggestedCtx(data.suggestedCtx);
+          if (!selectedRouterModel) {
+            setCtxSize(data.suggestedCtx);
+          }
+        }
+      } catch {
+        // Router models might not be available
+      }
+  
+      // Fetch chat models (Gateway/Direct based on settings)
+          try {
+            const providerModels = await fetchProviderModels(settings.defaultProvider);
+            setChatModels(providerModels);
+            if (providerModels.length > 0) {
+              const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
+              setSelectedChatModel(defaultModel?.id || providerModels[0].id);
+            }
+          } catch {
+            // Chat models might not be available
+          }
+      
+          // Test endpoint health
+          await testAllEndpoints();
+        };
+      
+        // Reload chat models when settings defaultProvider changes
+        useEffect(() => {
+          const loadChatModels = async () => {
+            try {
+              const providerModels = await fetchProviderModels(settings.defaultProvider);
+              setChatModels(providerModels);
+              if (providerModels.length > 0) {
+                const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
+                setSelectedChatModel(defaultModel?.id || providerModels[0].id);
+              }
+            } catch {
+              // Chat models might not be available
+            }
+          };
+          loadChatModels();
+        }, [settings.defaultProvider, settings.defaultModel]);
 
   const testAllEndpoints = async () => {
     setHealthLoading(true);
@@ -102,14 +133,14 @@ const DashboardPage: React.FC = () => {
   };
 
   const handleLaunch = async () => {
-    if (!selectedModel) return;
-
-    setActionLoading(true);
-    setActionStatus('launching');
-    setActionMessage('');
-
-    try {
-      const result = await apiLaunchModel(selectedModel, ctxSize);
+      if (!selectedRouterModel) return;
+  
+      setActionLoading(true);
+      setActionStatus('launching');
+      setActionMessage('');
+  
+      try {
+        const result = await apiLaunchModel(selectedRouterModel, ctxSize);
       if (result.ok) {
         setActionStatus('success');
         setActionMessage(result.message || 'Model launched successfully');
@@ -132,39 +163,76 @@ const DashboardPage: React.FC = () => {
   };
 
   const handleStop = async () => {
-    setActionLoading(true);
-    setActionStatus('stopping');
-    setActionMessage('');
-
-    try {
-      const result = await apiStopModel();
-      if (result.ok) {
-        setActionStatus('success');
-        setActionMessage(result.message || 'Model stopped successfully');
-        setToastMessage('Model stopped successfully');
-        setRouterStatus((prev) => (prev ? { ...prev, running: false } : null));
-      } else {
+      setActionLoading(true);
+      setActionStatus('stopping');
+      setActionMessage('');
+  
+      try {
+        const result = await apiStopModel();
+        if (result.ok) {
+          setActionStatus('success');
+          setActionMessage(result.message || 'Model stopped successfully');
+          setToastMessage('Model stopped successfully');
+          setRouterStatus((prev) => (prev ? { ...prev, running: false } : null));
+        } else {
+          setActionStatus('error');
+          setActionMessage(result.message || 'Failed to stop model');
+        }
+      } catch (err) {
         setActionStatus('error');
-        setActionMessage(result.message || 'Failed to stop model');
+        setActionMessage(err instanceof Error ? err.message : 'Failed to stop model');
+      } finally {
+        setActionLoading(false);
+        setTimeout(() => {
+          setActionMessage('');
+          setActionStatus('idle');
+        }, 5000);
       }
-    } catch (err) {
-      setActionStatus('error');
-      setActionMessage(err instanceof Error ? err.message : 'Failed to stop model');
-    } finally {
-      setActionLoading(false);
-      setTimeout(() => {
-        setActionMessage('');
-        setActionStatus('idle');
-      }, 5000);
-    }
-  };
-
-  // Auto-select first model if none selected and models available
-  useEffect(() => {
-    if (!selectedModel && routerModels.length > 0) {
-      setSelectedModel(routerModels[0].name);
-    }
-  }, [routerModels, selectedModel]);
+    };
+  
+    const handleRestart = async () => {
+      if (!selectedRouterModel) return;
+  
+      setActionLoading(true);
+      setActionStatus('restarting');
+      setActionMessage('');
+  
+      try {
+        const result = await apiRestartModel(selectedRouterModel, ctxSize);
+        if (result.ok) {
+          setActionStatus('success');
+          setActionMessage(result.message || 'Model restarted successfully');
+          setToastMessage('Model restarted successfully');
+          setRouterStatus((prev) => (prev ? { ...prev, running: true } : null));
+        } else {
+          setActionStatus('error');
+          setActionMessage(result.message || 'Failed to restart model');
+        }
+      } catch (err) {
+        setActionStatus('error');
+        setActionMessage(err instanceof Error ? err.message : 'Failed to restart model');
+      } finally {
+        setActionLoading(false);
+        setTimeout(() => {
+          setActionMessage('');
+          setActionStatus('idle');
+        }, 5000);
+      }
+    };
+  
+    // Auto-select first model if none selected and models available
+      useEffect(() => {
+        if (!selectedRouterModel && routerModels.length > 0) {
+          setSelectedRouterModel(routerModels[0].name);
+        }
+      }, [routerModels, selectedRouterModel]);
+    
+      // Auto-select first chat model if none selected
+      useEffect(() => {
+        if (!selectedChatModel && chatModels.length > 0) {
+          setSelectedChatModel(chatModels[0].id);
+        }
+      }, [chatModels, selectedChatModel]);
 
   const mode = settings.endpointMode;
 
@@ -225,16 +293,17 @@ const DashboardPage: React.FC = () => {
         </div>
 
         {/* System Overview */}
-        <div className="mb-6">
-          <SystemOverview
-            endpointHealth={endpointHealth}
-            healthLoading={healthLoading}
-            routerStatus={routerStatus}
-            selectedModel={selectedModel}
-            endpointErrors={endpointErrors}
-            onRefresh={testAllEndpoints}
-          />
-        </div>
+                <div className="mb-6">
+                  <SystemOverview
+                    endpointHealth={endpointHealth}
+                    healthLoading={healthLoading}
+                    routerStatus={routerStatus}
+                    chatModel={selectedChatModel}
+                    routerModel={routerStatus?.running ? selectedRouterModel : undefined}
+                    endpointErrors={endpointErrors}
+                    onRefresh={testAllEndpoints}
+                  />
+                </div>
 
         {/* Endpoint Cards */}
         <div className="mb-6">
@@ -299,22 +368,26 @@ const DashboardPage: React.FC = () => {
         </div>
 
         {/* Router Model Control — always visible, always enabled */}
-        <div className="mb-6">
-          <ModelControlCard
-            routerStatus={routerStatus}
-            models={routerModels}
-            selectedModel={selectedModel}
-            ctxSize={ctxSize}
-            suggestedCtx={suggestedCtx}
-            onSelectModel={setSelectedModel}
-            onCtxChange={setCtxSize}
-            onLaunch={handleLaunch}
-            onStop={handleStop}
-            loading={actionLoading}
-            actionStatus={actionStatus}
-            actionMessage={actionMessage}
-          />
-        </div>
+                <div className="mb-6">
+                  <ModelControlCard
+                    routerStatus={routerStatus}
+                    models={routerModels}
+                    selectedModel={selectedRouterModel}
+                    ctxSize={ctxSize}
+                    suggestedCtx={suggestedCtx}
+                    onSelectModel={setSelectedRouterModel}
+                    onCtxChange={setCtxSize}
+                    onLaunch={handleLaunch}
+                    onStop={handleStop}
+                    onRestart={handleRestart}
+                    loading={actionLoading}
+                    actionStatus={actionStatus}
+                    actionMessage={actionMessage}
+                    chatModels={chatModels}
+                    selectedChatModel={selectedChatModel}
+                    onSelectedChatModelChange={setSelectedChatModel}
+                  />
+                </div>
 
         {/* Live Logs */}
         <div className="mb-6">

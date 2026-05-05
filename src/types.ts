@@ -24,6 +24,22 @@ export interface Settings {
   endpointMode: EndpointMode;
 }
 
+/**
+ * Normalized model shape used throughout the UI.
+ * Works for Gateway, Direct, and Router models regardless of response format.
+ */
+export interface NormalizedModel {
+  id: string;
+  name: string;
+  provider: 'Gateway' | 'Direct' | 'Router';
+  sourceUrl: string;
+  created?: number;
+  ownedBy?: string;
+  path?: string;
+  parameterSize?: string; // e.g., "35B", "20B", "unknown"
+  fileSize?: string;       // e.g., "26.6 GB", "unknown"
+}
+
 export interface Model {
   id: string;
   object: string;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, EndpointOverrides } from '../types';
-import { getSettings, saveSettings } from '../services/api';
+import { Settings, EndpointOverrides, ProviderType } from '../types';
+import { getSettings, saveSettings, fetchProviderModels, NormalizedModel } from '../services/api';
 import { ENDPOINTS, getMode, setMode, setEndpointOverride, clearEndpointOverrides, hasEndpointOverride, validateEndpoint } from '../config/endpoints';
 import Toast from '../components/Toast';
 
@@ -10,6 +10,8 @@ const SettingsPage: React.FC = () => {
   const [isDirty, setIsDirty] = useState(false);
   const [overrides, setOverrides] = useState<EndpointOverrides>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [availableModels, setAvailableModels] = useState<NormalizedModel[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
 
   useEffect(() => {
     setFormData(getSettings());
@@ -18,7 +20,27 @@ const SettingsPage: React.FC = () => {
       const raw = localStorage.getItem('qonduit-endpoint-overrides');
       if (raw) setOverrides(JSON.parse(raw));
     } catch { /* ignore */ }
+    // Load models for the default provider
+    loadModels(getSettings().defaultProvider);
   }, []);
+
+  // Reload models when provider changes
+  useEffect(() => {
+    loadModels(formData.defaultProvider);
+  }, [formData.defaultProvider]);
+
+  const loadModels = async (provider: ProviderType) => {
+    setModelsLoading(true);
+    try {
+      const models = await fetchProviderModels(provider);
+      setAvailableModels(models);
+    } catch {
+      // Models may not be available
+      setAvailableModels([]);
+    } finally {
+      setModelsLoading(false);
+    }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -207,18 +229,37 @@ const SettingsPage: React.FC = () => {
                    </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">
-                    Default Model
-                  </label>
-                  <input
-                    type="text"
-                    name="defaultModel"
-                    value={formData.defaultModel}
-                    onChange={handleChange}
-                    className="w-full px-5 py-3 bg-bg-secondary border border-border-primary rounded-xl text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 transition-all duration-200"
-                    placeholder="Qwen3-Coder-Next-IQ4_NL.gguf"
-                  />
-                </div>
+                                  <label className="block text-sm font-medium text-text-secondary mb-2">
+                                    Default Model
+                                  </label>
+                                  <div className="relative">
+                                    <input
+                                      list="settings-model-options"
+                                      name="defaultModel"
+                                      value={formData.defaultModel}
+                                      onChange={handleChange}
+                                      className="w-full px-5 py-3 bg-bg-secondary border border-border-primary rounded-xl text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 transition-all duration-200"
+                                      placeholder="Select or type a model name..."
+                                    />
+                                    <datalist id="settings-model-options">
+                                      {modelsLoading ? (
+                                        <option value="" disabled>Loading models...</option>
+                                      ) : (
+                                        availableModels.map((m) => (
+                                          <option key={m.id} value={m.name}>
+                                            {m.name}
+                                            {m.parameterSize && m.parameterSize !== 'unknown' ? ` (${m.parameterSize})` : ''}
+                                          </option>
+                                        ))
+                                      )}
+                                    </datalist>
+                                    {availableModels.length > 0 && (
+                                      <p className="text-[10px] text-text-tertiary mt-1.5">
+                                        {availableModels.length} model{availableModels.length !== 1 ? 's' : ''} available for {formData.defaultProvider} · Type to filter or select from suggestions
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
                 <div>
                   <label className="block text-sm font-medium text-text-secondary mb-2">
                     API Key

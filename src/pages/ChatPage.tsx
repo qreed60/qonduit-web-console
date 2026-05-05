@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { fetchGatewayModels, fetchChatCompletions, getSettings, NormalizedModel } from '../services/api';
-import { ChatMessage } from '../types';
+import { fetchProviderModels, fetchChatCompletions, getSettings, NormalizedModel } from '../services/api';
+import { ChatMessage, ProviderType } from '../types';
 import Toast from '../components/Toast';
 import {
   Send,
@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 
 const ChatPage: React.FC = () => {
-  const settings = getSettings();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -24,13 +23,21 @@ const ChatPage: React.FC = () => {
   const [modelLoading, setModelLoading] = useState(true);
   const [selectedModel, setSelectedModel] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const [currentProvider, setCurrentProvider] = useState<ProviderType>('Direct');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load gateway models on mount
+  // Load models when provider changes or on mount
   useEffect(() => {
-    loadModels();
+    const settings = getSettings();
+    setCurrentProvider(settings.defaultProvider);
+    loadModels(settings.defaultProvider);
   }, []);
+
+  // Reload models when provider changes
+  useEffect(() => {
+    loadModels(currentProvider);
+  }, [currentProvider]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -42,20 +49,23 @@ const ChatPage: React.FC = () => {
     inputRef.current?.focus();
   }, []);
 
-  const loadModels = async () => {
-    setModelLoading(true);
-    try {
-      const gatewayModels = await fetchGatewayModels();
-      setModels(gatewayModels);
-      if (gatewayModels.length > 0) {
-        setSelectedModel(gatewayModels[0].id);
+  const loadModels = async (provider: ProviderType = currentProvider) => {
+      setModelLoading(true);
+      try {
+        const providerModels = await fetchProviderModels(provider);
+        setModels(providerModels);
+        if (providerModels.length > 0) {
+          // Prefer the settings default model, otherwise use first available
+          const settings = getSettings();
+          const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
+          setSelectedModel(defaultModel?.id || providerModels[0].id);
+        }
+      } catch (err) {
+        console.log(`${provider} models unavailable:`, err);
+      } finally {
+        setModelLoading(false);
       }
-    } catch (err) {
-      console.log('Gateway models unavailable:', err);
-    } finally {
-      setModelLoading(false);
-    }
-  };
+    };
 
   const handleSend = async () => {
     if (!input.trim() || !selectedModel || loading) return;
@@ -124,75 +134,92 @@ const ChatPage: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-bg-primary">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-border-primary bg-bg-card">
-        <div className="flex items-center gap-3">
-          <MessageSquare className="w-5 h-5 text-accent-primary" />
-          <h2 className="text-lg font-semibold text-text-primary">Chat</h2>
-          {!selectedModel && !modelLoading && (
-            <span className="text-xs text-status-warning flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" />
-              No models available
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Model Selector */}
-          <div className="flex items-center gap-2">
-            <Globe className="w-3.5 h-3.5 text-text-tertiary" />
-            {modelLoading ? (
-              <Loader2 className="w-4 h-4 text-text-tertiary animate-spin" />
-            ) : (
-              <select
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
-                disabled={loading}
-                className="px-3 py-1.5 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed max-w-[200px] truncate"
-              >
-                {models.length === 0 ? (
-                  <option value="">No models</option>
-                ) : (
-                  models.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.id}
-                    </option>
-                  ))
-                )}
-              </select>
+      <div className="flex flex-col h-full bg-bg-primary">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-3 border-b border-border-primary bg-bg-card">
+          <div className="flex items-center gap-3">
+            <MessageSquare className="w-5 h-5 text-accent-primary" />
+            <h2 className="text-lg font-semibold text-text-primary">Chat</h2>
+            {!selectedModel && !modelLoading && (
+              <span className="text-xs text-status-warning flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                No models available
+              </span>
             )}
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Provider Selector */}
+            <div className="flex items-center gap-2">
+              <Globe className="w-3.5 h-3.5 text-text-tertiary" />
+              <select
+                value={currentProvider}
+                onChange={(e) => setCurrentProvider(e.target.value as ProviderType)}
+                disabled={modelLoading || loading}
+                className="px-3 py-1.5 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="Direct">Direct</option>
+                <option value="Gateway">Gateway</option>
+              </select>
+            </div>
+            {/* Model Selector */}
+            <div className="flex items-center gap-2">
+              {modelLoading ? (
+                <Loader2 className="w-4 h-4 text-text-tertiary animate-spin" />
+              ) : (
+                <select
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  disabled={loading}
+                  className="px-3 py-1.5 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed max-w-[200px] truncate"
+                >
+                  {models.length === 0 ? (
+                    <option value="">No models</option>
+                  ) : (
+                    models.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.id}
+                      </option>
+                    ))
+                  )}
+                </select>
+              )}
+              <button
+                onClick={() => loadModels(currentProvider)}
+                disabled={loading}
+                className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50"
+                title="Refresh models"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${modelLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+            {/* Settings Toggle */}
             <button
-              onClick={loadModels}
-              disabled={loading}
-              className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50"
-              title="Refresh models"
+              onClick={() => setShowSettings(!showSettings)}
+              className={`p-1.5 rounded-lg transition-all duration-200 ${showSettings ? 'text-accent-primary bg-accent-primary/10' : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'}`}
+              title="Chat settings"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${modelLoading ? 'animate-spin' : ''}`} />
+              <Settings2 className="w-3.5 h-3.5" />
             </button>
           </div>
-          {/* Settings Toggle */}
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className={`p-1.5 rounded-lg transition-all duration-200 ${showSettings ? 'text-accent-primary bg-accent-primary/10' : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'}`}
-            title="Chat settings"
-          >
-            <Settings2 className="w-3.5 h-3.5" />
-          </button>
         </div>
-      </div>
-
-      {/* Settings Panel */}
-      {showSettings && (
-        <div className="px-6 py-3 border-b border-border-primary bg-bg-secondary/50">
-          <div className="flex items-center gap-4 text-xs text-text-secondary">
-            <span>Endpoint: <span className="font-mono text-accent-primary">{settings.endpointMode === 'local' ? '192.168.5.5:8090' : 'memory.qneural.org'}</span></span>
-            <span>·</span>
-            <span>Provider: <span className="font-medium text-text-primary">Gateway</span></span>
-            <span>·</span>
-            <span>Models loaded: <span className="font-medium text-text-primary">{models.length}</span></span>
+  
+        {/* Settings Panel */}
+        {showSettings && (
+          <div className="px-6 py-3 border-b border-border-primary bg-bg-secondary/50">
+            {(() => {
+              const settings = getSettings();
+              return (
+                <div className="flex items-center gap-4 text-xs text-text-secondary">
+                  <span>Mode: <span className="font-medium text-text-primary">{settings.endpointMode}</span></span>
+                  <span>·</span>
+                  <span>Provider: <span className="font-medium text-text-primary">{currentProvider}</span></span>
+                  <span>·</span>
+                  <span>Models loaded: <span className="font-medium text-text-primary">{models.length}</span></span>
+                </div>
+              );
+            })()}
           </div>
-        </div>
-      )}
+        )}
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-6 py-4">

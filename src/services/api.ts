@@ -1,20 +1,31 @@
-import { Settings, ProviderType, ChatMessage } from '../types';
+import { Settings, ProviderType, ChatMessage, NormalizedModel } from '../types';
 import { getMode, apiPath } from '../config/endpoints';
 
-// ── Normalized model shape ──────────────────────────────────────────────────
+// Re-export NormalizedModel for convenience
+export type { NormalizedModel };
+
+// ── Model metadata helpers ──────────────────────────────────────────────────
 
 /**
- * Normalized model shape used throughout the UI.
- * Works for Gateway, Direct, and Router models regardless of response format.
+ * Extract parameter size from a model name/filename.
+ * Matches patterns like "35B", "20B", "0.5B", "1.5B".
  */
-export interface NormalizedModel {
-  id: string;
-  name: string;
-  provider: 'Gateway' | 'Direct' | 'Router';
-  sourceUrl: string;
-  created?: number;
-  ownedBy?: string;
-  path?: string;
+export function extractParameterSize(name: string): string {
+  const match = name.match(/(\d+(?:\.\d+)?)B/);
+  return match ? `${match[1]}B` : 'unknown';
+}
+
+/**
+ * Extract file size from a model name/filename if present.
+ * Matches patterns like "26.6GB", "15.2gb".
+ * Returns 'unknown' if no file size pattern found.
+ */
+export function extractFileSize(name: string): string {
+  const sizeMatch = name.match(/(\d+(?:\.\d+)?)\s*(GB|TB)/i);
+  if (sizeMatch) {
+    return `${sizeMatch[1]} ${sizeMatch[2].toUpperCase()}`;
+  }
+  return 'unknown';
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -125,57 +136,68 @@ function parseModelsResponse(raw: unknown, provider: 'Gateway' | 'Direct'): Norm
   const results: NormalizedModel[] = [];
 
   // Shape 1: { data: [{ id: "x", ... }] } — OpenAI standard
-  if (Array.isArray(obj.data)) {
-    for (const item of obj.data) {
-      if (item && typeof item === 'object') {
-        const o = item as Record<string, unknown>;
-        const id = String(o.id || o.name || 'unknown');
-        const name = String(o.name || o.model || o.id || 'unknown');
-        results.push({
-          id,
-          name,
-          provider,
-          sourceUrl: '',
-          created: typeof o.created === 'number' ? o.created : undefined,
-          ownedBy: typeof o.owned_by === 'string' ? o.owned_by : undefined,
-        });
-      }
-    }
-  }
-
-  // Shape 2: { models: [{ name: "x", model: "x" }] } — alternative object array
-  if (Array.isArray(obj.models)) {
-    for (const item of obj.models) {
-      if (item && typeof item === 'object') {
-        const o = item as Record<string, unknown>;
-        const id = String(o.id || o.name || 'unknown');
-        if (!results.some(m => m.id === id)) {
-          const name = String(o.name || o.model || o.id || 'unknown');
-          results.push({
-            id,
-            name,
-            provider,
-            sourceUrl: '',
-            created: typeof o.created === 'number' ? o.created : undefined,
-            ownedBy: typeof o.owned_by === 'string' ? o.owned_by : undefined,
-          });
-        }
-      }
-    }
-  }
-
-  // Shape 3: { models: ["x", "y"] } — string array
-  if (Array.isArray(obj.models) && obj.models.length > 0 && typeof obj.models[0] === 'string') {
-    for (const name of obj.models as string[]) {
-      const id = name;
-      if (!results.some(m => m.id === id)) {
-        results.push({ id, name, provider, sourceUrl: '' });
-      }
-    }
-  }
-
-  return results;
-}
+   if (Array.isArray(obj.data)) {
+     for (const item of obj.data) {
+       if (item && typeof item === 'object') {
+         const o = item as Record<string, unknown>;
+         const id = String(o.id || o.name || 'unknown');
+         const name = String(o.name || o.model || o.id || 'unknown');
+         results.push({
+           id,
+           name,
+           provider,
+           sourceUrl: '',
+           created: typeof o.created === 'number' ? o.created : undefined,
+           ownedBy: typeof o.owned_by === 'string' ? o.owned_by : undefined,
+           parameterSize: extractParameterSize(name),
+           fileSize: extractFileSize(name),
+         });
+       }
+     }
+   }
+ 
+   // Shape 2: { models: [{ name: "x", model: "x" }] } — alternative object array
+   if (Array.isArray(obj.models)) {
+     for (const item of obj.models) {
+       if (item && typeof item === 'object') {
+         const o = item as Record<string, unknown>;
+         const id = String(o.id || o.name || 'unknown');
+         if (!results.some(m => m.id === id)) {
+           const name = String(o.name || o.model || o.id || 'unknown');
+           results.push({
+             id,
+             name,
+             provider,
+             sourceUrl: '',
+             created: typeof o.created === 'number' ? o.created : undefined,
+             ownedBy: typeof o.owned_by === 'string' ? o.owned_by : undefined,
+             parameterSize: extractParameterSize(name),
+             fileSize: extractFileSize(name),
+           });
+         }
+       }
+     }
+   }
+ 
+   // Shape 3: { models: ["x", "y"] } — string array
+   if (Array.isArray(obj.models) && obj.models.length > 0 && typeof obj.models[0] === 'string') {
+     for (const name of obj.models as string[]) {
+       const id = name;
+       if (!results.some(m => m.id === id)) {
+         results.push({
+           id,
+           name,
+           provider,
+           sourceUrl: '',
+           parameterSize: extractParameterSize(name),
+           fileSize: extractFileSize(name),
+         });
+       }
+     }
+   }
+ 
+   return results;
+ }
 
 /**
  * Parse router models response.
@@ -195,32 +217,36 @@ function parseRouterModelsResponse(raw: unknown, sourceUrl: string): { models: N
   if (typeof ctx === 'number') suggestedCtx = ctx;
 
   // Handle models array
-  if (Array.isArray(obj.models)) {
-    for (const item of obj.models) {
-      if (typeof item === 'string') {
-        results.push({
-          id: item,
-          name: item,
-          provider: 'Router',
-          sourceUrl,
-          path: item,
-        });
-      } else if (item && typeof item === 'object') {
-        const o = item as Record<string, unknown>;
-        const name = String(o.name || o.id || 'unknown');
-        results.push({
-          id: name,
-          name,
-          provider: 'Router',
-          sourceUrl,
-          path: typeof o.path === 'string' ? o.path : undefined,
-        });
+    if (Array.isArray(obj.models)) {
+      for (const item of obj.models) {
+        if (typeof item === 'string') {
+          results.push({
+            id: item,
+            name: item,
+            provider: 'Router',
+            sourceUrl,
+            path: item,
+            parameterSize: extractParameterSize(item),
+            fileSize: extractFileSize(item),
+          });
+        } else if (item && typeof item === 'object') {
+          const o = item as Record<string, unknown>;
+          const name = String(o.name || o.id || 'unknown');
+          results.push({
+            id: name,
+            name,
+            provider: 'Router',
+            sourceUrl,
+            path: typeof o.path === 'string' ? o.path : undefined,
+            parameterSize: extractParameterSize(name),
+            fileSize: extractFileSize(name),
+          });
+        }
       }
     }
+  
+    return { models: results, suggestedCtx };
   }
-
-  return { models: results, suggestedCtx };
-}
 
 /**
  * Fetch models from the Memory Gateway (OpenAI-compatible /v1/models).
@@ -442,6 +468,18 @@ export async function stopModel(): Promise<{ ok: boolean; message: string }> {
     throw new Error(`HTTP ${response.status}`);
   }
   return response.json();
+}
+
+/**
+ * Restart (relaunch) the currently running model with the given context size.
+ * Frontend-safe implementation: stops then launches with same model and context.
+ */
+export async function restartModel(modelName: string, ctxSize: number): Promise<{ ok: boolean; message: string }> {
+  const stopResult = await stopModel();
+  if (!stopResult.ok) {
+    throw new Error(`Failed to stop model before restart: ${stopResult.message}`);
+  }
+  return launchModel(modelName, ctxSize);
 }
 
 /**

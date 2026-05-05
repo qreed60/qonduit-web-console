@@ -16,7 +16,10 @@ interface SystemOverviewProps {
   };
   healthLoading: boolean;
   routerStatus: { running: boolean; exists: boolean } | null;
-  selectedModel: string;
+  /** The chat provider's selected model (from Settings or ChatPage) */
+  chatModel: string;
+  /** The router's currently running model name (if known) */
+  routerModel?: string;
   endpointErrors?: Record<string, string | null>;
   onRefresh: () => void;
 }
@@ -25,7 +28,8 @@ const SystemOverview: React.FC<SystemOverviewProps> = ({
   endpointHealth,
   healthLoading,
   routerStatus,
-  selectedModel,
+  chatModel,
+  routerModel,
   endpointErrors,
   onRefresh,
 }) => {
@@ -67,10 +71,10 @@ const SystemOverview: React.FC<SystemOverviewProps> = ({
       key: 'model' as const,
       label: 'Model',
       icon: Server,
-      status: isRunning ? true : !routerStatus ? null : false,
+      status: chatModel ? true : isRunning ? true : !routerStatus ? null : false,
       loadingLabel: 'Checking Model...',
-      onlineLabel: 'Model Running',
-      offlineLabel: 'Model Stopped',
+      onlineLabel: chatModel || (isRunning ? 'Model Running' : 'No Model'),
+      offlineLabel: 'No Model',
       unknownLabel: 'Model Unknown',
     },
   ];
@@ -84,13 +88,13 @@ const SystemOverview: React.FC<SystemOverviewProps> = ({
   return (
     <div className="bg-bg-card rounded-xl border border-border-primary p-5 shadow-card">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <h2 className="text-base font-semibold text-text-primary">System Health</h2>
-          {selectedModel && (
-            <StatusBadge status="online" label={selectedModel} />
-          )}
-        </div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <h2 className="text-base font-semibold text-text-primary">System Health</h2>
+                {chatModel && (
+                  <StatusBadge status="online" label={chatModel} />
+                )}
+              </div>
         <button
           onClick={onRefresh}
           disabled={healthLoading}
@@ -143,22 +147,35 @@ const SystemOverview: React.FC<SystemOverviewProps> = ({
        )}
  
        {/* Model Info Bar */}
-       {selectedModel && (
-         <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary/50 rounded-lg border border-border-subtle">
-           <div className="flex items-center gap-2">
-             <Server className="w-3.5 h-3.5 text-text-tertiary" />
-             <span className="text-xs text-text-secondary">Selected:</span>
-             <span className="text-xs font-mono text-text-primary truncate max-w-[200px]" title={selectedModel}>
-               {selectedModel}
-             </span>
-           </div>
-           <span className="text-[10px] text-text-tertiary">
-             Last checked: {new Date(lastChecked).toLocaleTimeString()}
-           </span>
-         </div>
-       )}
-     </div>
-   );
- };
-
-export default SystemOverview;
+              {(chatModel || routerModel) && (
+                <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary/50 rounded-lg border border-border-subtle">
+                  <div className="flex items-center gap-3">
+                    <Server className="w-3.5 h-3.5 text-text-tertiary" />
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-text-secondary">Chat:</span>
+                      <span className="text-xs font-mono text-text-primary truncate max-w-[150px]" title={chatModel || ''}>
+                        {chatModel || '—'}
+                      </span>
+                    </div>
+                    {routerModel && (
+                      <>
+                        <span className="text-text-tertiary">·</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-text-secondary">Router:</span>
+                          <span className="text-xs font-mono text-text-primary truncate max-w-[150px]" title={routerModel}>
+                            {routerModel}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-text-tertiary">
+                    Last checked: {new Date(lastChecked).toLocaleTimeString()}
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        };
+       
+       export default SystemOverview;
