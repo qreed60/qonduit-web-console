@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getSettings, fetchRouterModels, fetchProviderModels, fetchRouterGpu, launchModel as apiLaunchModel, stopModel as apiStopModel, restartRouterModel as apiRestartRouterModel, testEndpointWithError, testRouterHealthWithError, getRouterStatus, NormalizedModel, GpuStatus, RouterStatus } from '../services/api';
 import { Settings } from '../types';
 import { ENDPOINTS } from '../config/endpoints';
@@ -16,10 +16,18 @@ import {
   BarChart3,
   Shield,
   Database,
+  Loader2,
 } from 'lucide-react';
 
 const DashboardPage: React.FC = () => {
   const [settings] = useState<Settings>(getSettings());
+
+  // ── State: separate loading phases ──
+  const [contentRefreshing, setContentRefreshing] = useState(false);
+  const inFlightRef = useRef(false);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+
+  // ── State: health/connectivity ──
   const [endpointHealth, setEndpointHealth] = useState<{
     gateway: boolean | null;
     llama: boolean | null;
@@ -31,92 +39,108 @@ const DashboardPage: React.FC = () => {
     router: null,
   });
   const [healthLoading, setHealthLoading] = useState(false);
+
+  // ── State: content data (preserved across refreshes) ──
   const [routerStatus, setRouterStatus] = useState<RouterStatus | null>(null);
-   const [routerModels, setRouterModels] = useState<NormalizedModel[]>([]);
-   const [selectedRouterModel, setSelectedRouterModel] = useState('');
-   const [ctxSize, setCtxSize] = useState(4096);
-   const [suggestedCtx, setSuggestedCtx] = useState<number | null>(null);
-   const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null);
-   const [gpuError, setGpuError] = useState<string | null>(null);
-   const [actionLoading, setActionLoading] = useState(false);
-   const [actionStatus, setActionStatus] = useState<'idle' | 'launching' | 'stopping' | 'restarting' | 'success' | 'error'>('idle');
-   const [actionMessage, setActionMessage] = useState('');
-   const [toastMessage, setToastMessage] = useState<string | null>(null);
-    const [chatModels, setChatModels] = useState<NormalizedModel[]>([]);
-    const [selectedChatModel, setSelectedChatModel] = useState('');
- 
-   // Fetch initial data
-     useEffect(() => {
-       fetchDashboardData();
-     }, []);
-   
-     const fetchDashboardData = async () => {
-        // Fetch router status (always, for health card and logs)
-        try {
-          const status = await getRouterStatus();
-          setRouterStatus(status);
-        } catch {
-          // Router might not be available
-        }
- 
-        // Fetch GPU/VRAM status
-        try {
-          const gpu = await fetchRouterGpu();
-          setGpuStatus(gpu);
-          setGpuError(null);
-        } catch (err) {
-          setGpuStatus(null);
-          setGpuError(err instanceof Error ? err.message : 'Failed to fetch GPU status');
-        }
- 
-        // Fetch router models (for launch/stop — always available)
-        try {
-          const data = await fetchRouterModels();
-          setRouterModels(data.models || []);
-          if (data.suggestedCtx) {
-            setSuggestedCtx(data.suggestedCtx);
-            if (!selectedRouterModel) {
-              setCtxSize(data.suggestedCtx);
-            }
+  const [routerModels, setRouterModels] = useState<NormalizedModel[]>([]);
+  const [selectedRouterModel, setSelectedRouterModel] = useState('');
+  const [ctxSize, setCtxSize] = useState(4096);
+  const [suggestedCtx, setSuggestedCtx] = useState<number | null>(null);
+  const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null);
+  const [gpuError, setGpuError] = useState<string | null>(null);
+  const [chatModels, setChatModels] = useState<NormalizedModel[]>([]);
+  const [selectedChatModel, setSelectedChatModel] = useState('');
+
+  // ── State: action feedback ──
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionStatus, setActionStatus] = useState<'idle' | 'launching' | 'stopping' | 'restarting' | 'success' | 'error'>('idle');
+  const [actionMessage, setActionMessage] = useState('');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // ── Data fetch (stale-while-revalidate) ──
+  const fetchDashboardData = async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+
+    setContentRefreshing(true);
+
+    try {
+      // ── Health: fetch router status — update immediately ──
+      try {
+        const status = await getRouterStatus();
+        setRouterStatus(status);
+      } catch {
+        // Router might not be available — set null immediately
+        setRouterStatus(null);
+      }
+
+      // ── Content: fetch GPU/VRAM — preserve old data on failure ──
+      try {
+        const gpu = await fetchRouterGpu();
+        setGpuStatus(gpu);
+        setGpuError(null);
+      } catch (err) {
+        // Keep old GPU data, just log error
+        setGpuError(err instanceof Error ? err.message : 'Failed to fetch GPU status');
+      }
+
+      // ── Content: fetch router models — preserve old data on failure ──
+      try {
+        const data = await fetchRouterModels();
+        setRouterModels(data.models || []);
+        if (data.suggestedCtx) {
+          setSuggestedCtx(data.suggestedCtx);
+          if (!selectedRouterModel) {
+            setCtxSize(data.suggestedCtx);
           }
-        } catch {
-          // Router models might not be available
         }
- 
-        // Fetch chat models (Gateway/Direct based on settings)
-        // These are used for the SystemOverview "Model Running" pill, not for Router control.
-            try {
-              const providerModels = await fetchProviderModels(settings.defaultProvider);
-              setChatModels(providerModels);
-              if (providerModels.length > 0) {
-                const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
-                setSelectedChatModel(defaultModel?.id || providerModels[0].id);
-              }
-            } catch {
-              // Chat models might not be available
-            }
- 
-            // Test endpoint health
-            await testAllEndpoints();
-          };
-       
-         // Reload chat models when settings defaultProvider changes
-         // Chat models are for the SystemOverview "Model Running" display only.
-         useEffect(() => {
-           const loadChatModels = async () => {
-             try {
-               const providerModels = await fetchProviderModels(settings.defaultProvider);
-               setChatModels(providerModels);
-               if (providerModels.length > 0) {
-                 const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
-                 setSelectedChatModel(defaultModel?.id || providerModels[0].id);
-               }
-             } catch {
-               // Chat models might not be available
-             }
-           };
-           loadChatModels();
-         }, [settings.defaultProvider, settings.defaultModel]);
+      } catch {
+        // Keep old router models
+      }
+
+      // ── Content: fetch chat models — preserve old data on failure ──
+      try {
+        const providerModels = await fetchProviderModels(settings.defaultProvider);
+        setChatModels(providerModels);
+        if (providerModels.length > 0) {
+          const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
+          setSelectedChatModel(defaultModel?.id || providerModels[0].id);
+        }
+      } catch {
+        // Keep old chat models
+      }
+
+      // ── Health: test endpoint health ──
+      await testAllEndpoints();
+
+      setLastUpdated(Date.now());
+    } finally {
+      setContentRefreshing(false);
+      inFlightRef.current = false;
+    }
+  };
+
+  // Initial fetch on mount
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  // Reload chat models when settings defaultProvider changes
+  useEffect(() => {
+    const loadChatModels = async () => {
+      try {
+        const providerModels = await fetchProviderModels(settings.defaultProvider);
+        setChatModels(providerModels);
+        if (providerModels.length > 0) {
+          const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
+          setSelectedChatModel(defaultModel?.id || providerModels[0].id);
+        }
+      } catch {
+        // Chat models might not be available
+      }
+    };
+    loadChatModels();
+  }, [settings.defaultProvider, settings.defaultModel]);
 
   const testAllEndpoints = async () => {
     setHealthLoading(true);
@@ -145,11 +169,11 @@ const DashboardPage: React.FC = () => {
 
   const handleLaunch = async () => {
       if (!selectedRouterModel) return;
-  
+
       setActionLoading(true);
       setActionStatus('launching');
       setActionMessage('');
-  
+
       try {
         const result = await apiLaunchModel(selectedRouterModel, ctxSize);
       if (result.ok) {
@@ -177,7 +201,7 @@ const DashboardPage: React.FC = () => {
       setActionLoading(true);
       setActionStatus('stopping');
       setActionMessage('');
-  
+
       try {
         const result = await apiStopModel();
         if (result.ok) {
@@ -200,14 +224,14 @@ const DashboardPage: React.FC = () => {
         }, 5000);
       }
     };
-  
+
     const handleRestart = async () => {
        if (!selectedRouterModel) return;
- 
+
        setActionLoading(true);
        setActionStatus('restarting');
        setActionMessage('');
- 
+
        try {
          const result = await apiRestartRouterModel(selectedRouterModel, ctxSize);
          if (result.ok) {
@@ -236,15 +260,15 @@ const DashboardPage: React.FC = () => {
          }, 5000);
        }
      };
-  
+
     // Auto-select first model if none selected and models available
       useEffect(() => {
         if (!selectedRouterModel && routerModels.length > 0) {
           setSelectedRouterModel(routerModels[0].name);
         }
       }, [routerModels, selectedRouterModel]);
-    
-      // Auto-select first chat model if none selected
+
+    // Auto-select first chat model if none selected
       useEffect(() => {
         if (!selectedChatModel && chatModels.length > 0) {
           setSelectedChatModel(chatModels[0].id);
@@ -292,6 +316,15 @@ const DashboardPage: React.FC = () => {
     },
   ];
 
+  const formatTimeAgo = (ts: number) => {
+    const diff = Date.now() - ts;
+    const secs = Math.floor(diff / 1000);
+    if (secs < 10) return 'just now';
+    if (secs < 60) return `${secs}s ago`;
+    const mins = Math.floor(secs / 60);
+    return `${mins}m ago`;
+  };
+
   return (
     <div className="flex flex-col h-full bg-bg-primary">
       {/* Status Bar */}
@@ -301,12 +334,25 @@ const DashboardPage: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-6">
         {/* Page Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
-            Qonduit Control Center
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
+              Qonduit Control Center
+            </h1>
+            {contentRefreshing && (
+              <span className="flex items-center gap-1 text-[10px] text-text-tertiary">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Refreshing…
+              </span>
+            )}
+          </div>
           <p className="text-text-secondary mt-1">
             Monitor and manage your AI infrastructure
           </p>
+          {lastUpdated && !contentRefreshing && (
+            <p className="text-[10px] text-text-tertiary mt-0.5">
+              Updated {formatTimeAgo(lastUpdated)}
+            </p>
+          )}
         </div>
 
         {/* System Overview */}

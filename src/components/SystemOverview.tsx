@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import StatusBadge from './StatusBadge';
 import { GpuStatus } from '../types';
 import {
@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Cpu,
   MemoryStick,
+  AlertCircle,
 } from 'lucide-react';
 
 interface SystemOverviewProps {
@@ -41,6 +42,19 @@ const SystemOverview: React.FC<SystemOverviewProps> = ({
   onRefresh,
 }) => {
   const isRunning = routerStatus?.running;
+
+  // Track whether we've ever had a successful health check
+  const [hasEverLoaded, setHasEverLoaded] = useState(false);
+
+  useEffect(() => {
+    if (routerStatus !== null || endpointHealth.router !== null) {
+      setHasEverLoaded(true);
+    }
+  }, [routerStatus, endpointHealth.router]);
+
+  // Determine if router is offline (health check failed after previously loading)
+  const routerOffline = hasEverLoaded && endpointHealth.router === false;
+
   const lastChecked = Date.now();
 
   // Determine the router running model display text
@@ -79,7 +93,7 @@ const SystemOverview: React.FC<SystemOverviewProps> = ({
       loadingLabel: 'Checking Router...',
       onlineLabel: 'Router Online',
       offlineLabel: 'Router Offline',
-      unknownLabel: 'Router Unknown',
+      unknownLabel: routerOffline ? 'Router Offline' : 'Router Unknown',
     },
     {
       key: 'model' as const,
@@ -108,6 +122,12 @@ const SystemOverview: React.FC<SystemOverviewProps> = ({
                 {chatModel && (
                   <StatusBadge status="online" label={chatModel} />
                 )}
+                {routerOffline && (
+                  <span className="flex items-center gap-1 text-[10px] text-status-warning bg-status-warning/10 px-2 py-0.5 rounded-full">
+                    <AlertCircle className="w-3 h-3" />
+                    Router Offline
+                  </span>
+                )}
               </div>
         <button
           onClick={onRefresh}
@@ -124,7 +144,9 @@ const SystemOverview: React.FC<SystemOverviewProps> = ({
         {healthCards.map(({ label, icon: Icon, status, loadingLabel, onlineLabel, offlineLabel, unknownLabel }) => (
           <div
             key={label}
-            className="flex items-center gap-3 px-3 py-2.5 bg-bg-secondary rounded-lg border border-border-subtle"
+            className={`flex items-center gap-3 px-3 py-2.5 bg-bg-secondary rounded-lg border border-border-subtle ${
+              routerOffline && label === 'Router' ? 'border-status-warning/30' : ''
+            }`}
           >
             <Icon className="w-4 h-4 text-text-tertiary flex-shrink-0" />
             <div className="min-w-0 flex-1">

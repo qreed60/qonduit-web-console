@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getSettings, getRouterStatus, fetchRouterModels, fetchRouterGpu, launchModel as apiLaunchModel, stopModel as apiStopModel, restartRouterModel as apiRestartRouterModel, NormalizedModel } from '../services/api';
 import { ENDPOINTS } from '../config/endpoints';
 import { GpuInfo } from '../types';
@@ -23,78 +23,108 @@ const PRESET_CTX = [4096, 8192, 16384, 32768, 65536, 131072, 262144];
 const RouterPage: React.FC = () => {
   const settings = getSettings();
   const mode = settings.endpointMode;
+
+  // ── State: separate loading phases ──
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const inFlightRef = useRef(false);
+
+  // ── State: content data (preserved across refreshes) ──
   const [routerStatus, setRouterStatus] = useState<{ running: boolean; exists: boolean } | null>(null);
   const [routerModels, setRouterModels] = useState<NormalizedModel[]>([]);
   const [suggestedCtx, setSuggestedCtx] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
   const [selectedModel, setSelectedModel] = useState('');
   const [ctxSize, setCtxSize] = useState(4096);
+  const [vramData, setVramData] = useState<{ total: string; used: string; free: string } | null>(null);
+  const [gpuRows, setGpuRows] = useState<Array<{ index: number; name: string; total: string; used: string; free: string; isDisplay?: boolean }>>([]);
+
+  // ── State: errors & timestamps ──
+  const [contentError, setContentError] = useState<string | null>(null);
+  const [vramError, setVramError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+
+  // ── State: action feedback ──
   const [actionLoading, setActionLoading] = useState(false);
   const [actionStatus, setActionStatus] = useState<'idle' | 'launching' | 'stopping' | 'restarting' | 'success' | 'error'>('idle');
   const [actionMessage, setActionMessage] = useState('');
-   const [toastMessage, setToastMessage] = useState<string | null>(null);
-   const [vramData, setVramData] = useState<{ total: string; used: string; free: string } | null>(null);
-     const [vramError, setVramError] = useState<string | null>(null);
-     const [gpuRows, setGpuRows] = useState<Array<{ index: number; name: string; total: string; used: string; free: string; isDisplay?: boolean }>>([]);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Track the context size used when the model was launched,
   // so we can detect when context has changed and needs restart.
   const [runningCtxSize, setRunningCtxSize] = useState<number | null>(null);
 
+  // ── Data fetch (stale-while-revalidate) ──
+  const fetchData = async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+
+    if (initialLoading) {
+      setInitialLoading(true);
+    } else {
+      setRefreshing(true);
+      setContentError(null);
+    }
+
+    try {
+      // ── Health: fetch router status — update immediately ──
+      try {
+        const status = await getRouterStatus();
+        setRouterStatus({ running: status.running, exists: status.exists });
+      } catch {
+        // Health failure — immediately show null (unknown/offline)
+        setRouterStatus(null);
+      }
+
+      // ── Content: fetch models — preserve old data on failure ──
+      try {
+        const data = await fetchRouterModels();
+        setRouterModels(data.models || []);
+        if (data.suggestedCtx) setSuggestedCtx(data.suggestedCtx);
+        setContentError(null);
+      } catch {
+        setContentError('Model list refresh failed — showing last known data');
+      }
+
+      // ── Content: fetch GPU/VRAM — preserve old data on failure ──
+      try {
+        const gpu = await fetchRouterGpu();
+        if (gpu.ok) {
+          setVramData({
+            total: gpu.memory_total_human,
+            used: gpu.memory_used_human,
+            free: gpu.memory_free_human,
+          });
+          setVramError(null);
+          const rows = gpu.gpus.map((g: GpuInfo) => ({
+            index: g.index,
+            name: g.name,
+            total: `${(g.memory_total_mib / 1024).toFixed(1)} GiB`,
+            used: `${(g.memory_used_mib / 1024).toFixed(1)} GiB`,
+            free: `${(g.memory_free_mib / 1024).toFixed(1)} GiB`,
+            isDisplay: /quadro|display|integrated|igd/i.test(g.name),
+          }));
+          setGpuRows(rows);
+        } else {
+          setVramError('VRAM unavailable — GPU endpoint returned ok:false');
+        }
+      } catch (err) {
+        setVramError(err instanceof Error ? err.message : 'Failed to fetch GPU status');
+      }
+
+      setLastUpdated(Date.now());
+    } finally {
+      setInitialLoading(false);
+      setRefreshing(false);
+      inFlightRef.current = false;
+    }
+  };
+
   useEffect(() => {
-     const fetchData = async () => {
-       setLoading(true);
-       try {
-         const status = await getRouterStatus();
-         setRouterStatus({ running: status.running, exists: status.exists });
- 
-         try {
-           const data = await fetchRouterModels();
-           setRouterModels(data.models || []);
-           if (data.suggestedCtx) setSuggestedCtx(data.suggestedCtx);
-         } catch { /* models may not be available */ }
- 
-         // Fetch GPU/VRAM data
-          try {
-            const gpu = await fetchRouterGpu();
-            if (gpu.ok) {
-              setVramData({
-                total: gpu.memory_total_human,
-                used: gpu.memory_used_human,
-                free: gpu.memory_free_human,
-              });
-              setVramError(null);
-              const rows = gpu.gpus.map((g: GpuInfo) => ({
-                index: g.index,
-                name: g.name,
-                total: `${(g.memory_total_mib / 1024).toFixed(1)} GiB`,
-                used: `${(g.memory_used_mib / 1024).toFixed(1)} GiB`,
-                free: `${(g.memory_free_mib / 1024).toFixed(1)} GiB`,
-                isDisplay: /quadro|display|integrated|igd/i.test(g.name),
-              }));
-              setGpuRows(rows);
-            } else {
-              setVramData(null);
-              setVramError('VRAM unavailable — GPU endpoint returned ok:false');
-              setGpuRows([]);
-            }
-          } catch (err) {
-            setVramData(null);
-            setVramError(err instanceof Error ? err.message : 'Failed to fetch GPU status');
-            setGpuRows([]);
-          }
-       } catch {
-         // Router may not be available
-       } finally {
-         setLoading(false);
-       }
-     };
- 
-     fetchData();
-     // Refresh every 10 seconds
-     const interval = setInterval(fetchData, 10000);
-     return () => clearInterval(interval);
-   }, []);
+    fetchData();
+    // Refresh every 10 seconds
+    const interval = setInterval(fetchData, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Track running context size when model starts/stops
   useEffect(() => {
@@ -112,6 +142,7 @@ const RouterPage: React.FC = () => {
     }
   }, [routerModels, selectedModel]);
 
+  const isStale = (routerModels.length > 0 || vramData) && routerStatus === null;
 
   const handleLaunch = async () => {
     if (!selectedModel) return;
@@ -204,16 +235,44 @@ const RouterPage: React.FC = () => {
     setCtxSize(ctx);
   };
 
+  const formatTimeAgo = (ts: number) => {
+    const diff = Date.now() - ts;
+    const secs = Math.floor(diff / 1000);
+    if (secs < 10) return 'just now';
+    if (secs < 60) return `${secs}s ago`;
+    const mins = Math.floor(secs / 60);
+    return `${mins}m ago`;
+  };
+
   return (
-      <div className="p-6 h-full flex flex-col">
+      <div className={`p-6 h-full flex flex-col ${isStale ? 'opacity-80' : ''}`}>
         {/* Header */}
         <div className="mb-6">
-          <h2 className="text-xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
-            Router
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
+              Router
+            </h2>
+            {refreshing && (
+              <span className="flex items-center gap-1 text-[10px] text-text-tertiary">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Refreshing…
+              </span>
+            )}
+            {isStale && (
+              <span className="flex items-center gap-1 text-[10px] text-status-warning bg-status-warning/10 px-2 py-0.5 rounded-full">
+                <AlertCircle className="w-3 h-3" />
+                Data stale
+              </span>
+            )}
+          </div>
           <p className="text-sm text-text-secondary mt-1">
             Launch and manage local GGUF models via the Qonduit Router
           </p>
+          {lastUpdated && !refreshing && (
+            <p className="text-[10px] text-text-tertiary mt-0.5">
+              Updated {formatTimeAgo(lastUpdated)}
+            </p>
+          )}
         </div>
   
         {/* Main Content */}
@@ -222,7 +281,7 @@ const RouterPage: React.FC = () => {
           <div className="bg-bg-card rounded-xl border border-border-primary p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-text-primary">Router Status</h3>
-              {loading ? (
+              {refreshing && !routerStatus ? (
                 <Loader2 className="w-4 h-4 text-text-tertiary animate-spin" />
               ) : routerStatus ? (
                 <div className="flex items-center gap-2">
@@ -324,12 +383,12 @@ const RouterPage: React.FC = () => {
                 </span>
               )}
             </div>
-            {loading ? (
+            {initialLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 text-text-tertiary animate-spin" />
               </div>
             ) : routerModels.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+              <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4 ${isStale ? 'opacity-70' : ''}`}>
                 {routerModels.map((model) => {
                                   const isSelected = model.name === selectedModel;
                                   const isThisRunning = isRunning && isSelected;
@@ -390,6 +449,26 @@ const RouterPage: React.FC = () => {
               <div className="text-center py-8">
                 <p className="text-text-tertiary text-sm">No models available</p>
                 <p className="text-text-tertiary/60 text-xs mt-1">Add GGUF files to the Router's model directory</p>
+              </div>
+            )}
+  
+            {/* Content Error Warning */}
+            {contentError && (
+              <div className="mt-2 p-2 bg-status-warning/5 border border-status-warning/20 rounded-lg">
+                <p className="text-[10px] text-status-warning flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  {contentError}
+                </p>
+              </div>
+            )}
+  
+            {/* VRAM Error Warning */}
+            {vramError && !vramData && (
+              <div className="mt-2 p-2 bg-status-warning/5 border border-status-warning/20 rounded-lg">
+                <p className="text-[10px] text-status-warning flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  {vramError}
+                </p>
               </div>
             )}
   

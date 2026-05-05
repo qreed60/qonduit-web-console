@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { fetchGatewayModels, fetchDirectModels, fetchRouterModels, fetchRouterGpu } from '../services/api';
 import { apiPath } from '../config/endpoints';
 import { GpuInfo } from '../types';
@@ -14,6 +14,7 @@ import {
   Cpu,
   HardDrive,
   MemoryStick,
+  Loader2,
 } from 'lucide-react';
 
 interface ModelCardData {
@@ -50,15 +51,25 @@ interface GpuRow {
 }
 
 const ModelsPage: React.FC = () => {
+  // ── State: separate loading phases ──
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const inFlightRef = useRef(false);
+
+  // ── State: content data (preserved across refreshes) ──
   const [models, setModels] = useState<ModelCardData[]>([]);
-  const [loading, setLoading] = useState(false);
+
+  // ── State: errors & timestamps ──
   const [error, setError] = useState<string | null>(null);
   const [providerErrors, setProviderErrors] = useState<ProviderError[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+
+  // ── State: VRAM ──
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [vramData, setVramData] = useState<VramData | null>(null);
-    const [vramError, setVramError] = useState<string | null>(null);
-    const [gpuRows, setGpuRows] = useState<GpuRow[]>([]);
+  const [vramError, setVramError] = useState<string | null>(null);
+  const [gpuRows, setGpuRows] = useState<GpuRow[]>([]);
 
   useEffect(() => {
     loadModels();
@@ -66,97 +77,105 @@ const ModelsPage: React.FC = () => {
   }, []);
 
   const loadModels = async () => {
-      setLoading(true);
-      setError(null);
-      setModels([]);
-      setProviderErrors([]);
-  
-      const timeout = 10000; // 10 seconds per provider
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
-  
-      try {
-        const results = await Promise.allSettled([
-          fetchGatewayModels().then(models => ({ provider: 'Gateway' as const, models, url: apiPath('gateway', '/v1/models') })),
-          fetchDirectModels().then(models => ({ provider: 'Direct' as const, models, url: apiPath('llama', '/v1/models') })),
-          fetchRouterModels().then(result => ({ provider: 'Router' as const, models: result.models, url: apiPath('router', '/api/v1/qonduit-router/models'), suggestedCtx: result.suggestedCtx })),
-        ]);
-  
-        const allModels: ModelCardData[] = [];
-        const errors: ProviderError[] = [];
-  
-        for (const result of results) {
-          if (result.status === 'fulfilled') {
-            const data = result.value;
-            data.models.forEach((m) => {
-              allModels.push({
-                id: `${data.provider}:${m.id}`,
-                name: m.name,
-                provider: data.provider,
-                created: m.created,
-                ownedBy: m.ownedBy,
-                path: m.path,
-                sourceUrl: m.sourceUrl,
-                parameterSize: m.parameterSize,
-                fileSize: m.fileSize,
-              });
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+
+    if (initialLoading) {
+      setInitialLoading(true);
+    } else {
+      setRefreshing(true);
+    }
+
+    // DO NOT call setModels([]) — preserve existing data
+    setError(null);
+    setProviderErrors([]);
+
+    const timeout = 10000; // 10 seconds per provider
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const results = await Promise.allSettled([
+        fetchGatewayModels().then(models => ({ provider: 'Gateway' as const, models, url: apiPath('gateway', '/v1/models') })),
+        fetchDirectModels().then(models => ({ provider: 'Direct' as const, models, url: apiPath('llama', '/v1/models') })),
+        fetchRouterModels().then(result => ({ provider: 'Router' as const, models: result.models, url: apiPath('router', '/api/v1/qonduit-router/models'), suggestedCtx: result.suggestedCtx })),
+      ]);
+
+      const allModels: ModelCardData[] = [];
+      const errors: ProviderError[] = [];
+
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          const data = result.value;
+          data.models.forEach((m) => {
+            allModels.push({
+              id: `${data.provider}:${m.id}`,
+              name: m.name,
+              provider: data.provider,
+              created: m.created,
+              ownedBy: m.ownedBy,
+              path: m.path,
+              sourceUrl: m.sourceUrl,
+              parameterSize: m.parameterSize,
+              fileSize: m.fileSize,
             });
-          } else {
-            const rejection = result as PromiseRejectedResult;
-            const msg = rejection.reason instanceof Error ? rejection.reason.message : 'Unknown error';
-            errors.push({ provider: 'Unknown', url: 'unknown', error: msg });
-          }
+          });
+        } else {
+          const rejection = result as PromiseRejectedResult;
+          const msg = rejection.reason instanceof Error ? rejection.reason.message : 'Unknown error';
+          errors.push({ provider: 'Unknown', url: 'unknown', error: msg });
         }
-  
-        setModels(allModels);
-        setProviderErrors(errors);
-  
-        if (errors.length > 0 && allModels.length === 0) {
-          setError(`No models found. Provider errors:\n${errors.map(e => `${e.provider}: ${e.error}`).join('\n')}`);
-        } else if (allModels.length === 0) {
-          setError('No models found from any endpoint (Gateway, Direct, or Router)');
-        }
-      } finally {
-        clearTimeout(timeoutId);
-        setLoading(false);
       }
-    };
-  
-    const loadVram = async () => {
-       try {
-          const gpu = await fetchRouterGpu();
-          if (gpu.ok) {
-            setVramData({
-              total: gpu.memory_total_human,
-              used: gpu.memory_used_human,
-              free: gpu.memory_free_human,
-            });
-            // Build per-GPU rows
-            const rows: GpuRow[] = gpu.gpus.map((g: GpuInfo) => {
-              // Heuristic: Quadro/K-series GPUs are often display adapters
-              const isDisplay = /quadro|display|integrated|igd/i.test(g.name);
-              return {
-                index: g.index,
-                name: g.name,
-                total: `${(g.memory_total_mib / 1024).toFixed(1)} GiB`,
-                used: `${(g.memory_used_mib / 1024).toFixed(1)} GiB`,
-                free: `${(g.memory_free_mib / 1024).toFixed(1)} GiB`,
-                isDisplay,
-              };
-            });
-            setGpuRows(rows);
-            setVramError(null);
-          } else {
-            setVramData(null);
-            setVramError('VRAM unavailable — GPU endpoint returned ok:false');
-            setGpuRows([]);
-          }
-        } catch (err) {
-          setVramData(null);
-          setVramError(err instanceof Error ? err.message : 'Failed to fetch GPU status');
-          setGpuRows([]);
+
+      setModels(allModels);
+      setProviderErrors(errors);
+
+      if (errors.length > 0 && allModels.length === 0) {
+        setError(`No models found. Provider errors:\n${errors.map(e => `${e.provider}: ${e.error}`).join('\n')}`);
+      } else if (allModels.length === 0) {
+        setError('No models found from any endpoint (Gateway, Direct, or Router)');
+      }
+
+      setLastUpdated(Date.now());
+    } finally {
+      clearTimeout(timeoutId);
+      setInitialLoading(false);
+      setRefreshing(false);
+      inFlightRef.current = false;
+    }
+  };
+
+  const loadVram = async () => {
+     try {
+        const gpu = await fetchRouterGpu();
+        if (gpu.ok) {
+          setVramData({
+            total: gpu.memory_total_human,
+            used: gpu.memory_used_human,
+            free: gpu.memory_free_human,
+          });
+          // Build per-GPU rows
+          const rows: GpuRow[] = gpu.gpus.map((g: GpuInfo) => {
+            // Heuristic: Quadro/K-series GPUs are often display adapters
+            const isDisplay = /quadro|display|integrated|igd/i.test(g.name);
+            return {
+              index: g.index,
+              name: g.name,
+              total: `${(g.memory_total_mib / 1024).toFixed(1)} GiB`,
+              used: `${(g.memory_used_mib / 1024).toFixed(1)} GiB`,
+              free: `${(g.memory_free_mib / 1024).toFixed(1)} GiB`,
+              isDisplay,
+            };
+          });
+          setGpuRows(rows);
+          setVramError(null);
+        } else {
+          setVramError('VRAM unavailable — GPU endpoint returned ok:false');
         }
-     };
+      } catch (err) {
+        setVramError(err instanceof Error ? err.message : 'Failed to fetch GPU status');
+      }
+   };
 
   const handleCopyId = async (id: string) => {
     try {
@@ -192,24 +211,46 @@ const ModelsPage: React.FC = () => {
     }
   };
 
+  const formatTimeAgo = (ts: number) => {
+    const diff = Date.now() - ts;
+    const secs = Math.floor(diff / 1000);
+    if (secs < 10) return 'just now';
+    if (secs < 60) return `${secs}s ago`;
+    const mins = Math.floor(secs / 60);
+    return `${mins}m ago`;
+  };
+
   return (
       <div className="p-6 h-full flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
-              Available Models
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
+                Available Models
+              </h2>
+              {refreshing && (
+                <span className="flex items-center gap-1 text-[10px] text-text-tertiary">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Refreshing…
+                </span>
+              )}
+            </div>
             <p className="text-sm text-text-secondary mt-0.5">
               Models from Gateway, Direct, and Router endpoints
             </p>
+            {lastUpdated && !refreshing && (
+              <p className="text-[10px] text-text-tertiary mt-0.5">
+                Updated {formatTimeAgo(lastUpdated)}
+              </p>
+            )}
           </div>
           <button
             onClick={loadModels}
-            disabled={loading}
+            disabled={refreshing}
             className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 border border-border-primary text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh
           </button>
         </div>
@@ -264,7 +305,7 @@ const ModelsPage: React.FC = () => {
   
         {/* Models Grid */}
          <div className="flex-1 overflow-y-auto">
-         {loading ? (
+         {initialLoading ? (
            <div className="flex flex-col items-center justify-center h-64 space-y-4">
              <div className="w-12 h-12 rounded-full border-4 border-accent-primary/20 border-t-accent-primary animate-spin" />
              <p className="text-text-secondary text-sm">Loading models...</p>
