@@ -7,6 +7,16 @@ export type { NormalizedModel };
 // ── Model metadata helpers ──────────────────────────────────────────────────
 
 /**
+ * Format bytes to human-readable string (GB, MB, KB).
+ */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+/**
  * Extract parameter size from a model name/filename.
  * Matches patterns like "35B", "20B", "0.5B", "1.5B".
  */
@@ -124,11 +134,34 @@ async function parseJsonSafe<T>(response: Response, context: string): Promise<T>
 }
 
 /**
+ * Extract file size from an API response object, checking multiple field names.
+ * Returns formatted string or undefined if not found.
+ */
+function extractSizeFromObject(o: Record<string, unknown>): string | undefined {
+  // Direct size fields
+  const sizeBytes = o.size ?? o.file_size_bytes ?? o.fileSize ?? o.filesize;
+  if (typeof sizeBytes === 'number' && sizeBytes > 0) {
+    return formatBytes(sizeBytes);
+  }
+  // Nested metadata
+  const meta = o.metadata as Record<string, unknown> | undefined;
+  if (meta) {
+    const metaSize = meta.size ?? meta.file_size_bytes ?? meta.fileSize;
+    if (typeof metaSize === 'number' && metaSize > 0) {
+      return formatBytes(metaSize);
+    }
+  }
+  return undefined;
+}
+
+/**
  * Parse any /v1/models response into a list of NormalizedModel objects.
  * Handles:
  *   - { data: [{ id: "x" }] }              — OpenAI standard
  *   - { models: [{ name: "x", model: "x" }] } — alternative shape
  *   - { models: ["x", "y"] }               — string array
+ *
+ * Also checks for size/file_size_bytes/metadata.size fields in API responses.
  */
 function parseModelsResponse(raw: unknown, provider: 'Gateway' | 'Direct'): NormalizedModel[] {
   if (!raw || typeof raw !== 'object') return [];
@@ -142,6 +175,8 @@ function parseModelsResponse(raw: unknown, provider: 'Gateway' | 'Direct'): Norm
          const o = item as Record<string, unknown>;
          const id = String(o.id || o.name || 'unknown');
          const name = String(o.name || o.model || o.id || 'unknown');
+         // Check API response for size fields first, fall back to filename parsing
+         const apiFileSize = extractSizeFromObject(o);
          results.push({
            id,
            name,
@@ -150,7 +185,7 @@ function parseModelsResponse(raw: unknown, provider: 'Gateway' | 'Direct'): Norm
            created: typeof o.created === 'number' ? o.created : undefined,
            ownedBy: typeof o.owned_by === 'string' ? o.owned_by : undefined,
            parameterSize: extractParameterSize(name),
-           fileSize: extractFileSize(name),
+           fileSize: apiFileSize ?? extractFileSize(name),
          });
        }
      }
@@ -164,6 +199,7 @@ function parseModelsResponse(raw: unknown, provider: 'Gateway' | 'Direct'): Norm
          const id = String(o.id || o.name || 'unknown');
          if (!results.some(m => m.id === id)) {
            const name = String(o.name || o.model || o.id || 'unknown');
+           const apiFileSize = extractSizeFromObject(o);
            results.push({
              id,
              name,
@@ -172,7 +208,7 @@ function parseModelsResponse(raw: unknown, provider: 'Gateway' | 'Direct'): Norm
              created: typeof o.created === 'number' ? o.created : undefined,
              ownedBy: typeof o.owned_by === 'string' ? o.owned_by : undefined,
              parameterSize: extractParameterSize(name),
-             fileSize: extractFileSize(name),
+             fileSize: apiFileSize ?? extractFileSize(name),
            });
          }
        }
@@ -205,6 +241,9 @@ function parseModelsResponse(raw: unknown, provider: 'Gateway' | 'Direct'): Norm
  *   - { ok: true, models: ["a.gguf", "b.gguf"], suggested_context: 32768 }
  *   - { models: [{ name: "a.gguf", path: "/path/to/a.gguf" }] }
  *   - { models: ["a.gguf"] }
+ *   - { models: [{ name: "a.gguf", file_size_bytes: 26581518848, parameter_size: "35B" }] }
+ *
+ * Checks for file_size_bytes and parameter_size fields in enriched model objects.
  */
 function parseRouterModelsResponse(raw: unknown, sourceUrl: string): { models: NormalizedModel[]; suggestedCtx: number } {
   if (!raw || typeof raw !== 'object') return { models: [], suggestedCtx: 8192 };
@@ -232,19 +271,30 @@ function parseRouterModelsResponse(raw: unknown, sourceUrl: string): { models: N
         } else if (item && typeof item === 'object') {
           const o = item as Record<string, unknown>;
           const name = String(o.name || o.id || 'unknown');
+          // Check for enriched metadata fields
+          let fileSize: string | undefined;
+          let paramSize: string | undefined;
+
+          if (typeof o.file_size_bytes === 'number' && o.file_size_bytes > 0) {
+            fileSize = formatBytes(o.file_size_bytes);
+          }
+          if (typeof o.parameter_size === 'string' && o.parameter_size) {
+            paramSize = o.parameter_size;
+          }
+
           results.push({
             id: name,
             name,
             provider: 'Router',
             sourceUrl,
             path: typeof o.path === 'string' ? o.path : undefined,
-            parameterSize: extractParameterSize(name),
-            fileSize: extractFileSize(name),
+            parameterSize: paramSize ?? extractParameterSize(name),
+            fileSize: fileSize ?? extractFileSize(name),
           });
         }
       }
     }
-  
+
     return { models: results, suggestedCtx };
   }
 
@@ -523,11 +573,14 @@ export async function llamaReady(): Promise<boolean> {
 
 /**
  * Stream logs from the router API (SSE via fetch ReadableStream).
+ * Handles both plain text and SSE "data: ..." prefixed lines.
+ * Accepts an optional AbortSignal for clean cancellation.
  */
-export async function* streamLogs(onMessage: (line: string) => void): AsyncIterable<void> {
-  const response = await fetch(apiPath('router', '/api/v1/qonduit-router/logs'));
+export async function* streamLogs(onMessage: (line: string) => void, signal?: AbortSignal): AsyncIterable<void> {
+  const url = apiPath('router', '/api/v1/qonduit-router/logs');
+  const response = await fetch(url, { signal });
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+    throw new Error(`HTTP ${response.status} — ${url}`);
   }
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
@@ -541,7 +594,10 @@ export async function* streamLogs(onMessage: (line: string) => void): AsyncItera
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
       for (const line of lines) {
-        if (line.trim()) onMessage(line.trim());
+        const cleanLine = line.trim();
+        // Strip SSE "data: " prefix if present
+        const stripped = cleanLine.startsWith('data:') ? cleanLine.slice(5).trim() : cleanLine;
+        if (stripped) onMessage(stripped);
       }
     }
   } finally {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { streamLogs } from '../services/api';
+import { apiPath } from '../config/endpoints';
 import {
   Terminal,
   Play,
@@ -23,6 +24,9 @@ const LOG_COLORS: Record<string, string> = {
   INFO: 'text-text-secondary',
 };
 
+const LOGS_URL = '/api/v1/qonduit-router/logs';
+const WAIT_TIMEOUT_MS = 10000; // 10 seconds before showing "no output yet" hint
+
 const LogsPanel: React.FC<LogsPanelProps> = ({ routerStatus }) => {
   const [logs, setLogs] = useState<string[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -31,8 +35,10 @@ const LogsPanel: React.FC<LogsPanelProps> = ({ routerStatus }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+   const [waitTimeout, setWaitTimeout] = useState(false); // Track if we've passed the wait timeout
   const logsEndRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const waitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const maxLines = 500;
 
   // Load expanded state from localStorage
@@ -46,37 +52,58 @@ const LogsPanel: React.FC<LogsPanelProps> = ({ routerStatus }) => {
     localStorage.setItem('qonduit-logs-expanded', String(expanded));
   };
 
+  const stopStreaming = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setIsStreaming(false);
+  }, []);
+
   const startStreaming = useCallback(async () => {
+    // Stop any existing stream first
+    stopStreaming();
+
     setIsStreaming(true);
-    setError(null);
-    abortRef.current = false;
-    setIsPaused(false);
+     setError(null);
+     setWaitTimeout(false);
+
+    // Set up wait timeout — if no logs arrive within 10s, show hint
+    if (waitTimerRef.current) clearTimeout(waitTimerRef.current);
+    waitTimerRef.current = setTimeout(() => {
+      setWaitTimeout(true);
+    }, WAIT_TIMEOUT_MS);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       for await (const _ of streamLogs((line: string) => {
-        if (abortRef.current || isPaused) return;
+        if (controller.signal.aborted || isPaused) return;
+        // Clear wait timeout on first log line
+        if (waitTimeout) setWaitTimeout(false);
         setLogs((prev) => {
           const next = [...prev, line];
           return next.length > maxLines ? next.slice(-maxLines) : next;
         });
-      })) {
+      }, controller.signal)) {
         // Keep the generator running
       }
     } catch (err) {
-      if (!abortRef.current) {
-        setError(err instanceof Error ? err.message : 'Failed to connect to log stream');
+      if (!controller.signal.aborted) {
+        const msg = err instanceof Error ? err.message : 'Failed to connect to log stream';
+        setError(msg);
       }
     } finally {
-      if (!abortRef.current) {
+      if (waitTimerRef.current) {
+        clearTimeout(waitTimerRef.current);
+        waitTimerRef.current = null;
+      }
+      if (!controller.signal.aborted) {
         setIsStreaming(false);
       }
     }
-  }, [isPaused]);
-
-  const stopStreaming = useCallback(() => {
-    abortRef.current = true;
-    setIsStreaming(false);
-  }, []);
+  }, [isPaused, stopStreaming, waitTimeout]);
 
   const reconnect = useCallback(() => {
     setError(null);
@@ -93,18 +120,23 @@ const LogsPanel: React.FC<LogsPanelProps> = ({ routerStatus }) => {
     }
   }, [isPaused, startStreaming, stopStreaming]);
 
+  // Auto-start streaming when model starts running
   useEffect(() => {
-    if (routerStatus?.running && !isStreaming && !error) {
+    if (routerStatus?.running && !isStreaming && !error && !isPaused) {
       startStreaming();
     }
     return () => {
-      abortRef.current = true;
+      stopStreaming();
     };
-  }, [routerStatus?.running, isStreaming, error, startStreaming]);
+  }, [routerStatus?.running, isStreaming, error, isPaused, startStreaming, stopStreaming]);
 
+  // Cleanup on unmount
   useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [logs]);
+    return () => {
+      stopStreaming();
+      if (waitTimerRef.current) clearTimeout(waitTimerRef.current);
+    };
+  }, [stopStreaming]);
 
   const isRunning = routerStatus?.running;
 
@@ -228,7 +260,10 @@ const LogsPanel: React.FC<LogsPanelProps> = ({ routerStatus }) => {
                    <div className="text-center">
                      <AlertCircle className="w-8 h-8 text-status-error mx-auto mb-2" />
                      <p className="text-status-error mb-1">Connection Error</p>
-                     <p className="text-xs text-text-tertiary mb-3">{error}</p>
+                     <p className="text-xs text-text-tertiary mb-1">{error}</p>
+                     <p className="text-[10px] text-text-tertiary font-mono mb-3">
+                       URL: {apiPath('router', LOGS_URL)}
+                     </p>
                      {isRunning && (
                        <button
                          onClick={reconnect}
@@ -243,12 +278,32 @@ const LogsPanel: React.FC<LogsPanelProps> = ({ routerStatus }) => {
                      <Terminal className="w-8 h-8 text-text-tertiary/50 mx-auto mb-2" />
                      <p className="text-text-tertiary text-sm">Router not available</p>
                      <p className="text-text-tertiary/60 text-xs mt-1">Check that the Router service is running</p>
+                     <button
+                       onClick={startStreaming}
+                       className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent-primary/10 text-accent-primary border border-accent-primary/20 hover:bg-accent-primary/20 transition-colors"
+                     >
+                       <Play className="w-3 h-3" />
+                       Start Streaming
+                     </button>
                    </div>
                  ) : isRunning ? (
                    <div className="text-center">
                      <Terminal className="w-8 h-8 text-text-tertiary/50 mx-auto mb-2" />
-                     <p className="text-text-tertiary text-sm">Waiting for logs...</p>
-                     <p className="text-text-tertiary/60 text-xs mt-1">Logs will appear once the model starts</p>
+                     <p className="text-text-tertiary text-sm">
+                       {waitTimeout ? 'Waiting for logs... (no output yet)' : 'Waiting for logs...'}
+                     </p>
+                     <p className="text-text-tertiary/60 text-xs mt-1">
+                       {waitTimeout
+                         ? 'The model may still be starting up, or the server is not producing output.'
+                         : 'Logs will appear once the model starts'}
+                     </p>
+                     <button
+                       onClick={startStreaming}
+                       className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent-primary/10 text-accent-primary border border-accent-primary/20 hover:bg-accent-primary/20 transition-colors"
+                     >
+                       <Play className="w-3 h-3" />
+                       Start Streaming
+                     </button>
                    </div>
                  ) : (
                    <div className="text-center">

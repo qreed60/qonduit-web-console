@@ -43,69 +43,71 @@ const DashboardPage: React.FC = () => {
   const [actionStatus, setActionStatus] = useState<'idle' | 'launching' | 'stopping' | 'restarting' | 'success' | 'error'>('idle');
   const [actionMessage, setActionMessage] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [chatModels, setChatModels] = useState<NormalizedModel[]>([]);
-  const [selectedChatModel, setSelectedChatModel] = useState('');
-
-  // Fetch initial data
-    useEffect(() => {
-      fetchDashboardData();
-    }, []);
-  
-    const fetchDashboardData = async () => {
-      // Fetch router status (always, for health card and logs)
-      try {
-        const status = await getRouterStatus();
-        setRouterStatus({ running: status.running, exists: status.exists });
-      } catch {
-        // Router might not be available
-      }
-  
-      // Fetch router models (for launch/stop — always available)
-      try {
-        const data = await fetchRouterModels();
-        setRouterModels(data.models || []);
-        if (data.suggestedCtx) {
-          setSuggestedCtx(data.suggestedCtx);
-          if (!selectedRouterModel) {
-            setCtxSize(data.suggestedCtx);
-          }
-        }
-      } catch {
-        // Router models might not be available
-      }
-  
-      // Fetch chat models (Gateway/Direct based on settings)
-          try {
-            const providerModels = await fetchProviderModels(settings.defaultProvider);
-            setChatModels(providerModels);
-            if (providerModels.length > 0) {
-              const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
-              setSelectedChatModel(defaultModel?.id || providerModels[0].id);
-            }
-          } catch {
-            // Chat models might not be available
-          }
-      
-          // Test endpoint health
-          await testAllEndpoints();
-        };
-      
-        // Reload chat models when settings defaultProvider changes
-        useEffect(() => {
-          const loadChatModels = async () => {
-            try {
-              const providerModels = await fetchProviderModels(settings.defaultProvider);
-              setChatModels(providerModels);
-              if (providerModels.length > 0) {
-                const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
-                setSelectedChatModel(defaultModel?.id || providerModels[0].id);
-              }
-            } catch {
-              // Chat models might not be available
-            }
-          };
-          loadChatModels();
-        }, [settings.defaultProvider, settings.defaultModel]);
+   const [chatModels, setChatModels] = useState<NormalizedModel[]>([]);
+   const [selectedChatModel, setSelectedChatModel] = useState('');
+ 
+   // Fetch initial data
+     useEffect(() => {
+       fetchDashboardData();
+     }, []);
+   
+     const fetchDashboardData = async () => {
+       // Fetch router status (always, for health card and logs)
+       try {
+         const status = await getRouterStatus();
+         setRouterStatus({ running: status.running, exists: status.exists });
+       } catch {
+         // Router might not be available
+       }
+   
+       // Fetch router models (for launch/stop — always available)
+       try {
+         const data = await fetchRouterModels();
+         setRouterModels(data.models || []);
+         if (data.suggestedCtx) {
+           setSuggestedCtx(data.suggestedCtx);
+           if (!selectedRouterModel) {
+             setCtxSize(data.suggestedCtx);
+           }
+         }
+       } catch {
+         // Router models might not be available
+       }
+   
+       // Fetch chat models (Gateway/Direct based on settings)
+       // These are used for the SystemOverview "Model Running" pill, not for Router control.
+           try {
+             const providerModels = await fetchProviderModels(settings.defaultProvider);
+             setChatModels(providerModels);
+             if (providerModels.length > 0) {
+               const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
+               setSelectedChatModel(defaultModel?.id || providerModels[0].id);
+             }
+           } catch {
+             // Chat models might not be available
+           }
+       
+           // Test endpoint health
+           await testAllEndpoints();
+         };
+       
+         // Reload chat models when settings defaultProvider changes
+         // Chat models are for the SystemOverview "Model Running" display only.
+         useEffect(() => {
+           const loadChatModels = async () => {
+             try {
+               const providerModels = await fetchProviderModels(settings.defaultProvider);
+               setChatModels(providerModels);
+               if (providerModels.length > 0) {
+                 const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
+                 setSelectedChatModel(defaultModel?.id || providerModels[0].id);
+               }
+             } catch {
+               // Chat models might not be available
+             }
+           };
+           loadChatModels();
+         }, [settings.defaultProvider, settings.defaultModel]);
 
   const testAllEndpoints = async () => {
     setHealthLoading(true);
@@ -368,26 +370,23 @@ const DashboardPage: React.FC = () => {
         </div>
 
         {/* Router Model Control — always visible, always enabled */}
-                <div className="mb-6">
-                  <ModelControlCard
-                    routerStatus={routerStatus}
-                    models={routerModels}
-                    selectedModel={selectedRouterModel}
-                    ctxSize={ctxSize}
-                    suggestedCtx={suggestedCtx}
-                    onSelectModel={setSelectedRouterModel}
-                    onCtxChange={setCtxSize}
-                    onLaunch={handleLaunch}
-                    onStop={handleStop}
-                    onRestart={handleRestart}
-                    loading={actionLoading}
-                    actionStatus={actionStatus}
-                    actionMessage={actionMessage}
-                    chatModels={chatModels}
-                    selectedChatModel={selectedChatModel}
-                    onSelectedChatModelChange={setSelectedChatModel}
-                  />
-                </div>
+                 <div className="mb-6">
+                   <ModelControlCard
+                     routerStatus={routerStatus}
+                     models={routerModels}
+                     selectedModel={selectedRouterModel}
+                     ctxSize={ctxSize}
+                     suggestedCtx={suggestedCtx}
+                     onSelectModel={setSelectedRouterModel}
+                     onCtxChange={setCtxSize}
+                     onLaunch={handleLaunch}
+                     onStop={handleStop}
+                     onRestart={handleRestart}
+                     loading={actionLoading}
+                     actionStatus={actionStatus}
+                     actionMessage={actionMessage}
+                   />
+                 </div>
 
         {/* Live Logs */}
         <div className="mb-6">

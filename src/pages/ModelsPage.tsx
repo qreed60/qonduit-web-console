@@ -293,23 +293,32 @@ const ModelsPage: React.FC = () => {
                                     </div>
                   
                                     {/* Metadata row */}
-                                    <div className="flex items-center gap-2 mb-3 text-[10px] text-text-tertiary">
-                                      {model.parameterSize && model.parameterSize !== 'unknown' && (
-                                        <span className="flex items-center gap-1">
-                                          <Cpu className="w-3 h-3" />
-                                          {model.parameterSize}
-                                        </span>
-                                      )}
-                                      {model.fileSize && model.fileSize !== 'unknown' && (
-                                        <span className="flex items-center gap-1">
-                                          <HardDrive className="w-3 h-3" />
-                                          {model.fileSize}
-                                        </span>
-                                      )}
-                                      {(!model.parameterSize || model.parameterSize === 'unknown') && (!model.fileSize || model.fileSize === 'unknown') && (
-                                        <span className="text-text-tertiary/50">Metadata not available</span>
-                                      )}
-                                    </div>
+                                     <div className="flex items-center gap-2 mb-3 text-[10px] text-text-tertiary flex-wrap">
+                                       {model.parameterSize && model.parameterSize !== 'unknown' ? (
+                                         <span className="flex items-center gap-1">
+                                           <Cpu className="w-3 h-3" />
+                                           {model.parameterSize}
+                                         </span>
+                                       ) : (
+                                         <span className="text-text-tertiary/50">Param size unknown</span>
+                                       )}
+                                       {model.fileSize && model.fileSize !== 'unknown' ? (
+                                         <span className="flex items-center gap-1">
+                                           <HardDrive className="w-3 h-3" />
+                                           {model.fileSize}
+                                         </span>
+                                       ) : model.provider === 'Router' ? (
+                                         <span className="text-status-warning/70" title="Router API returns filenames only — file size requires backend enhancement">
+                                           <HardDrive className="w-3 h-3 inline" />
+                                           File size unavailable (Router API)
+                                         </span>
+                                       ) : (
+                                         <span className="text-text-tertiary/50" title="File size not available from this provider's /v1/models response">
+                                           <HardDrive className="w-3 h-3 inline" />
+                                           File size unavailable
+                                         </span>
+                                       )}
+                                     </div>
                   
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-3 text-xs text-text-tertiary">

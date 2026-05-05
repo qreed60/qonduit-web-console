@@ -11,6 +11,7 @@ import {
   Square,
   RotateCcw,
   HardDrive,
+  MemoryStick,
 } from 'lucide-react';
 
 /**
@@ -31,6 +32,12 @@ const RouterPage: React.FC = () => {
   const [actionStatus, setActionStatus] = useState<'idle' | 'launching' | 'stopping' | 'restarting' | 'success' | 'error'>('idle');
   const [actionMessage, setActionMessage] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [vramData, setVramData] = useState<{ total: string; used: string; free: string } | null>(null);
+  const [vramError, setVramError] = useState<string | null>(null);
+
+  // Track the context size used when the model was launched,
+  // so we can detect when context has changed and needs restart.
+  const [runningCtxSize, setRunningCtxSize] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -44,6 +51,9 @@ const RouterPage: React.FC = () => {
           setRouterModels(data.models || []);
           if (data.suggestedCtx) setSuggestedCtx(data.suggestedCtx);
         } catch { /* models may not be available */ }
+
+        // Try to get VRAM data
+        await loadVram();
       } catch {
         // Router may not be available
       } finally {
@@ -57,12 +67,57 @@ const RouterPage: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Track running context size when model starts/stops
+  useEffect(() => {
+    if (routerStatus?.running && selectedModel) {
+      setRunningCtxSize(ctxSize);
+    } else if (!routerStatus?.running) {
+      setRunningCtxSize(null);
+    }
+  }, [routerStatus?.running, selectedModel, ctxSize]);
+
   // Auto-select first model if none selected
   useEffect(() => {
     if (!selectedModel && routerModels.length > 0) {
       setSelectedModel(routerModels[0].name);
     }
   }, [routerModels, selectedModel]);
+
+  const loadVram = async () => {
+    try {
+      // Try to get VRAM from Router API status endpoint
+      const response = await fetch(`${ENDPOINTS.router[mode]}/api/v1/qonduit-router/status`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.vram) {
+          setVramData({
+            total: data.vram.total || 'unknown',
+            used: data.vram.used || 'unknown',
+            free: data.vram.free || 'unknown',
+          });
+          return;
+        }
+      }
+    } catch {
+      // VRAM endpoint may not exist — that's OK
+    }
+    // Try alternative VRAM endpoint
+    try {
+      const response = await fetch(`${ENDPOINTS.router[mode]}/api/v1/qonduit-router/vram`);
+      if (response.ok) {
+        const data = await response.json();
+        setVramData({
+          total: data.total || 'unknown',
+          used: data.used || 'unknown',
+          free: data.free || 'unknown',
+        });
+        return;
+      }
+    } catch {
+      // No VRAM endpoint available
+    }
+    setVramError('VRAM data unavailable — Router API needs a GPU status endpoint');
+  };
 
   const handleLaunch = async () => {
     if (!selectedModel) return;
@@ -143,6 +198,9 @@ const RouterPage: React.FC = () => {
   const canStop = isRunning && !actionLoading;
   const canRestart = isRunning && !actionLoading && !!selectedModel;
 
+  // Context size has changed from what was used at launch
+  const ctxChanged = isRunning && runningCtxSize !== null && ctxSize !== runningCtxSize;
+
   const handlePresetClick = (ctx: number) => {
     setCtxSize(ctx);
   };
@@ -196,6 +254,38 @@ const RouterPage: React.FC = () => {
             </div>
           </div>
   
+          {/* VRAM Summary */}
+          <div className="bg-bg-card rounded-xl border border-border-primary p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-text-primary">GPU Memory</h3>
+              {vramData ? (
+                <MemoryStick className="w-4 h-4 text-accent-primary" />
+              ) : (
+                <MemoryStick className="w-4 h-4 text-text-tertiary" />
+              )}
+            </div>
+            {vramData ? (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-bg-secondary/50 rounded-lg p-2.5 border border-border-subtle text-center">
+                  <p className="text-[10px] text-text-tertiary uppercase tracking-wider mb-1">Total</p>
+                  <p className="text-sm font-mono text-text-primary">{vramData.total}</p>
+                </div>
+                <div className="bg-bg-secondary/50 rounded-lg p-2.5 border border-border-subtle text-center">
+                  <p className="text-[10px] text-text-tertiary uppercase tracking-wider mb-1">Used</p>
+                  <p className="text-sm font-mono text-status-warning">{vramData.used}</p>
+                </div>
+                <div className="bg-bg-secondary/50 rounded-lg p-2.5 border border-border-subtle text-center">
+                  <p className="text-[10px] text-text-tertiary uppercase tracking-wider mb-1">Free</p>
+                  <p className="text-sm font-mono text-status-success">{vramData.free}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-bg-secondary/50 rounded-lg p-3 border border-border-subtle">
+                <p className="text-xs text-text-tertiary">{vramError || 'VRAM data unavailable'}</p>
+              </div>
+            )}
+          </div>
+  
           {/* Model Cards */}
           <div className="bg-bg-card rounded-xl border border-border-primary p-5">
             <div className="flex items-center justify-between mb-4">
@@ -241,17 +331,24 @@ const RouterPage: React.FC = () => {
                           {model.path}
                         </p>
                       )}
-                      <div className="flex items-center gap-2 text-[10px] text-text-tertiary">
-                        {model.parameterSize && model.parameterSize !== 'unknown' && (
+                      <div className="flex items-center gap-2 text-[10px] text-text-tertiary flex-wrap">
+                        {model.parameterSize && model.parameterSize !== 'unknown' ? (
                           <span className="flex items-center gap-1">
                             <Cpu className="w-3 h-3" />
                             {model.parameterSize}
                           </span>
+                        ) : (
+                          <span className="text-text-tertiary/50">Param: unknown</span>
                         )}
-                        {model.fileSize && model.fileSize !== 'unknown' && (
+                        {model.fileSize && model.fileSize !== 'unknown' ? (
                           <span className="flex items-center gap-1">
                             <HardDrive className="w-3 h-3" />
                             {model.fileSize}
+                          </span>
+                        ) : (
+                          <span className="text-status-warning/70" title="Router API returns filenames only — file size requires backend enhancement">
+                            <HardDrive className="w-3 h-3 inline" />
+                            Size unavailable
                           </span>
                         )}
                         {suggestedCtx && (
@@ -295,6 +392,12 @@ const RouterPage: React.FC = () => {
                 {suggestedCtx && ctxSize !== suggestedCtx && (
                   <p className="text-[10px] text-accent-primary">Suggested: {suggestedCtx}</p>
                 )}
+                {ctxChanged && (
+                  <p className="text-[10px] text-status-warning flex items-center gap-1 mt-1">
+                    <AlertCircle className="w-3 h-3" />
+                    Context changed from {runningCtxSize?.toLocaleString()} — restart to apply
+                  </p>
+                )}
               </div>
             )}
   
@@ -321,7 +424,9 @@ const RouterPage: React.FC = () => {
                 disabled={!canRestart}
                 className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
                   canRestart
-                    ? 'bg-accent-secondary/10 text-accent-secondary border border-accent-secondary/20 hover:bg-accent-secondary/20'
+                    ? ctxChanged
+                      ? 'bg-status-warning/10 text-status-warning border border-status-warning/30 hover:bg-status-warning/20 animate-pulse'
+                      : 'bg-accent-secondary/10 text-accent-secondary border border-accent-secondary/20 hover:bg-accent-secondary/20'
                     : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
                 }`}
               >
