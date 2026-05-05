@@ -681,68 +681,32 @@ export async function llamaReady(): Promise<boolean> {
  * Stream logs from the router API (SSE via fetch ReadableStream).
  * Handles both plain text and SSE "data: ..." prefixed lines.
  * Accepts an optional AbortSignal for clean cancellation.
- *
- * Fetch options:
- *  - credentials: 'same-origin' — needed for private network requests (PNA)
- *  - mode: 'cors' — explicit CORS mode for debugging
- *
- * Non-2xx handling:
- *  - Only throws on 5xx (server errors)
- *  - For 4xx and other non-2xx, logs a warning but still reads the stream body
- *    (backend may stream "waiting" messages with non-200 status)
  */
 export async function* streamLogs(onMessage: (line: string) => void, signal?: AbortSignal): AsyncIterable<void> {
   const url = apiPath('router', '/api/v1/qonduit-router/logs');
-  console.debug('[streamLogs] Connecting to:', url);
-
-  const response = await fetch(url, {
-    signal,
-    credentials: 'same-origin',
-    mode: 'cors',
-  });
-
-  console.debug('[streamLogs] Response status:', response.status, 'Content-Type:', response.headers.get('content-type'));
-
-  if (!response.body) {
-    throw new Error(`Response body is null (HTTP ${response.status})`);
-  }
-
-  // Only throw on 5xx — backend may stream "waiting" messages with non-200 status
-  if (!response.ok && response.status >= 500) {
+  const response = await fetch(url, { signal });
+  if (!response.ok) {
     throw new Error(`HTTP ${response.status} — ${url}`);
   }
-
-  if (!response.ok) {
-    console.warn('[streamLogs] Non-2xx response (', response.status, '), but continuing to read stream...');
-  }
-
-  const reader = response.body.getReader();
+  const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  let lineCount = 0;
 
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
-
       for (const line of lines) {
         const cleanLine = line.trim();
         // Strip SSE "data: " prefix if present
         const stripped = cleanLine.startsWith('data:') ? cleanLine.slice(5).trim() : cleanLine;
-        if (stripped) {
-          onMessage(stripped);
-          lineCount++;
-        }
+        if (stripped) onMessage(stripped);
       }
     }
   } finally {
     reader.releaseLock();
   }
-
-  console.debug('[streamLogs] Stream complete. Received', lineCount, 'lines.');
 }
