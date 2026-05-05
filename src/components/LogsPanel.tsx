@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { streamLogs } from '../services/api';
 import { apiPath } from '../config/endpoints';
 import {
   Terminal,
@@ -25,21 +24,19 @@ const LOG_COLORS: Record<string, string> = {
 };
 
 const LOGS_URL = '/api/v1/qonduit-router/logs';
-const WAIT_TIMEOUT_MS = 10000; // 10 seconds before showing "no output yet" hint
+const POLL_INTERVAL_MS = 4000;
+const maxLines = 500;
 
 const LogsPanel: React.FC<LogsPanelProps> = ({ routerStatus }) => {
   const [logs, setLogs] = useState<string[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
-   const [waitTimeout, setWaitTimeout] = useState(false); // Track if we've passed the wait timeout
-  const logsEndRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const waitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const maxLines = 500;
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const maxLinesRef = useRef(maxLines);
 
   // Load expanded state from localStorage
   useEffect(() => {
@@ -52,93 +49,73 @@ const LogsPanel: React.FC<LogsPanelProps> = ({ routerStatus }) => {
     localStorage.setItem('qonduit-logs-expanded', String(expanded));
   };
 
-  const stopStreaming = useCallback(() => {
-    if (abortRef.current) {
-      abortRef.current.abort();
-      abortRef.current = null;
+  const fetchLogs = useCallback(async () => {
+    // Cancel any in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
-    setIsStreaming(false);
-  }, []);
-
-  const startStreaming = useCallback(async () => {
-    // Stop any existing stream first
-    stopStreaming();
-
-    setIsStreaming(true);
-     setError(null);
-     setWaitTimeout(false);
-
-    // Set up wait timeout — if no logs arrive within 10s, show hint
-    if (waitTimerRef.current) clearTimeout(waitTimerRef.current);
-    waitTimerRef.current = setTimeout(() => {
-      setWaitTimeout(true);
-    }, WAIT_TIMEOUT_MS);
 
     const controller = new AbortController();
-    abortRef.current = controller;
+    abortControllerRef.current = controller;
 
     try {
-      for await (const _ of streamLogs((line: string) => {
-        if (controller.signal.aborted || isPaused) return;
-        // Clear wait timeout on first log line
-        if (waitTimeout) setWaitTimeout(false);
-        setLogs((prev) => {
-          const next = [...prev, line];
-          return next.length > maxLines ? next.slice(-maxLines) : next;
-        });
-      }, controller.signal)) {
-        // Keep the generator running
+      const url = apiPath('router', LOGS_URL);
+      const response = await fetch(url, { signal: controller.signal });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
+
+      const text = await response.text();
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+      setError(null);
+
+      setLogs(prev => {
+        const next = [...prev, ...lines];
+        return next.length > maxLinesRef.current ? next.slice(-maxLinesRef.current) : next;
+      });
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       if (!controller.signal.aborted) {
-        const msg = err instanceof Error ? err.message : 'Failed to connect to log stream';
-        setError(msg);
-      }
-    } finally {
-      if (waitTimerRef.current) {
-        clearTimeout(waitTimerRef.current);
-        waitTimerRef.current = null;
-      }
-      if (!controller.signal.aborted) {
-        setIsStreaming(false);
+        setError(err instanceof Error ? err.message : 'Failed to fetch logs');
       }
     }
-  }, [isPaused, stopStreaming, waitTimeout]);
+  }, []);
 
-  const reconnect = useCallback(() => {
-    setError(null);
-    startStreaming();
-  }, [startStreaming]);
-
-  const togglePause = useCallback(() => {
-    if (isPaused) {
-      setIsPaused(false);
-      startStreaming();
-    } else {
-      setIsPaused(true);
-      stopStreaming();
-    }
-  }, [isPaused, startStreaming, stopStreaming]);
-
-  // Auto-start streaming when model starts running
+  // Polling effect
   useEffect(() => {
-    if (routerStatus?.running && !isStreaming && !error && !isPaused) {
-      startStreaming();
-    }
+    if (!routerStatus?.running) return;
+
+    // Initial fetch
+    fetchLogs();
+
+    const pollInterval = setInterval(() => {
+      fetchLogs();
+    }, POLL_INTERVAL_MS);
+
+    pollIntervalRef.current = pollInterval;
+
     return () => {
-      stopStreaming();
+      clearInterval(pollInterval);
+      pollIntervalRef.current = null;
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
-  }, [routerStatus?.running, isStreaming, error, isPaused, startStreaming, stopStreaming]);
+  }, [routerStatus?.running, fetchLogs]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      stopStreaming();
-      if (waitTimerRef.current) clearTimeout(waitTimerRef.current);
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
-  }, [stopStreaming]);
-
-  const isRunning = routerStatus?.running;
+  }, []);
 
   const handleCopyAll = async () => {
     try {
@@ -173,12 +150,12 @@ const LogsPanel: React.FC<LogsPanelProps> = ({ routerStatus }) => {
             <Terminal className="w-4 h-4 text-text-tertiary" />
             <h3 className="text-sm font-semibold text-text-primary">Terminal</h3>
           </div>
-          {isRunning && (
+          {routerStatus?.running && (
             <div className="flex items-center gap-1.5">
-              {isStreaming && !isPaused ? (
+              {error ? (
                 <>
-                  <div className="w-1.5 h-1.5 rounded-full bg-status-success animate-pulse-dot" />
-                  <span className="text-[10px] text-status-success">Streaming</span>
+                  <div className="w-1.5 h-1.5 rounded-full bg-status-error" />
+                  <span className="text-[10px] text-status-error">Error</span>
                 </>
               ) : isPaused ? (
                 <>
@@ -187,8 +164,8 @@ const LogsPanel: React.FC<LogsPanelProps> = ({ routerStatus }) => {
                 </>
               ) : (
                 <>
-                  <div className="w-1.5 h-1.5 rounded-full bg-text-tertiary" />
-                  <span className="text-[10px] text-text-tertiary">Reconnecting...</span>
+                  <div className="w-1.5 h-1.5 rounded-full bg-status-success animate-pulse-dot" />
+                  <span className="text-[10px] text-status-success">Polling</span>
                 </>
               )}
             </div>
@@ -198,20 +175,27 @@ const LogsPanel: React.FC<LogsPanelProps> = ({ routerStatus }) => {
           </span>
         </div>
         <div className="flex items-center gap-1">
-          {isRunning && (
+          {routerStatus?.running && (
             <>
               <button
-                onClick={togglePause}
+                 onClick={() => setIsPaused(!isPaused)}
+                 className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200"
+                 title={isPaused ? 'Resume' : 'Pause'}
+               >
+                 {isPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+               </button>
+              <button
+                onClick={fetchLogs}
                 className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200"
-                title={isPaused ? 'Resume' : 'Pause'}
+                title="Refresh"
               >
-                {isPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+                <RotateCcw className="w-3.5 h-3.5" />
               </button>
               {error && (
                 <button
-                  onClick={reconnect}
+                  onClick={fetchLogs}
                   className="p-1.5 rounded-lg text-status-warning hover:bg-status-warning/10 transition-all duration-200"
-                  title="Reconnect"
+                  title="Retry"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                 </button>
@@ -251,89 +235,69 @@ const LogsPanel: React.FC<LogsPanelProps> = ({ routerStatus }) => {
       )}
 
       {/* Logs Display */}
-       <div className={`px-4 pb-4 ${isExpanded ? 'pt-2' : ''}`}>
-         <div className={`bg-bg-terminal rounded-lg border border-border-subtle overflow-hidden ${containerHeight}`}>
-           <div className="h-full overflow-y-auto font-mono text-xs p-3">
-             {logs.length === 0 ? (
-               <div className="flex items-center justify-center h-full text-text-tertiary">
-                 {error ? (
-                   <div className="text-center">
-                     <AlertCircle className="w-8 h-8 text-status-error mx-auto mb-2" />
-                     <p className="text-status-error mb-1">Connection Error</p>
-                     <p className="text-xs text-text-tertiary mb-1">{error}</p>
-                     <p className="text-[10px] text-text-tertiary font-mono mb-3">
-                       URL: {apiPath('router', LOGS_URL)}
-                     </p>
-                     {isRunning && (
-                       <button
-                         onClick={reconnect}
-                         className="px-3 py-1.5 rounded-lg text-xs font-medium border border-status-warning/30 text-status-warning hover:bg-status-warning/10 transition-all duration-200"
-                       >
-                         Reconnect
-                       </button>
-                     )}
-                   </div>
-                 ) : !routerStatus ? (
-                   <div className="text-center">
-                     <Terminal className="w-8 h-8 text-text-tertiary/50 mx-auto mb-2" />
-                     <p className="text-text-tertiary text-sm">Router not available</p>
-                     <p className="text-text-tertiary/60 text-xs mt-1">Check that the Router service is running</p>
-                     <button
-                       onClick={startStreaming}
-                       className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent-primary/10 text-accent-primary border border-accent-primary/20 hover:bg-accent-primary/20 transition-colors"
-                     >
-                       <Play className="w-3 h-3" />
-                       Start Streaming
-                     </button>
-                   </div>
-                 ) : isRunning ? (
-                   <div className="text-center">
-                     <Terminal className="w-8 h-8 text-text-tertiary/50 mx-auto mb-2" />
-                     <p className="text-text-tertiary text-sm">
-                       {waitTimeout ? 'Waiting for logs... (no output yet)' : 'Waiting for logs...'}
-                     </p>
-                     <p className="text-text-tertiary/60 text-xs mt-1">
-                       {waitTimeout
-                         ? 'The model may still be starting up, or the server is not producing output.'
-                         : 'Logs will appear once the model starts'}
-                     </p>
-                     <button
-                       onClick={startStreaming}
-                       className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent-primary/10 text-accent-primary border border-accent-primary/20 hover:bg-accent-primary/20 transition-colors"
-                     >
-                       <Play className="w-3 h-3" />
-                       Start Streaming
-                     </button>
-                   </div>
-                 ) : (
-                   <div className="text-center">
-                     <Terminal className="w-8 h-8 text-text-tertiary/50 mx-auto mb-2" />
-                     <p className="text-text-tertiary text-sm">No logs yet</p>
-                     <p className="text-text-tertiary/60 text-xs mt-1">Launch a model to see logs here</p>
-                     <button
-                       onClick={startStreaming}
-                       className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent-primary/10 text-accent-primary border border-accent-primary/20 hover:bg-accent-primary/20 transition-colors"
-                     >
-                       <Play className="w-3 h-3" />
-                       Start Streaming
-                     </button>
-                   </div>
-                 )}
-               </div>
-             ) : (
-               <div className="space-y-0.5">
-                 {filteredLogs.map((log, idx) => (
-                   <div key={idx} className={`${getLogColor(log)} hover:bg-white/5 px-1 -mx-1 rounded transition-colors`}>
-                     <span className="text-text-tertiary/40 select-none mr-3">{String(idx + 1).padStart(4, ' ')}</span>
-                     {log}
-                   </div>
-                 ))}
-                 <div ref={logsEndRef} />
-               </div>
-             )}
-           </div>
-         </div>
-       </div>
+      <div className={`px-4 pb-4 ${isExpanded ? 'pt-2' : ''}`}>
+        <div className={`bg-bg-terminal rounded-lg border border-border-subtle overflow-hidden ${containerHeight}`}>
+          <div className="h-full overflow-y-auto font-mono text-xs p-3">
+            {logs.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-text-tertiary">
+                {error ? (
+                  <div className="text-center">
+                    <AlertCircle className="w-8 h-8 text-status-error mx-auto mb-2" />
+                    <p className="text-status-error mb-1">Connection Error</p>
+                    <p className="text-xs text-text-tertiary mb-1">{error}</p>
+                    <p className="text-[10px] text-text-tertiary font-mono mb-3">
+                      URL: {apiPath('router', LOGS_URL)}
+                    </p>
+                    {routerStatus?.running && (
+                      <button
+                        onClick={fetchLogs}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium border border-status-warning/30 text-status-warning hover:bg-status-warning/10 transition-all duration-200"
+                      >
+                        Retry
+                      </button>
+                    )}
+                  </div>
+                ) : !routerStatus ? (
+                  <div className="text-center">
+                    <Terminal className="w-8 h-8 text-text-tertiary/50 mx-auto mb-2" />
+                    <p className="text-text-tertiary text-sm">Router not available</p>
+                    <p className="text-text-tertiary/60 text-xs mt-1">Check that the Router service is running</p>
+                  </div>
+                ) : routerStatus.running ? (
+                  <div className="text-center">
+                    <Terminal className="w-8 h-8 text-text-tertiary/50 mx-auto mb-2" />
+                    <p className="text-text-tertiary text-sm">No logs yet — polling every 4s</p>
+                    <p className="text-text-tertiary/60 text-xs mt-1">Logs will appear once the model starts producing output</p>
+                    <button
+                      onClick={fetchLogs}
+                      className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent-primary/10 text-accent-primary border border-accent-primary/20 hover:bg-accent-primary/20 transition-colors"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Refresh
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <Terminal className="w-8 h-8 text-text-tertiary/50 mx-auto mb-2" />
+                    <p className="text-text-tertiary text-sm">No logs yet</p>
+                    <p className="text-text-tertiary/60 text-xs mt-1">Launch a model to see logs here</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-0.5">
+                {filteredLogs.map((log, idx) => (
+                  <div key={idx} className={`${getLogColor(log)} hover:bg-white/5 px-1 -mx-1 rounded transition-colors`}>
+                    <span className="text-text-tertiary/40 select-none mr-3">{String(idx + 1).padStart(4, ' ')}</span>
+                    {log}
+                  </div>
+                ))}
+                <div ref={null} />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

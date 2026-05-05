@@ -675,38 +675,3 @@ export async function llamaReady(): Promise<boolean> {
   }
 }
 
-// ── Logs streaming ──────────────────────────────────────────────────────────
-
-/**
- * Stream logs from the router API (SSE via fetch ReadableStream).
- * Handles both plain text and SSE "data: ..." prefixed lines.
- * Accepts an optional AbortSignal for clean cancellation.
- */
-export async function* streamLogs(onMessage: (line: string) => void, signal?: AbortSignal): AsyncIterable<void> {
-  const url = apiPath('router', '/api/v1/qonduit-router/logs');
-  const response = await fetch(url, { signal });
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status} — ${url}`);
-  }
-  const reader = response.body!.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-      for (const line of lines) {
-        const cleanLine = line.trim();
-        // Strip SSE "data: " prefix if present
-        const stripped = cleanLine.startsWith('data:') ? cleanLine.slice(5).trim() : cleanLine;
-        if (stripped) onMessage(stripped);
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
