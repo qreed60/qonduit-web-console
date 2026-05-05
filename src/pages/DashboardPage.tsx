@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getSettings, fetchRouterModels, fetchProviderModels, launchModel as apiLaunchModel, stopModel as apiStopModel, restartModel as apiRestartModel, testEndpointWithError, testRouterHealthWithError, getRouterStatus, NormalizedModel } from '../services/api';
+import { getSettings, fetchRouterModels, fetchProviderModels, fetchRouterGpu, launchModel as apiLaunchModel, stopModel as apiStopModel, restartRouterModel as apiRestartRouterModel, testEndpointWithError, testRouterHealthWithError, getRouterStatus, NormalizedModel, GpuStatus, RouterStatus } from '../services/api';
 import { Settings } from '../types';
 import { ENDPOINTS } from '../config/endpoints';
 import StatusBar from '../components/StatusBar';
@@ -31,20 +31,19 @@ const DashboardPage: React.FC = () => {
     router: null,
   });
   const [healthLoading, setHealthLoading] = useState(false);
-  const [routerStatus, setRouterStatus] = useState<{
-    running: boolean;
-    exists: boolean;
-  } | null>(null);
-  const [routerModels, setRouterModels] = useState<NormalizedModel[]>([]);
-  const [selectedRouterModel, setSelectedRouterModel] = useState('');
-  const [ctxSize, setCtxSize] = useState(4096);
-  const [suggestedCtx, setSuggestedCtx] = useState<number | null>(null);
-  const [actionLoading, setActionLoading] = useState(false);
-  const [actionStatus, setActionStatus] = useState<'idle' | 'launching' | 'stopping' | 'restarting' | 'success' | 'error'>('idle');
-  const [actionMessage, setActionMessage] = useState('');
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-   const [chatModels, setChatModels] = useState<NormalizedModel[]>([]);
-   const [selectedChatModel, setSelectedChatModel] = useState('');
+  const [routerStatus, setRouterStatus] = useState<RouterStatus | null>(null);
+   const [routerModels, setRouterModels] = useState<NormalizedModel[]>([]);
+   const [selectedRouterModel, setSelectedRouterModel] = useState('');
+   const [ctxSize, setCtxSize] = useState(4096);
+   const [suggestedCtx, setSuggestedCtx] = useState<number | null>(null);
+   const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null);
+   const [gpuError, setGpuError] = useState<string | null>(null);
+   const [actionLoading, setActionLoading] = useState(false);
+   const [actionStatus, setActionStatus] = useState<'idle' | 'launching' | 'stopping' | 'restarting' | 'success' | 'error'>('idle');
+   const [actionMessage, setActionMessage] = useState('');
+   const [toastMessage, setToastMessage] = useState<string | null>(null);
+    const [chatModels, setChatModels] = useState<NormalizedModel[]>([]);
+    const [selectedChatModel, setSelectedChatModel] = useState('');
  
    // Fetch initial data
      useEffect(() => {
@@ -52,44 +51,54 @@ const DashboardPage: React.FC = () => {
      }, []);
    
      const fetchDashboardData = async () => {
-       // Fetch router status (always, for health card and logs)
-       try {
-         const status = await getRouterStatus();
-         setRouterStatus({ running: status.running, exists: status.exists });
-       } catch {
-         // Router might not be available
-       }
-   
-       // Fetch router models (for launch/stop — always available)
-       try {
-         const data = await fetchRouterModels();
-         setRouterModels(data.models || []);
-         if (data.suggestedCtx) {
-           setSuggestedCtx(data.suggestedCtx);
-           if (!selectedRouterModel) {
-             setCtxSize(data.suggestedCtx);
-           }
-         }
-       } catch {
-         // Router models might not be available
-       }
-   
-       // Fetch chat models (Gateway/Direct based on settings)
-       // These are used for the SystemOverview "Model Running" pill, not for Router control.
-           try {
-             const providerModels = await fetchProviderModels(settings.defaultProvider);
-             setChatModels(providerModels);
-             if (providerModels.length > 0) {
-               const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
-               setSelectedChatModel(defaultModel?.id || providerModels[0].id);
-             }
-           } catch {
-             // Chat models might not be available
-           }
-       
-           // Test endpoint health
-           await testAllEndpoints();
-         };
+        // Fetch router status (always, for health card and logs)
+        try {
+          const status = await getRouterStatus();
+          setRouterStatus(status);
+        } catch {
+          // Router might not be available
+        }
+ 
+        // Fetch GPU/VRAM status
+        try {
+          const gpu = await fetchRouterGpu();
+          setGpuStatus(gpu);
+          setGpuError(null);
+        } catch (err) {
+          setGpuStatus(null);
+          setGpuError(err instanceof Error ? err.message : 'Failed to fetch GPU status');
+        }
+ 
+        // Fetch router models (for launch/stop — always available)
+        try {
+          const data = await fetchRouterModels();
+          setRouterModels(data.models || []);
+          if (data.suggestedCtx) {
+            setSuggestedCtx(data.suggestedCtx);
+            if (!selectedRouterModel) {
+              setCtxSize(data.suggestedCtx);
+            }
+          }
+        } catch {
+          // Router models might not be available
+        }
+ 
+        // Fetch chat models (Gateway/Direct based on settings)
+        // These are used for the SystemOverview "Model Running" pill, not for Router control.
+            try {
+              const providerModels = await fetchProviderModels(settings.defaultProvider);
+              setChatModels(providerModels);
+              if (providerModels.length > 0) {
+                const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
+                setSelectedChatModel(defaultModel?.id || providerModels[0].id);
+              }
+            } catch {
+              // Chat models might not be available
+            }
+ 
+            // Test endpoint health
+            await testAllEndpoints();
+          };
        
          // Reload chat models when settings defaultProvider changes
          // Chat models are for the SystemOverview "Model Running" display only.
@@ -193,34 +202,40 @@ const DashboardPage: React.FC = () => {
     };
   
     const handleRestart = async () => {
-      if (!selectedRouterModel) return;
-  
-      setActionLoading(true);
-      setActionStatus('restarting');
-      setActionMessage('');
-  
-      try {
-        const result = await apiRestartModel(selectedRouterModel, ctxSize);
-        if (result.ok) {
-          setActionStatus('success');
-          setActionMessage(result.message || 'Model restarted successfully');
-          setToastMessage('Model restarted successfully');
-          setRouterStatus((prev) => (prev ? { ...prev, running: true } : null));
-        } else {
-          setActionStatus('error');
-          setActionMessage(result.message || 'Failed to restart model');
-        }
-      } catch (err) {
-        setActionStatus('error');
-        setActionMessage(err instanceof Error ? err.message : 'Failed to restart model');
-      } finally {
-        setActionLoading(false);
-        setTimeout(() => {
-          setActionMessage('');
-          setActionStatus('idle');
-        }, 5000);
-      }
-    };
+       if (!selectedRouterModel) return;
+ 
+       setActionLoading(true);
+       setActionStatus('restarting');
+       setActionMessage('');
+ 
+       try {
+         const result = await apiRestartRouterModel(selectedRouterModel, ctxSize);
+         if (result.ok) {
+           setActionStatus('success');
+           setActionMessage(result.message || 'Model restarted successfully');
+           setToastMessage('Model restarted successfully');
+           setRouterStatus((prev) => (prev ? { ...prev, running: true } : null));
+         } else {
+           setActionStatus('error');
+           setActionMessage(result.message || 'Failed to restart model');
+         }
+       } catch (err) {
+         const msg = err instanceof Error ? err.message : 'Failed to restart model';
+         // Handle backend "model_required" error
+         if (msg.includes('model_required') || msg.includes('model')) {
+           setActionMessage('No model selected for restart. Please select a model first.');
+         } else {
+           setActionMessage(msg);
+         }
+         setActionStatus('error');
+       } finally {
+         setActionLoading(false);
+         setTimeout(() => {
+           setActionMessage('');
+           setActionStatus('idle');
+         }, 5000);
+       }
+     };
   
     // Auto-select first model if none selected and models available
       useEffect(() => {
@@ -295,17 +310,19 @@ const DashboardPage: React.FC = () => {
         </div>
 
         {/* System Overview */}
-                <div className="mb-6">
-                  <SystemOverview
-                    endpointHealth={endpointHealth}
-                    healthLoading={healthLoading}
-                    routerStatus={routerStatus}
-                    chatModel={selectedChatModel}
-                    routerModel={routerStatus?.running ? selectedRouterModel : undefined}
-                    endpointErrors={endpointErrors}
-                    onRefresh={testAllEndpoints}
-                  />
-                </div>
+                 <div className="mb-6">
+                   <SystemOverview
+                     endpointHealth={endpointHealth}
+                     healthLoading={healthLoading}
+                     routerStatus={routerStatus}
+                     chatModel={selectedChatModel}
+                     routerRunningModel={routerStatus?.running_model || undefined}
+                     gpuStatus={gpuStatus}
+                     gpuError={gpuError}
+                     endpointErrors={endpointErrors}
+                     onRefresh={testAllEndpoints}
+                   />
+                 </div>
 
         {/* Endpoint Cards */}
         <div className="mb-6">

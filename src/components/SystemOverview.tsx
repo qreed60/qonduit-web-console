@@ -1,11 +1,14 @@
 import React from 'react';
 import StatusBadge from './StatusBadge';
+import { GpuStatus } from '../types';
 import {
   Globe,
   Zap,
   Router,
   Server,
   RefreshCw,
+  Cpu,
+  MemoryStick,
 } from 'lucide-react';
 
 interface SystemOverviewProps {
@@ -15,11 +18,13 @@ interface SystemOverviewProps {
     router: boolean | null;
   };
   healthLoading: boolean;
-  routerStatus: { running: boolean; exists: boolean } | null;
+  routerStatus: { running: boolean; exists: boolean; running_model?: string | null; context_size?: number | null } | null;
   /** The chat provider's selected model (from Settings or ChatPage) */
   chatModel: string;
-  /** The router's currently running model name (if known) */
-  routerModel?: string;
+  /** The router's currently running model name from /status (may be null) */
+  routerRunningModel?: string;
+  gpuStatus?: GpuStatus | null;
+  gpuError?: string | null;
   endpointErrors?: Record<string, string | null>;
   onRefresh: () => void;
 }
@@ -29,12 +34,21 @@ const SystemOverview: React.FC<SystemOverviewProps> = ({
   healthLoading,
   routerStatus,
   chatModel,
-  routerModel,
+  routerRunningModel,
+  gpuStatus,
+  gpuError,
   endpointErrors,
   onRefresh,
 }) => {
   const isRunning = routerStatus?.running;
   const lastChecked = Date.now();
+
+  // Determine the router running model display text
+  const routerRunningDisplay = routerRunningModel
+    ? routerRunningModel
+    : isRunning
+    ? 'unknown until next launch/status update'
+    : undefined;
 
   const healthCards = [
     {
@@ -147,35 +161,54 @@ const SystemOverview: React.FC<SystemOverviewProps> = ({
        )}
  
        {/* Model Info Bar */}
-              {(chatModel || routerModel) && (
-                <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary/50 rounded-lg border border-border-subtle">
-                  <div className="flex items-center gap-3">
-                    <Server className="w-3.5 h-3.5 text-text-tertiary" />
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-text-secondary">Chat:</span>
-                      <span className="text-xs font-mono text-text-primary truncate max-w-[150px]" title={chatModel || ''}>
-                        {chatModel || '—'}
-                      </span>
+                {(chatModel || routerRunningDisplay) && (
+                  <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary/50 rounded-lg border border-border-subtle">
+                    <div className="flex items-center gap-3">
+                      <Server className="w-3.5 h-3.5 text-text-tertiary" />
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-text-secondary">Chat:</span>
+                        <span className="text-xs font-mono text-text-primary truncate max-w-[150px]" title={chatModel || ''}>
+                          {chatModel || '—'}
+                        </span>
+                      </div>
+                      {routerRunningDisplay && (
+                        <>
+                          <span className="text-text-tertiary">·</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-text-secondary">Router:</span>
+                            <span className="text-xs font-mono text-text-primary truncate max-w-[150px]" title={routerRunningDisplay}>
+                              {routerRunningDisplay}
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
-                    {routerModel && (
-                      <>
-                        <span className="text-text-tertiary">·</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-text-secondary">Router:</span>
-                          <span className="text-xs font-mono text-text-primary truncate max-w-[150px]" title={routerModel}>
-                            {routerModel}
-                          </span>
-                        </div>
-                      </>
-                    )}
+                    <span className="text-[10px] text-text-tertiary">
+                      Last checked: {new Date(lastChecked).toLocaleTimeString()}
+                    </span>
                   </div>
-                  <span className="text-[10px] text-text-tertiary">
-                    Last checked: {new Date(lastChecked).toLocaleTimeString()}
-                  </span>
-                </div>
-              )}
-            </div>
-          );
-        };
-       
-       export default SystemOverview;
+                )}
+  
+        {/* VRAM Summary */}
+                {gpuStatus && (
+                  <div className="mt-3 flex items-center gap-3 px-3 py-2 bg-bg-secondary/50 rounded-lg border border-border-subtle">
+                    <MemoryStick className="w-3.5 h-3.5 text-accent-primary flex-shrink-0" />
+                    <div className="flex items-center gap-4 text-xs">
+                      <span className="text-text-secondary">Detected GPU Memory:</span>
+                      <span className="text-text-secondary">Total: <span className="font-mono text-text-primary">{gpuStatus.memory_total_human}</span></span>
+                      <span className="text-text-secondary">Used: <span className="font-mono text-status-warning">{gpuStatus.memory_used_human}</span></span>
+                      <span className="text-text-secondary">Free: <span className="font-mono text-status-success">{gpuStatus.memory_free_human}</span></span>
+                    </div>
+                  </div>
+                )}
+                {gpuError && !gpuStatus && (
+                  <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-status-error/5 rounded-lg border border-status-error/15">
+                    <Cpu className="w-3.5 h-3.5 text-status-error flex-shrink-0" />
+                    <span className="text-xs text-status-error">VRAM unavailable: {gpuError}</span>
+                  </div>
+                )}
+              </div>
+            );
+          };
+  
+          export default SystemOverview;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { getSettings, getRouterStatus, fetchRouterModels, launchModel as apiLaunchModel, stopModel as apiStopModel, restartModel as apiRestartModel, NormalizedModel } from '../services/api';
+import { getSettings, getRouterStatus, fetchRouterModels, fetchRouterGpu, launchModel as apiLaunchModel, stopModel as apiStopModel, restartRouterModel as apiRestartRouterModel, NormalizedModel } from '../services/api';
 import { ENDPOINTS } from '../config/endpoints';
+import { GpuInfo } from '../types';
 import Toast from '../components/Toast';
 import {
   Cpu,
@@ -31,41 +32,69 @@ const RouterPage: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [actionStatus, setActionStatus] = useState<'idle' | 'launching' | 'stopping' | 'restarting' | 'success' | 'error'>('idle');
   const [actionMessage, setActionMessage] = useState('');
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [vramData, setVramData] = useState<{ total: string; used: string; free: string } | null>(null);
-  const [vramError, setVramError] = useState<string | null>(null);
+   const [toastMessage, setToastMessage] = useState<string | null>(null);
+   const [vramData, setVramData] = useState<{ total: string; used: string; free: string } | null>(null);
+     const [vramError, setVramError] = useState<string | null>(null);
+     const [gpuRows, setGpuRows] = useState<Array<{ index: number; name: string; total: string; used: string; free: string; isDisplay?: boolean }>>([]);
 
   // Track the context size used when the model was launched,
   // so we can detect when context has changed and needs restart.
   const [runningCtxSize, setRunningCtxSize] = useState<number | null>(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const status = await getRouterStatus();
-        setRouterStatus({ running: status.running, exists: status.exists });
-
-        try {
-          const data = await fetchRouterModels();
-          setRouterModels(data.models || []);
-          if (data.suggestedCtx) setSuggestedCtx(data.suggestedCtx);
-        } catch { /* models may not be available */ }
-
-        // Try to get VRAM data
-        await loadVram();
-      } catch {
-        // Router may not be available
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchData, 10000);
-    return () => clearInterval(interval);
-  }, []);
+     const fetchData = async () => {
+       setLoading(true);
+       try {
+         const status = await getRouterStatus();
+         setRouterStatus({ running: status.running, exists: status.exists });
+ 
+         try {
+           const data = await fetchRouterModels();
+           setRouterModels(data.models || []);
+           if (data.suggestedCtx) setSuggestedCtx(data.suggestedCtx);
+         } catch { /* models may not be available */ }
+ 
+         // Fetch GPU/VRAM data
+          try {
+            const gpu = await fetchRouterGpu();
+            if (gpu.ok) {
+              setVramData({
+                total: gpu.memory_total_human,
+                used: gpu.memory_used_human,
+                free: gpu.memory_free_human,
+              });
+              setVramError(null);
+              const rows = gpu.gpus.map((g: GpuInfo) => ({
+                index: g.index,
+                name: g.name,
+                total: `${(g.memory_total_mib / 1024).toFixed(1)} GiB`,
+                used: `${(g.memory_used_mib / 1024).toFixed(1)} GiB`,
+                free: `${(g.memory_free_mib / 1024).toFixed(1)} GiB`,
+                isDisplay: /quadro|display|integrated|igd/i.test(g.name),
+              }));
+              setGpuRows(rows);
+            } else {
+              setVramData(null);
+              setVramError('VRAM unavailable — GPU endpoint returned ok:false');
+              setGpuRows([]);
+            }
+          } catch (err) {
+            setVramData(null);
+            setVramError(err instanceof Error ? err.message : 'Failed to fetch GPU status');
+            setGpuRows([]);
+          }
+       } catch {
+         // Router may not be available
+       } finally {
+         setLoading(false);
+       }
+     };
+ 
+     fetchData();
+     // Refresh every 10 seconds
+     const interval = setInterval(fetchData, 10000);
+     return () => clearInterval(interval);
+   }, []);
 
   // Track running context size when model starts/stops
   useEffect(() => {
@@ -83,41 +112,6 @@ const RouterPage: React.FC = () => {
     }
   }, [routerModels, selectedModel]);
 
-  const loadVram = async () => {
-    try {
-      // Try to get VRAM from Router API status endpoint
-      const response = await fetch(`${ENDPOINTS.router[mode]}/api/v1/qonduit-router/status`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.vram) {
-          setVramData({
-            total: data.vram.total || 'unknown',
-            used: data.vram.used || 'unknown',
-            free: data.vram.free || 'unknown',
-          });
-          return;
-        }
-      }
-    } catch {
-      // VRAM endpoint may not exist — that's OK
-    }
-    // Try alternative VRAM endpoint
-    try {
-      const response = await fetch(`${ENDPOINTS.router[mode]}/api/v1/qonduit-router/vram`);
-      if (response.ok) {
-        const data = await response.json();
-        setVramData({
-          total: data.total || 'unknown',
-          used: data.used || 'unknown',
-          free: data.free || 'unknown',
-        });
-        return;
-      }
-    } catch {
-      // No VRAM endpoint available
-    }
-    setVramError('VRAM data unavailable — Router API needs a GPU status endpoint');
-  };
 
   const handleLaunch = async () => {
     if (!selectedModel) return;
@@ -169,29 +163,34 @@ const RouterPage: React.FC = () => {
   };
 
   const handleRestart = async () => {
-    if (!selectedModel) return;
-    setActionLoading(true);
-    setActionStatus('restarting');
-    setActionMessage('');
-    try {
-      const result = await apiRestartModel(selectedModel, ctxSize);
-      if (result.ok) {
-        setActionStatus('success');
-        setActionMessage(result.message || 'Model restarted successfully');
-        setToastMessage('Model restarted successfully');
-        setRouterStatus(prev => prev ? { ...prev, running: true } : null);
-      } else {
-        setActionStatus('error');
-        setActionMessage(result.message || 'Failed to restart model');
-      }
-    } catch (err) {
-      setActionStatus('error');
-      setActionMessage(err instanceof Error ? err.message : 'Failed to restart model');
-    } finally {
-      setActionLoading(false);
-      setTimeout(() => { setActionMessage(''); setActionStatus('idle'); }, 5000);
-    }
-  };
+     if (!selectedModel) return;
+     setActionLoading(true);
+     setActionStatus('restarting');
+     setActionMessage('');
+     try {
+       const result = await apiRestartRouterModel(selectedModel, ctxSize);
+       if (result.ok) {
+         setActionStatus('success');
+         setActionMessage(result.message || 'Model restarted successfully');
+         setToastMessage('Model restarted successfully');
+         setRouterStatus(prev => prev ? { ...prev, running: true } : null);
+       } else {
+         setActionStatus('error');
+         setActionMessage(result.message || 'Failed to restart model');
+       }
+     } catch (err) {
+       const msg = err instanceof Error ? err.message : 'Failed to restart model';
+       if (msg.includes('model_required') || msg.includes('model')) {
+         setActionMessage('No model selected for restart. Please select a model first.');
+       } else {
+         setActionMessage(msg);
+       }
+       setActionStatus('error');
+     } finally {
+       setActionLoading(false);
+       setTimeout(() => { setActionMessage(''); setActionStatus('idle'); }, 5000);
+     }
+   };
 
   const isRunning = routerStatus?.running;
   const canLaunch = !isRunning && !actionLoading && routerModels.length > 0 && !!selectedModel;
@@ -255,36 +254,64 @@ const RouterPage: React.FC = () => {
           </div>
   
           {/* VRAM Summary */}
-          <div className="bg-bg-card rounded-xl border border-border-primary p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-text-primary">GPU Memory</h3>
-              {vramData ? (
-                <MemoryStick className="w-4 h-4 text-accent-primary" />
-              ) : (
-                <MemoryStick className="w-4 h-4 text-text-tertiary" />
-              )}
-            </div>
-            {vramData ? (
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-bg-secondary/50 rounded-lg p-2.5 border border-border-subtle text-center">
-                  <p className="text-[10px] text-text-tertiary uppercase tracking-wider mb-1">Total</p>
-                  <p className="text-sm font-mono text-text-primary">{vramData.total}</p>
-                </div>
-                <div className="bg-bg-secondary/50 rounded-lg p-2.5 border border-border-subtle text-center">
-                  <p className="text-[10px] text-text-tertiary uppercase tracking-wider mb-1">Used</p>
-                  <p className="text-sm font-mono text-status-warning">{vramData.used}</p>
-                </div>
-                <div className="bg-bg-secondary/50 rounded-lg p-2.5 border border-border-subtle text-center">
-                  <p className="text-[10px] text-text-tertiary uppercase tracking-wider mb-1">Free</p>
-                  <p className="text-sm font-mono text-status-success">{vramData.free}</p>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-bg-secondary/50 rounded-lg p-3 border border-border-subtle">
-                <p className="text-xs text-text-tertiary">{vramError || 'VRAM data unavailable'}</p>
-              </div>
-            )}
-          </div>
+           <div className="bg-bg-card rounded-xl border border-border-primary p-5">
+             <div className="flex items-center justify-between mb-3">
+               <h3 className="text-sm font-semibold text-text-primary">Detected GPU Memory</h3>
+               {vramData ? (
+                 <MemoryStick className="w-4 h-4 text-accent-primary" />
+               ) : (
+                 <MemoryStick className="w-4 h-4 text-text-tertiary" />
+               )}
+             </div>
+             {vramData ? (
+               <div className="space-y-3">
+                 <div className="grid grid-cols-3 gap-3">
+                   <div className="bg-bg-secondary/50 rounded-lg p-2.5 border border-border-subtle text-center">
+                     <p className="text-[10px] text-text-tertiary uppercase tracking-wider mb-1">Total</p>
+                     <p className="text-sm font-mono text-text-primary">{vramData.total}</p>
+                   </div>
+                   <div className="bg-bg-secondary/50 rounded-lg p-2.5 border border-border-subtle text-center">
+                     <p className="text-[10px] text-text-tertiary uppercase tracking-wider mb-1">Used</p>
+                     <p className="text-sm font-mono text-status-warning">{vramData.used}</p>
+                   </div>
+                   <div className="bg-bg-secondary/50 rounded-lg p-2.5 border border-border-subtle text-center">
+                     <p className="text-[10px] text-text-tertiary uppercase tracking-wider mb-1">Free</p>
+                     <p className="text-sm font-mono text-status-success">{vramData.free}</p>
+                   </div>
+                 </div>
+                 {/* Per-GPU rows */}
+                 {gpuRows.length > 0 && (
+                   <div className="bg-bg-secondary/30 border border-border-subtle rounded-lg overflow-hidden">
+                     <div className="grid grid-cols-5 gap-2 px-3 py-1.5 bg-bg-tertiary/50 text-[10px] font-medium text-text-tertiary uppercase tracking-wider">
+                       <span>GPU</span>
+                       <span>Name</span>
+                       <span className="text-right">Total</span>
+                       <span className="text-right">Used</span>
+                       <span className="text-right">Free</span>
+                     </div>
+                     {gpuRows.map((gpu) => (
+                       <div key={gpu.index} className={`grid grid-cols-5 gap-2 px-3 py-2 text-xs border-t border-border-subtle ${gpu.isDisplay ? 'bg-status-warning/5' : ''}`}>
+                         <span className="font-mono text-text-tertiary">#{gpu.index}</span>
+                         <span className="text-text-primary truncate" title={gpu.name}>
+                           {gpu.name}
+                           {gpu.isDisplay && (
+                             <span className="ml-1 text-[10px] text-status-warning">(display)</span>
+                           )}
+                         </span>
+                         <span className="font-mono text-text-primary text-right">{gpu.total}</span>
+                         <span className="font-mono text-status-warning text-right">{gpu.used}</span>
+                         <span className="font-mono text-status-success text-right">{gpu.free}</span>
+                       </div>
+                     ))}
+                   </div>
+                 )}
+               </div>
+             ) : (
+               <div className="bg-bg-secondary/50 rounded-lg p-3 border border-border-subtle">
+                 <p className="text-xs text-text-tertiary">{vramError || 'VRAM data unavailable'}</p>
+               </div>
+             )}
+           </div>
   
           {/* Model Cards */}
           <div className="bg-bg-card rounded-xl border border-border-primary p-5">
@@ -304,60 +331,60 @@ const RouterPage: React.FC = () => {
             ) : routerModels.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
                 {routerModels.map((model) => {
-                  const isSelected = model.name === selectedModel;
-                  const isThisRunning = isRunning && isSelected;
-                  return (
-                    <button
-                      key={model.name}
-                      onClick={() => setSelectedModel(model.name)}
-                      className={`text-left p-4 rounded-lg border-2 transition-all duration-200 ${
-                        isSelected
-                          ? 'border-accent-primary bg-accent-primary/5'
-                          : isThisRunning
-                          ? 'border-status-success bg-status-success/5'
-                          : 'border-border-subtle bg-bg-secondary/30 hover:border-border-primary'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <p className="text-xs font-mono text-text-primary truncate flex-1" title={model.name}>
-                          {model.name}
-                        </p>
-                        {isThisRunning && (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-status-success flex-shrink-0 ml-2" />
-                        )}
-                      </div>
-                      {model.path && (
-                        <p className="text-[10px] font-mono text-text-tertiary truncate mb-2" title={model.path}>
-                          {model.path}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-2 text-[10px] text-text-tertiary flex-wrap">
-                        {model.parameterSize && model.parameterSize !== 'unknown' ? (
-                          <span className="flex items-center gap-1">
-                            <Cpu className="w-3 h-3" />
-                            {model.parameterSize}
-                          </span>
-                        ) : (
-                          <span className="text-text-tertiary/50">Param: unknown</span>
-                        )}
-                        {model.fileSize && model.fileSize !== 'unknown' ? (
-                          <span className="flex items-center gap-1">
-                            <HardDrive className="w-3 h-3" />
-                            {model.fileSize}
-                          </span>
-                        ) : (
-                          <span className="text-status-warning/70" title="Router API returns filenames only — file size requires backend enhancement">
-                            <HardDrive className="w-3 h-3 inline" />
-                            Size unavailable
-                          </span>
-                        )}
-                        {suggestedCtx && (
-                          <span className="text-accent-primary">ctx: {suggestedCtx}</span>
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
+                                  const isSelected = model.name === selectedModel;
+                                  const isThisRunning = isRunning && isSelected;
+                                  return (
+                                    <button
+                                      key={model.name}
+                                      onClick={() => setSelectedModel(model.name)}
+                                      className={`text-left p-4 rounded-lg border-2 transition-all duration-200 ${
+                                        isSelected
+                                          ? 'border-accent-primary bg-accent-primary/5'
+                                          : isThisRunning
+                                          ? 'border-status-success bg-status-success/5'
+                                          : 'border-border-subtle bg-bg-secondary/30 hover:border-border-primary'
+                                      }`}
+                                    >
+                                      <div className="flex items-start justify-between mb-2">
+                                        <p className="text-xs font-mono text-text-primary truncate flex-1" title={model.name}>
+                                          {model.name}
+                                        </p>
+                                        {isThisRunning && (
+                                          <CheckCircle2 className="w-3.5 h-3.5 text-status-success flex-shrink-0 ml-2" />
+                                        )}
+                                      </div>
+                                      {model.path && (
+                                        <p className="text-[10px] font-mono text-text-tertiary truncate mb-2" title={model.path}>
+                                          {model.path}
+                                        </p>
+                                      )}
+                                      <div className="flex items-center gap-2 text-[10px] text-text-tertiary flex-wrap">
+                                        {model.parameterSize && model.parameterSize !== 'unknown' ? (
+                                          <span className="flex items-center gap-1">
+                                            <Cpu className="w-3 h-3" />
+                                            {model.parameterSize}
+                                          </span>
+                                        ) : (
+                                          <span className="text-text-tertiary/50">Param: unknown</span>
+                                        )}
+                                        {model.fileSize && model.fileSize !== 'unknown' ? (
+                                          <span className="flex items-center gap-1">
+                                            <HardDrive className="w-3 h-3" />
+                                            {model.fileSize}
+                                          </span>
+                                        ) : (
+                                          <span className="text-text-tertiary/50">
+                                            <HardDrive className="w-3 h-3 inline" />
+                                            Size: unknown
+                                          </span>
+                                        )}
+                                        {suggestedCtx && (
+                                          <span className="text-accent-primary">ctx: {suggestedCtx}</span>
+                                        )}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
               </div>
             ) : (
               <div className="text-center py-8">
@@ -480,15 +507,18 @@ const RouterPage: React.FC = () => {
           </div>
   
           {/* About the Router */}
-          <div className="bg-bg-card rounded-xl border border-border-primary p-5">
-            <h3 className="text-sm font-semibold text-text-primary mb-3">About the Router</h3>
-            <p className="text-xs text-text-secondary leading-relaxed">
-              The Qonduit Router is a control-plane service that manages model lifecycle.
-              It launches and stops llama.cpp servers that serve GGUF models via the Direct endpoint.
-              Router operation is independent of your chat provider setting (Gateway or Direct) —
-              you can launch models from the Dashboard at any time.
-            </p>
-          </div>
+           <div className="bg-bg-card rounded-xl border border-border-primary p-5">
+             <h3 className="text-sm font-semibold text-text-primary mb-3">About the Router</h3>
+             <p className="text-xs text-text-secondary leading-relaxed">
+               The Qonduit Router is a control-plane service that manages model lifecycle.
+               It launches and stops llama.cpp servers that serve GGUF models via the Direct endpoint.
+               Router operation is independent of your chat provider setting (Gateway or Direct) —
+               you can launch models from the Dashboard at any time.
+             </p>
+             <p className="text-[10px] text-text-tertiary mt-2">
+               Note: GPU memory shown includes all detected GPUs (including display adapters). Not all detected VRAM may be available for inference.
+             </p>
+           </div>
         </div>
   
         {/* Toast */}

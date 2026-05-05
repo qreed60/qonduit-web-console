@@ -1,8 +1,8 @@
-import { Settings, ProviderType, ChatMessage, NormalizedModel } from '../types';
+import { Settings, ProviderType, ChatMessage, NormalizedModel, GpuStatus, RouterStatus } from '../types';
 import { getMode, apiPath } from '../config/endpoints';
 
 // Re-export NormalizedModel for convenience
-export type { NormalizedModel };
+export type { NormalizedModel, GpuStatus, RouterStatus };
 
 // ── Model metadata helpers ──────────────────────────────────────────────────
 
@@ -14,6 +14,16 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+/**
+ * Convert MiB to human-readable string (GiB or MiB).
+ */
+export function formatMiBToHuman(mib: number): string {
+  if (mib >= 1024) {
+    return `${(mib / 1024).toFixed(1)} GiB`;
+  }
+  return `${mib} MiB`;
 }
 
 /**
@@ -236,14 +246,29 @@ function parseModelsResponse(raw: unknown, provider: 'Gateway' | 'Direct'): Norm
  }
 
 /**
+ * Normalize parameter_size display casing.
+ * Backend may return uppercase, lowercase, or mixed — normalize to title case.
+ */
+function normalizeParameterSize(raw: string): string {
+  if (!raw || raw === 'unknown') return 'unknown';
+  // If it already matches pattern like "35B", "20B", "0.5B" — return as-is
+  if (/^\d+(\.\d+)?B$/i.test(raw)) {
+    const match = raw.match(/^(\d+(?:\.\d+)?)b$/i);
+    if (match) return `${match[1]}B`;
+  }
+  return raw;
+}
+
+/**
  * Parse router models response.
  * Handles:
- *   - { ok: true, models: ["a.gguf", "b.gguf"], suggested_context: 32768 }
- *   - { models: [{ name: "a.gguf", path: "/path/to/a.gguf" }] }
- *   - { models: ["a.gguf"] }
- *   - { models: [{ name: "a.gguf", file_size_bytes: 26581518848, parameter_size: "35B" }] }
+ *   - { ok: true, models: [{...}], suggested_context: 65536 }  — enriched object[] (primary)
+ *   - { ok: true, models: ["a.gguf", "b.gguf"], suggested_context: 32768 }  — legacy string[]
+ *   - { models: [{ name: "a.gguf", path: "/path" }] }  — alternative object array
+ *   - { models: ["a.gguf"] }  — legacy string array
  *
- * Checks for file_size_bytes and parameter_size fields in enriched model objects.
+ * Primary source: response.models[] as object[].
+ * Fallback: response.model_names[] for legacy/simple compatibility.
  */
 function parseRouterModelsResponse(raw: unknown, sourceUrl: string): { models: NormalizedModel[]; suggestedCtx: number } {
   if (!raw || typeof raw !== 'object') return { models: [], suggestedCtx: 8192 };
@@ -255,48 +280,78 @@ function parseRouterModelsResponse(raw: unknown, sourceUrl: string): { models: N
   const ctx = obj.suggested_context ?? obj.suggested_ctx ?? 8192;
   if (typeof ctx === 'number') suggestedCtx = ctx;
 
-  // Handle models array
-    if (Array.isArray(obj.models)) {
-      for (const item of obj.models) {
-        if (typeof item === 'string') {
-          results.push({
-            id: item,
-            name: item,
-            provider: 'Router',
-            sourceUrl,
-            path: item,
-            parameterSize: extractParameterSize(item),
-            fileSize: extractFileSize(item),
-          });
-        } else if (item && typeof item === 'object') {
-          const o = item as Record<string, unknown>;
-          const name = String(o.name || o.id || 'unknown');
-          // Check for enriched metadata fields
-          let fileSize: string | undefined;
-          let paramSize: string | undefined;
+  // Primary: response.models[] as object[]
+  if (Array.isArray(obj.models) && obj.models.length > 0 && typeof obj.models[0] === 'object') {
+    for (const item of obj.models) {
+      if (!item || typeof item !== 'object') continue;
+      const o = item as Record<string, unknown>;
+      const name = String(o.name || o.id || 'unknown');
+      const id = String(o.id || o.name || name);
 
-          if (typeof o.file_size_bytes === 'number' && o.file_size_bytes > 0) {
-            fileSize = formatBytes(o.file_size_bytes);
-          }
-          if (typeof o.parameter_size === 'string' && o.parameter_size) {
-            paramSize = o.parameter_size;
-          }
+      // file_size_human is primary; fall back to formatting file_size_bytes
+      let fileSize: string | undefined;
+      if (typeof o.file_size_human === 'string' && o.file_size_human && o.file_size_human !== 'unknown') {
+        fileSize = o.file_size_human;
+      } else if (typeof o.file_size_bytes === 'number' && o.file_size_bytes > 0) {
+        fileSize = formatBytes(o.file_size_bytes);
+      }
 
-          results.push({
-            id: name,
-            name,
-            provider: 'Router',
-            sourceUrl,
-            path: typeof o.path === 'string' ? o.path : undefined,
-            parameterSize: paramSize ?? extractParameterSize(name),
-            fileSize: fileSize ?? extractFileSize(name),
-          });
-        }
+      // parameter_size — normalize casing
+      let paramSize: string | undefined;
+      if (typeof o.parameter_size === 'string' && o.parameter_size) {
+        paramSize = normalizeParameterSize(o.parameter_size);
+      }
+
+      results.push({
+        id,
+        name,
+        provider: 'Router',
+        sourceUrl,
+        path: typeof o.path === 'string' ? o.path : undefined,
+        parameterSize: paramSize ?? extractParameterSize(name),
+        fileSize: fileSize ?? extractFileSize(name),
+      });
+    }
+  }
+
+  // Fallback: response.models[] as string[]
+  if (results.length === 0 && Array.isArray(obj.models) && obj.models.length > 0 && typeof obj.models[0] === 'string') {
+    for (const name of obj.models as string[]) {
+      const id = name;
+      if (!results.some(m => m.id === id)) {
+        results.push({
+          id,
+          name,
+          provider: 'Router',
+          sourceUrl,
+          path: name,
+          parameterSize: extractParameterSize(name),
+          fileSize: extractFileSize(name),
+        });
       }
     }
-
-    return { models: results, suggestedCtx };
   }
+
+  // Fallback: response.model_names[] for legacy/simple compatibility
+  if (results.length === 0 && Array.isArray(obj.model_names)) {
+    for (const name of obj.model_names as string[]) {
+      const id = name;
+      if (!results.some(m => m.id === id)) {
+        results.push({
+          id,
+          name,
+          provider: 'Router',
+          sourceUrl,
+          path: name,
+          parameterSize: extractParameterSize(name),
+          fileSize: extractFileSize(name),
+        });
+      }
+    }
+  }
+
+  return { models: results, suggestedCtx };
+}
 
 /**
  * Fetch models from the Memory Gateway (OpenAI-compatible /v1/models).
@@ -495,27 +550,29 @@ export async function testRouterHealthWithError(): Promise<HealthCheckResult> {
 // ── Router control ──────────────────────────────────────────────────────────
 
 /**
- * Launch a model via the Flask router API.
+ * Launch a model via POST /api/v1/qonduit-router/launch.
  */
 export async function launchModel(modelName: string, ctxSize: number): Promise<{ ok: boolean; message: string }> {
-  const response = await fetch(apiPath('router', '/api/v1/qonduit-router/launch'), {
+  const url = apiPath('router', '/api/v1/qonduit-router/launch');
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: modelName, context_size: ctxSize }),
   });
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+    throw new Error(`Router /api/v1/qonduit-router/launch failed (HTTP ${response.status}): ${response.statusText}`);
   }
   return response.json();
 }
 
 /**
- * Stop the llama_server container.
+ * Stop the running model via POST /api/v1/qonduit-router/stop.
  */
 export async function stopModel(): Promise<{ ok: boolean; message: string }> {
-  const response = await fetch(apiPath('router', '/api/v1/qonduit-router/stop'), { method: 'POST' });
+  const url = apiPath('router', '/api/v1/qonduit-router/stop');
+  const response = await fetch(url, { method: 'POST' });
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+    throw new Error(`Router /api/v1/qonduit-router/stop failed (HTTP ${response.status}): ${response.statusText}`);
   }
   return response.json();
 }
@@ -533,15 +590,64 @@ export async function restartModel(modelName: string, ctxSize: number): Promise<
 }
 
 /**
- * Get the router status (container running/exists).
+ * Get the enriched router status from GET /api/v1/qonduit-router/status.
+ * Returns all fields including running_model, context_size, last_launch, ready, etc.
+ * Note: running_model, context_size, last_launch may be null/missing before first launch.
  */
-export async function getRouterStatus(): Promise<{
-  running: boolean;
-  exists: boolean;
-}> {
-  const response = await fetch(apiPath('router', '/api/v1/qonduit-router/status'));
+export async function getRouterStatus(): Promise<RouterStatus> {
+  const url = apiPath('router', '/api/v1/qonduit-router/status');
+  const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+    throw new Error(`Router /api/v1/qonduit-router/status failed (HTTP ${response.status}): ${response.statusText}`);
+  }
+  const data = await response.json() as Record<string, unknown>;
+     const lastLaunchRaw = data.last_launch;
+     const lastLaunch: string | null = typeof lastLaunchRaw === 'string' ? lastLaunchRaw : null;
+     const runningModelRaw = data.running_model;
+     const runningModel: string | null = typeof runningModelRaw === 'string' ? runningModelRaw : null;
+     const contextSizeRaw = data.context_size;
+     const contextSize: number | null = typeof contextSizeRaw === 'number' ? contextSizeRaw : null;
+     return {
+       ok: data.ok === true,
+       running: data.running === true,
+       exists: data.exists === true,
+       running_model: runningModel,
+       context_size: contextSize,
+       last_launch: lastLaunch,
+       ready: data.ready === true,
+       container_name: typeof data.container_name === 'string' ? data.container_name : undefined,
+       container_id: typeof data.container_id === 'string' ? data.container_id : undefined,
+       image: typeof data.image === 'string' ? data.image : undefined,
+     };
+}
+
+/**
+ * Fetch GPU/VRAM status from GET /api/v1/qonduit-router/gpu.
+ * Returns all detected GPUs and memory totals.
+ * If ok:false, the caller should show an unavailable message.
+ */
+export async function fetchRouterGpu(): Promise<GpuStatus> {
+  const url = apiPath('router', '/api/v1/qonduit-router/gpu');
+  const raw = await parseJsonSafe<GpuStatus>(
+    await fetch(url),
+    'Router /api/v1/qonduit-router/gpu'
+  );
+  return raw;
+}
+
+/**
+ * Restart (relaunch) the model via POST /api/v1/qonduit-router/restart.
+ * Sends selected model and context_size to the backend.
+ */
+export async function restartRouterModel(modelName: string, ctxSize: number): Promise<{ ok: boolean; message: string }> {
+  const url = apiPath('router', '/api/v1/qonduit-router/restart');
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: modelName, context_size: ctxSize }),
+  });
+  if (!response.ok) {
+    throw new Error(`Router /api/v1/qonduit-router/restart failed (HTTP ${response.status}): ${response.statusText}`);
   }
   return response.json();
 }
