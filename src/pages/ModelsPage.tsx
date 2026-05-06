@@ -83,15 +83,16 @@ const ModelsPage: React.FC = () => {
 
   // ── State: trash list ──
    const [trashFiles, setTrashFiles] = useState<Array<{
-     trash_name: string;
-     original_name: string;
-     path: string;
-     size_bytes: number;
-     size_human: string;
-     trashed_at: string;
-   }>>([]);
-   const [trashLoading, setTrashLoading] = useState(false);
-   const [restoreLoading, setRestoreLoading] = useState<string | null>(null);
+      trash_name: string;
+      original_name: string;
+      path: string;
+      size_bytes: number;
+      size_human: string;
+      trashed_at: string;
+    }>>([]);
+    const [trashLoading, setTrashLoading] = useState(false);
+    const [trashError, setTrashError] = useState<string | null>(null);
+    const [restoreLoading, setRestoreLoading] = useState<string | null>(null);
  
    // ── State: permanent delete dialog ──
    const [permanentDeleteConfirmOpen, setPermanentDeleteConfirmOpen] = useState(false);
@@ -247,17 +248,19 @@ const ModelsPage: React.FC = () => {
   };
 
   // ── Load trash ──
-  const loadTrash = async () => {
-    setTrashLoading(true);
-    try {
-      const resp = await listModelTrash();
-      setTrashFiles(resp.files || []);
-    } catch {
-      // Non-fatal
-    } finally {
-      setTrashLoading(false);
-    }
-  };
+   const loadTrash = async () => {
+     setTrashLoading(true);
+     setTrashError(null);
+     try {
+       const resp = await listModelTrash();
+       setTrashFiles(resp.files || []);
+     } catch (err) {
+       const msg = err instanceof Error ? err.message : 'Failed to load trash';
+       setTrashError(msg);
+     } finally {
+       setTrashLoading(false);
+     }
+   };
 
   // ── Load download jobs ──
     const loadDownloadJobs = async () => {
@@ -290,10 +293,11 @@ const ModelsPage: React.FC = () => {
     };
 
   // ── Initial load ──
-  useEffect(() => {
-    loadModels();
-    loadVram();
-  }, []);
+   useEffect(() => {
+     loadModels();
+     loadVram();
+     loadTrash();
+   }, []);
 
   // ── Download jobs polling ──
   useEffect(() => {
@@ -771,18 +775,20 @@ const ModelsPage: React.FC = () => {
         />
 
         {/* ── Trash Panel ── */}
-         <TrashPanel
-           trashFiles={trashFiles}
-           trashLoading={trashLoading}
-           restoreLoading={restoreLoading}
-           onRestore={handleRestore}
-           onDeletePermanent={handlePermanentDelete}
-           permanentDeleteLoading={permanentDeleteLoading}
-           onPermanentDeleteConfirm={confirmPermanentDelete}
-           onPermanentDeleteCancel={() => { setPermanentDeleteConfirmOpen(false); setPermanentDeleteEntry(null); }}
-           permanentDeleteConfirmOpen={permanentDeleteConfirmOpen}
-           permanentDeleteEntry={permanentDeleteEntry}
-         />
+          <TrashPanel
+            trashFiles={trashFiles}
+            trashLoading={trashLoading}
+            trashError={trashError}
+            onRetry={loadTrash}
+            restoreLoading={restoreLoading}
+            onRestore={handleRestore}
+            onDeletePermanent={handlePermanentDelete}
+            permanentDeleteLoading={permanentDeleteLoading}
+            onPermanentDeleteConfirm={confirmPermanentDelete}
+            onPermanentDeleteCancel={() => { setPermanentDeleteConfirmOpen(false); setPermanentDeleteEntry(null); }}
+            permanentDeleteConfirmOpen={permanentDeleteConfirmOpen}
+            permanentDeleteEntry={permanentDeleteEntry}
+          />
       </div>
 
       {/* ── Toast ── */}

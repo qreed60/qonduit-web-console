@@ -13,6 +13,8 @@ interface TrashEntry {
 interface TrashPanelProps {
   trashFiles: TrashEntry[];
   trashLoading: boolean;
+  trashError: string | null;
+  onRetry?: () => void;
   restoreLoading: string | null;
   onRestore: (trashName: string) => void;
   onDeletePermanent: (entry: TrashEntry) => void;
@@ -24,13 +26,11 @@ interface TrashPanelProps {
 }
 
 const TrashPanel: React.FC<TrashPanelProps> = ({
-  trashFiles, trashLoading, restoreLoading, onRestore,
+  trashFiles, trashLoading, trashError, onRetry, restoreLoading, onRestore,
   onDeletePermanent, permanentDeleteLoading, onPermanentDeleteConfirm, onPermanentDeleteCancel,
   permanentDeleteConfirmOpen, permanentDeleteEntry,
 }) => {
   const [expanded, setExpanded] = React.useState(false);
-
-  if (trashFiles.length === 0 && !trashLoading) return null;
 
   return (
     <div className="bg-bg-card rounded-xl border border-border-primary overflow-hidden">
@@ -55,14 +55,26 @@ const TrashPanel: React.FC<TrashPanelProps> = ({
       </button>
 
       {expanded && (
-        <div className="px-5 pb-5 space-y-2 border-t border-border-subtle pt-4">
-          {trashLoading ? (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="w-5 h-5 text-text-tertiary animate-spin" />
-            </div>
-          ) : trashFiles.length === 0 ? (
-            <p className="text-xs text-text-tertiary text-center py-4">Trash is empty</p>
-          ) : (
+         <div className="px-5 pb-5 space-y-2 border-t border-border-subtle pt-4">
+           {trashError ? (
+             <div className="text-center py-4">
+               <p className="text-xs text-status-error mb-2">⚠ Failed to load trash: {trashError}</p>
+               {onRetry && (
+                 <button
+                   onClick={onRetry}
+                   className="text-xs text-accent-primary hover:text-accent-primary-hover font-medium"
+                 >
+                   Retry
+                 </button>
+               )}
+             </div>
+           ) : trashLoading ? (
+             <div className="flex items-center justify-center py-4">
+               <Loader2 className="w-5 h-5 text-text-tertiary animate-spin" />
+             </div>
+           ) : trashFiles.length === 0 ? (
+             <p className="text-xs text-text-tertiary text-center py-4">Trash is empty</p>
+           ) : (
             <div className="space-y-1.5">
               {trashFiles.map((entry) => (
                 <div
@@ -93,14 +105,14 @@ const TrashPanel: React.FC<TrashPanelProps> = ({
                       Restore
                     </button>
                     <button
-                      onClick={() => onDeletePermanent(entry)}
-                      disabled={permanentDeleteLoading !== null}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-status-error/10 text-status-error border border-status-error/30 rounded-lg text-xs font-medium hover:bg-status-error/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      title="Delete Permanently"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      Delete
-                    </button>
+                       onClick={() => onDeletePermanent(entry)}
+                       disabled={permanentDeleteLoading !== null}
+                       className="flex items-center gap-1.5 px-3 py-1.5 bg-status-error/10 text-status-error border border-status-error/30 rounded-lg text-xs font-medium hover:bg-status-error/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                       title="Delete Permanently"
+                     >
+                       <Trash2 className="w-3 h-3" />
+                       Delete Permanently
+                     </button>
                   </div>
                 </div>
               ))}
