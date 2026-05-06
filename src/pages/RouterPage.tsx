@@ -3,6 +3,7 @@ import { getSettings, getRouterStatus, fetchRouterModels, fetchRouterGpu, launch
 import { ENDPOINTS } from '../config/endpoints';
 import { GpuInfo } from '../types';
 import Toast from '../components/Toast';
+import { useNavigate } from 'react-router-dom';
 import {
   Cpu,
   AlertCircle,
@@ -13,6 +14,7 @@ import {
   RotateCcw,
   HardDrive,
   MemoryStick,
+  Plus,
 } from 'lucide-react';
 
 /**
@@ -21,6 +23,7 @@ import {
 const PRESET_CTX = [4096, 8192, 16384, 32768, 65536, 131072, 262144];
 
 const RouterPage: React.FC = () => {
+  const navigate = useNavigate();
   const settings = getSettings();
   const mode = settings.endpointMode;
 
@@ -446,9 +449,16 @@ const RouterPage: React.FC = () => {
               </div>
             ) : (
               <div className="text-center py-8">
-                <p className="text-text-tertiary text-sm">No models available</p>
-                <p className="text-text-tertiary/60 text-xs mt-1">Add GGUF files to the Router's model directory</p>
-              </div>
+                 <p className="text-text-tertiary text-sm">No models available</p>
+                 <p className="text-text-tertiary/60 text-xs mt-1">Add GGUF files to the Router's model directory</p>
+                 <button
+                   onClick={() => navigate('/models')}
+                   className="mt-3 flex items-center gap-1.5 mx-auto px-3 py-1.5 bg-accent-primary/10 text-accent-primary border border-accent-primary/30 rounded-lg text-xs font-medium hover:bg-accent-primary/20 transition-colors"
+                 >
+                   <Plus className="w-3 h-3" />
+                   Add model from Hugging Face →
+                 </button>
+               </div>
             )}
   
             {/* Content Error Warning */}

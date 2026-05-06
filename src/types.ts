@@ -172,3 +172,162 @@ export interface GpuStatus {
   memory_used_human: string;
   memory_free_human: string;
 }
+
+// ── Hugging Face Search ──────────────────────────────────────────────
+
+export interface HfSearchResult {
+  repo_id: string;
+  model_id: string;
+  author: string;
+  downloads: number;
+  likes: number;
+  last_modified: string;
+  tags: string[];
+  pipeline_tag: string;
+  private: boolean;
+  gated: boolean;
+  gguf_count: number;
+  sample_gguf_files: string[];
+  url: string;
+  parameter_size: string;
+  parameter_size_num: number;
+  parameter_size_active: string;
+  parameter_size_active_num: number;
+}
+
+export interface HfSearchResponse {
+  ok: boolean;
+  query: string;
+  count: number;
+  limit: number;
+  sort: string;
+  require_gguf: boolean;
+  source: string;
+  hf_models_url: string;
+  cached: boolean;
+  rate_limited: boolean;
+  retry_after_seconds?: number;
+  results: HfSearchResult[];
+  error: string | null;
+}
+
+// ── Hugging Face Repo Files ─────────────────────────────────────────
+
+export interface HfRepoFile {
+  filename: string;
+  path: string;
+  size_bytes: number;
+  size_human: string;
+  size_gib: number;
+  size_gb: number;
+  is_gguf: boolean;
+  quant: string;
+  parameter_size: string;
+  parameter_size_num: number;
+  parameter_size_active: string;
+  parameter_size_active_num: number;
+  downloadable: boolean;
+  url: string;
+}
+
+export interface HfRepoFilesResponse {
+  ok: boolean;
+  repo_id: string;
+  url: string;
+  gguf_count: number;
+  parameter_size: string;
+  parameter_size_num: number;
+  parameter_size_active: string;
+  parameter_size_active_num: number;
+  cached: boolean;
+  files: HfRepoFile[];
+  error: string | null;
+}
+
+// ── Hugging Face Downloads ──────────────────────────────────────────
+
+export interface HfDownloadDryRunResponse {
+  ok: boolean;
+  dry_run: true;
+  downloadable: boolean;
+  exists: boolean;
+  repo_id: string;
+  filename: string;
+  target_name: string;
+  target_path: string;
+  size_bytes: number;
+  size_human: string;
+}
+
+export interface HfDownloadStartResponse {
+  ok: boolean;
+  job_id: string;
+  status: string;
+  repo_id: string;
+  filename: string;
+  target_name: string;
+  target_path: string;
+  dry_run: false;
+}
+
+export interface HfDownloadJob {
+  job_id: string;
+  status: 'queued' | 'downloading' | 'complete' | 'failed' | 'cancelled';
+  repo_id: string;
+  filename: string;
+  target_name: string;
+  target_path: string;
+  partial_path?: string;
+  bytes_downloaded: number;
+  total_bytes: number;
+  progress: number;
+  started_at: string | null;
+  completed_at: string | null;
+  error: string | null;
+  cancel_requested: boolean;
+}
+
+export interface HfDownloadJobsResponse {
+  ok: boolean;
+  total: number;
+  active_count: number;
+  queued_count: number;
+  jobs: HfDownloadJob[];
+  error?: string | null;
+}
+
+// ── Model Trash ─────────────────────────────────────────────────────
+
+export interface LocalModelDeleteResponse {
+  ok: boolean;
+  deleted: boolean;
+  method: string;
+  model: string;
+  path: string;
+  trash_path: string;
+}
+
+export interface ModelTrashEntry {
+  trash_name: string;
+  original_name: string;
+  path: string;
+  size_bytes: number;
+  size_human: string;
+  trashed_at: string;
+}
+
+export interface ModelTrashResponse {
+  ok: boolean;
+  count: number;
+  trash_dir: string;
+  files: ModelTrashEntry[];
+}
+
+export interface ModelRestoreResponse {
+  ok: boolean;
+  restored: boolean;
+  trash_name: string;
+  original_name: string;
+  path: string;
+  error?: string | null;
+}

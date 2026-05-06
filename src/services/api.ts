@@ -1,8 +1,8 @@
-import { Settings, ProviderType, ChatMessage, NormalizedModel, GpuStatus, RouterStatus } from '../types';
+import { Settings, ProviderType, ChatMessage, NormalizedModel, GpuStatus, RouterStatus, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse } from '../types';
 import { getMode, apiPath } from '../config/endpoints';
 
 // Re-export NormalizedModel for convenience
-export type { NormalizedModel, GpuStatus, RouterStatus };
+export type { NormalizedModel, GpuStatus, RouterStatus, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse };
 
 // ── Model metadata helpers ──────────────────────────────────────────────────
 
@@ -673,5 +673,199 @@ export async function llamaReady(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ── Hugging Face Model Management ─────────────────────────────────────
+
+/**
+ * Search Hugging Face for models with GGUF files.
+ */
+export async function searchHfModels(
+  query: string,
+  limit: number = 20,
+  sort: 'downloads' | 'likes' | 'lastModified' = 'downloads'
+): Promise<HfSearchResponse> {
+  const url = apiPath('router', `/api/v1/qonduit-router/hf/search?q=${encodeURIComponent(query)}&limit=${limit}&sort=${sort}`);
+  const raw = await parseJsonSafe<HfSearchResponse>(
+    await fetch(url),
+    'HF search'
+  );
+  if (!raw.ok) {
+    const msg = raw.error || 'Search failed';
+    if (raw.rate_limited && raw.retry_after_seconds) {
+      throw new Error(`Rate limited. Try again in ${raw.retry_after_seconds}s. ${msg}`);
+    }
+    throw new Error(`HF search failed: ${msg}`);
+  }
+  return raw;
+}
+
+/**
+ * List GGUF files in a Hugging Face repository.
+ */
+export async function listHfRepoFiles(repoId: string): Promise<HfRepoFilesResponse> {
+  const url = apiPath('router', `/api/v1/qonduit-router/hf/repo-files?repo_id=${encodeURIComponent(repoId)}`);
+  const raw = await parseJsonSafe<HfRepoFilesResponse>(
+    await fetch(url),
+    'HF repo files'
+  );
+  if (!raw.ok) {
+    throw new Error(`HF repo files failed: ${raw.error || 'Unknown error'}`);
+  }
+  return raw;
+}
+
+/**
+ * Dry-run a Hugging Face download to validate before committing.
+ */
+export async function dryRunHfDownload(
+  repoId: string,
+  filename: string,
+  targetName?: string
+): Promise<HfDownloadDryRunResponse> {
+  const url = apiPath('router', '/api/v1/qonduit-router/hf/download');
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      repo_id: repoId,
+      filename,
+      target_name: targetName,
+      dry_run: true,
+    }),
+  });
+  const data = await parseJsonSafe<HfDownloadDryRunResponse>(
+    response,
+    'HF dry-run download'
+  );
+  if (!data.ok) {
+     throw new Error(`Dry-run failed: downloadable=${data.downloadable}, exists=${data.exists}`);
+   }
+   return data;
+ }
+ 
+ /**
+  * Start a Hugging Face model download.
+  */
+ export async function startHfDownload(
+   repoId: string,
+   filename: string,
+   targetName?: string,
+   overwrite?: boolean
+ ): Promise<HfDownloadStartResponse> {
+   const url = apiPath('router', '/api/v1/qonduit-router/hf/download');
+   const response = await fetch(url, {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/json' },
+     body: JSON.stringify({
+       repo_id: repoId,
+       filename,
+       target_name: targetName,
+       dry_run: false,
+       overwrite: overwrite || false,
+     }),
+   });
+   const data = await parseJsonSafe<HfDownloadStartResponse>(
+     response,
+     'HF download start'
+   );
+   if (!data.ok) {
+     throw new Error(`Download failed: job not created`);
+   }
+  return data;
+}
+
+/**
+ * List all Hugging Face download jobs.
+ */
+export async function listHfDownloads(): Promise<HfDownloadJobsResponse> {
+  const url = apiPath('router', '/api/v1/qonduit-router/hf/downloads');
+  const raw = await parseJsonSafe<HfDownloadJobsResponse>(
+    await fetch(url),
+    'HF downloads'
+  );
+  if (!raw.ok) {
+    throw new Error(`HF downloads failed: ${raw.error || 'Unknown error'}`);
+  }
+  return raw;
+}
+
+/**
+ * Get status of a single download job.
+ */
+export async function getHfDownload(jobId: string): Promise<HfDownloadJob> {
+  const url = apiPath('router', `/api/v1/qonduit-router/hf/downloads/${encodeURIComponent(jobId)}`);
+  const raw = await parseJsonSafe<HfDownloadJob>(
+    await fetch(url),
+    'HF download job'
+  );
+  return raw;
+}
+
+/**
+ * Cancel a download job.
+ */
+export async function cancelHfDownload(jobId: string): Promise<{ ok: boolean; job_id: string; status: string }> {
+  const url = apiPath('router', `/api/v1/qonduit-router/hf/downloads/${encodeURIComponent(jobId)}/cancel`);
+  const response = await fetch(url, { method: 'POST' });
+  if (!response.ok) {
+    throw new Error(`Cancel failed (HTTP ${response.status})`);
+  }
+  return response.json();
+}
+
+/**
+ * Move a local model to trash.
+ */
+export async function deleteLocalModel(modelName: string): Promise<LocalModelDeleteResponse> {
+  const url = apiPath('router', '/api/v1/qonduit-router/models/delete');
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: modelName, confirm: true }),
+  });
+  const data = await parseJsonSafe<LocalModelDeleteResponse>(
+     response,
+     'Model delete'
+   );
+   if (!data.ok) {
+     throw new Error(`Delete failed: model not moved to trash`);
+   }
+   return data;
+ }
+ 
+ /**
+  * List trashed models.
+  */
+ export async function listModelTrash(): Promise<ModelTrashResponse> {
+   const url = apiPath('router', '/api/v1/qonduit-router/models/trash');
+   const raw = await parseJsonSafe<ModelTrashResponse>(
+     await fetch(url),
+     'Model trash'
+   );
+   if (!raw.ok) {
+     throw new Error(`Trash list failed`);
+   }
+  return raw;
+}
+
+/**
+ * Restore a model from trash.
+ */
+export async function restoreModelFromTrash(trashName: string): Promise<ModelRestoreResponse> {
+  const url = apiPath('router', '/api/v1/qonduit-router/models/restore');
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ trash_name: trashName }),
+  });
+  const data = await parseJsonSafe<ModelRestoreResponse>(
+    response,
+    'Model restore'
+  );
+  if (!data.ok) {
+    throw new Error(`Restore failed: ${data.error || 'Unknown error'}`);
+  }
+  return data;
 }
 

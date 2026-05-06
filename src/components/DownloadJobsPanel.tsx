@@ -1,0 +1,166 @@
+import React from 'react';
+import { Loader2, X, Check, RotateCcw, FileDown, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { HfDownloadJob } from '../types';
+
+interface DownloadJobsPanelProps {
+  downloadJobs: HfDownloadJob[];
+  jobsLoading: boolean;
+  jobsError: string | null;
+  jobsLastUpdated: number | null;
+  onRefresh: () => void;
+  onCancel: (jobId: string) => void;
+}
+
+const statusStyles: Record<HfDownloadJob['status'], { bg: string; text: string; label: string }> = {
+  queued: { bg: 'bg-accent-primary/10', text: 'text-accent-primary', label: 'Queued' },
+  downloading: { bg: 'bg-accent-secondary/10', text: 'text-accent-secondary', label: 'Downloading' },
+  complete: { bg: 'bg-status-success/10', text: 'text-status-success', label: 'Complete' },
+  failed: { bg: 'bg-status-error/10', text: 'text-status-error', label: 'Failed' },
+  cancelled: { bg: 'bg-bg-tertiary/50', text: 'text-text-tertiary', label: 'Cancelled' },
+};
+
+const DownloadJobsPanel: React.FC<DownloadJobsPanelProps> = ({
+  downloadJobs, jobsLoading, jobsError, jobsLastUpdated, onRefresh, onCancel,
+}) => {
+  const [expanded, setExpanded] = React.useState(false);
+
+  const hasActiveJobs = downloadJobs.some(
+    j => j.status === 'queued' || j.status === 'downloading'
+  );
+
+  if (downloadJobs.length === 0 && !hasActiveJobs) return null;
+
+  return (
+    <div className="bg-bg-card rounded-xl border border-border-primary overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between p-5 text-left hover:bg-bg-secondary/30 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <FileDown className="w-4 h-4 text-accent-secondary" />
+          <h3 className="text-sm font-semibold text-text-primary">Download Jobs</h3>
+          {hasActiveJobs && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-secondary/10 text-accent-secondary font-medium animate-pulse">
+              Active
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {jobsLastUpdated && (
+            <span className="text-[10px] text-text-tertiary">
+              Updated {Math.floor((Date.now() - jobsLastUpdated) / 1000)}s ago
+            </span>
+          )}
+          {expanded ? (
+            <ChevronUp className="w-4 h-4 text-text-tertiary" />
+          ) : (
+            <ChevronDown className="w-4 h-4 text-text-tertiary" />
+          )}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="px-5 pb-5 space-y-3 border-t border-border-subtle pt-4">
+          {/* Error */}
+          {jobsError && (
+            <div className="p-2 bg-status-warning/5 border border-status-warning/20 rounded-lg">
+              <p className="text-[10px] text-status-warning flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                {jobsError}
+              </p>
+            </div>
+          )}
+
+          {/* Jobs list */}
+          <div className="space-y-2">
+            {downloadJobs.map((job) => {
+              const style = statusStyles[job.status];
+              const isActive = job.status === 'queued' || job.status === 'downloading';
+
+              return (
+                <div
+                  key={job.job_id}
+                  className={`p-3 rounded-lg border ${isActive ? 'border-border-primary bg-bg-secondary/30' : 'border-border-subtle bg-bg-secondary/10'}`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${style.bg} ${style.text}`}>
+                        {style.label}
+                      </span>
+                      <p className="text-xs font-mono text-text-primary truncate" title={job.filename}>
+                        {job.filename}
+                      </p>
+                    </div>
+                    {isActive && (
+                      <button
+                        onClick={() => onCancel(job.job_id)}
+                        className="ml-2 p-1 rounded hover:bg-status-error/10 text-text-tertiary hover:text-status-error transition-colors flex-shrink-0"
+                        title="Cancel download"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {job.status === 'failed' && (
+                      <button
+                        onClick={onRefresh}
+                        className="ml-2 p-1 rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-colors flex-shrink-0"
+                        title="Refresh"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Progress bar */}
+                  {(job.status === 'queued' || job.status === 'downloading') && (
+                    <div className="space-y-1">
+                      <div className="w-full bg-bg-tertiary rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="bg-accent-secondary h-full rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min(job.progress * 100, 100)}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] text-text-tertiary">
+                        <span>
+                          {job.bytes_downloaded > 0 ? `${(job.bytes_downloaded / (1024 * 1024)).toFixed(1)} MB` : '0 MB'}
+                          {' / '}
+                          {job.total_bytes > 0 ? `${(job.total_bytes / (1024 * 1024 * 1024)).toFixed(1)} GB` : '...'}
+                        </span>
+                        <span>{(job.progress * 100).toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Error message for failed jobs */}
+                  {job.status === 'failed' && job.error && (
+                    <p className="text-[10px] text-status-error mt-1">{job.error}</p>
+                  )}
+
+                  {/* Complete status */}
+                  {job.status === 'complete' && (
+                    <div className="flex items-center gap-1 text-[10px] text-status-success mt-1">
+                      <Check className="w-3 h-3" />
+                      Download complete
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Refresh button */}
+          <button
+            onClick={onRefresh}
+            disabled={jobsLoading}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary transition-colors disabled:opacity-50"
+          >
+            {jobsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+            Refresh Jobs
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default DownloadJobsPanel;
