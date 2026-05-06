@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, X, Check, RotateCcw, FileDown, AlertCircle, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { Loader2, X, Check, RotateCcw, FileDown, AlertCircle, AlertTriangle } from 'lucide-react';
 import { HfDownloadJob } from '../types';
 
 interface DownloadJobsPanelProps {
@@ -23,13 +23,13 @@ const statusStyles: Record<HfDownloadJob['status'], { bg: string; text: string; 
 const DownloadJobsPanel: React.FC<DownloadJobsPanelProps> = ({
   downloadJobs, jobsLoading, jobsError, jobsLastUpdated, onRefresh, onCancel,
 }) => {
-  const [expanded, setExpanded] = React.useState(false);
-
   const hasActiveJobs = downloadJobs.some(
     j => j.status === 'queued' || j.status === 'downloading'
   );
 
-  if (downloadJobs.length === 0 && !hasActiveJobs) return null;
+  const completedCount = downloadJobs.filter(
+    j => j.status === 'complete' || j.status === 'failed' || j.status === 'cancelled' || j.status === 'interrupted'
+  ).length;
 
   // Format bytes to GiB
   const toGiB = (bytes: number): string => {
@@ -38,11 +38,8 @@ const DownloadJobsPanel: React.FC<DownloadJobsPanelProps> = ({
   };
 
   return (
-    <div className="bg-bg-card rounded-xl border border-border-primary overflow-hidden">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between p-5 text-left hover:bg-bg-secondary/30 transition-colors"
-      >
+    <div className="bg-bg-card rounded-xl border border-border-primary">
+      <div className="px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <FileDown className="w-4 h-4 text-accent-secondary" />
           <h3 className="text-sm font-semibold text-text-primary">Download Jobs</h3>
@@ -51,39 +48,31 @@ const DownloadJobsPanel: React.FC<DownloadJobsPanelProps> = ({
               Active
             </span>
           )}
-          {downloadJobs.filter(j => j.status === 'complete' || j.status === 'failed' || j.status === 'cancelled' || j.status === 'interrupted').length > 0 && (
+          {completedCount > 0 && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-tertiary/50 text-text-tertiary font-medium">
-              {downloadJobs.filter(j => j.status === 'complete' || j.status === 'failed' || j.status === 'cancelled' || j.status === 'interrupted').length}
+              {completedCount}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          {jobsLastUpdated && (
-            <span className="text-[10px] text-text-tertiary">
-              Updated {Math.floor((Date.now() - jobsLastUpdated) / 1000)}s ago
-            </span>
-          )}
-          {expanded ? (
-            <ChevronUp className="w-4 h-4 text-text-tertiary" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-text-tertiary" />
-          )}
-        </div>
-      </button>
+        {jobsLastUpdated && (
+          <span className="text-[10px] text-text-tertiary">
+            Updated {Math.floor((Date.now() - jobsLastUpdated) / 1000)}s ago
+          </span>
+        )}
+      </div>
+      <div className="px-5 pb-5 space-y-3 border-t border-border-subtle pt-4">
+        {/* Error */}
+        {jobsError && (
+          <div className="p-2 bg-status-warning/5 border border-status-warning/20 rounded-lg">
+            <p className="text-[10px] text-status-warning flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />
+              {jobsError}
+            </p>
+          </div>
+        )}
 
-      {expanded && (
-        <div className="px-5 pb-5 space-y-3 border-t border-border-subtle pt-4">
-          {/* Error */}
-          {jobsError && (
-            <div className="p-2 bg-status-warning/5 border border-status-warning/20 rounded-lg">
-              <p className="text-[10px] text-status-warning flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" />
-                {jobsError}
-              </p>
-            </div>
-          )}
-
-          {/* Jobs list */}
+        {/* Jobs list */}
+        {downloadJobs.length > 0 && (
           <div className="space-y-2">
             {downloadJobs.map((job) => {
               const style = statusStyles[job.status];
@@ -179,18 +168,26 @@ const DownloadJobsPanel: React.FC<DownloadJobsPanelProps> = ({
               );
             })}
           </div>
+        )}
 
-          {/* Refresh button */}
-          <button
-            onClick={onRefresh}
-            disabled={jobsLoading}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary transition-colors disabled:opacity-50"
-          >
-            {jobsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
-            Refresh Jobs
-          </button>
-        </div>
-      )}
+        {/* Empty state */}
+        {downloadJobs.length === 0 && (
+          <div className="text-center py-6">
+            <FileDown className="w-8 h-8 text-text-tertiary/40 mx-auto mb-2" />
+            <p className="text-xs text-text-tertiary">No active download jobs</p>
+          </div>
+        )}
+
+        {/* Refresh button */}
+        <button
+          onClick={onRefresh}
+          disabled={jobsLoading}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border border-border-subtle text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary transition-colors disabled:opacity-50"
+        >
+          {jobsLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+          Refresh Jobs
+        </button>
+      </div>
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trash2, RotateCcw, Loader2, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { Trash2, RotateCcw, Loader2, AlertTriangle } from 'lucide-react';
 
 interface TrashEntry {
   trash_name: string;
@@ -30,32 +30,18 @@ const TrashPanel: React.FC<TrashPanelProps> = ({
   onDeletePermanent, permanentDeleteLoading, onPermanentDeleteConfirm, onPermanentDeleteCancel,
   permanentDeleteConfirmOpen, permanentDeleteEntry,
 }) => {
-  const [expanded, setExpanded] = React.useState(false);
-
   return (
-    <div className="bg-bg-card rounded-xl border border-border-primary overflow-hidden">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between p-5 text-left hover:bg-bg-secondary/30 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <Trash2 className="w-4 h-4 text-text-tertiary" />
-          <h3 className="text-sm font-semibold text-text-primary">Trash / Restore</h3>
-          {trashFiles.length > 0 && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-tertiary/50 text-text-tertiary font-medium">
-              {trashFiles.length}
-            </span>
-          )}
-        </div>
-        {expanded ? (
-          <ChevronUp className="w-4 h-4 text-text-tertiary" />
-        ) : (
-          <ChevronDown className="w-4 h-4 text-text-tertiary" />
+    <div className="bg-bg-card rounded-xl border border-border-primary">
+      <div className="px-5 py-4 flex items-center gap-2">
+        <Trash2 className="w-4 h-4 text-text-tertiary" />
+        <h3 className="text-sm font-semibold text-text-primary">Trash / Restore</h3>
+        {trashFiles.length > 0 && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-tertiary/50 text-text-tertiary font-medium">
+            {trashFiles.length}
+          </span>
         )}
-      </button>
-
-      {expanded && (
-         <div className="px-5 pb-5 space-y-2 border-t border-border-subtle pt-4">
+      </div>
+      <div className="px-5 pb-5 space-y-2 border-t border-border-subtle pt-4">
            {trashError ? (
              <div className="text-center py-4">
                <p className="text-xs text-status-error mb-2">⚠ Failed to load trash: {trashError}</p>
@@ -116,12 +102,11 @@ const TrashPanel: React.FC<TrashPanelProps> = ({
                   </div>
                 </div>
               ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Permanent Delete Confirmation Dialog ── */}
+             </div>
+           )}
+         </div>
+ 
+       {/* ── Permanent Delete Confirmation Dialog ── */}
       {permanentDeleteConfirmOpen && permanentDeleteEntry && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center">
           <div

@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Search, Loader2, ExternalLink, Download,
-  Cpu, ChevronDown, ChevronUp, Globe, ShieldCheck,
+  Cpu, Globe, ShieldCheck,
 } from 'lucide-react';
 import { HfSearchResult, HfRepoFile } from '../types';
 
@@ -67,8 +67,6 @@ const HfSearchPanel: React.FC<HfSearchPanelProps> = ({
   downloadConfirmOpen, downloadConfirmData, downloadConfirmLoading,
   onSearch, onSelectRepo, onDownloadConfirm, onStartDownload, onCancelDownload,
 }) => {
-  const [expanded, setExpanded] = React.useState(false);
-
   const sortedFiles = selectedRepo ? sortQuantFiles(repoFiles) : [];
 
   // Determine if any results are unverified (metadata-filtered only)
@@ -82,26 +80,14 @@ const HfSearchPanel: React.FC<HfSearchPanelProps> = ({
   };
 
   return (
-    <>
-      {/* HF Section */}
-      <div className="bg-bg-card rounded-xl border border-border-primary overflow-hidden">
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="w-full flex items-center justify-between p-5 text-left hover:bg-bg-secondary/30 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <Globe className="w-4 h-4 text-accent-primary" />
-            <h3 className="text-sm font-semibold text-text-primary">Add Model from Hugging Face</h3>
-          </div>
-          {expanded ? (
-            <ChevronUp className="w-4 h-4 text-text-tertiary" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-text-tertiary" />
-          )}
-        </button>
-
-        {expanded && (
-          <div className="px-5 pb-5 space-y-4 border-t border-border-subtle pt-4">
+     <>
+       {/* HF Section */}
+       <div className="bg-bg-card rounded-xl border border-border-primary">
+         <div className="px-5 py-4 flex items-center gap-2">
+           <Globe className="w-4 h-4 text-accent-primary" />
+           <h3 className="text-sm font-semibold text-text-primary">Add Model from Hugging Face</h3>
+         </div>
+         <div className="px-5 pb-5 space-y-4 border-t border-border-subtle pt-4">
             {/* Search input */}
             <div className="flex items-center gap-2">
               <div className="flex-1 relative">
@@ -314,11 +300,10 @@ const HfSearchPanel: React.FC<HfSearchPanelProps> = ({
                 )}
               </div>
             )}
-          </div>
-        )}
-      </div>
-
-      {/* Download Confirmation Dialog */}
+           </div>
+       </div>
+ 
+       {/* Download Confirmation Dialog */}
       {downloadConfirmOpen && downloadConfirmData && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={onCancelDownload} />
