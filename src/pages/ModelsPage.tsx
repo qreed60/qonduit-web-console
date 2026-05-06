@@ -3,6 +3,7 @@ import {
   fetchGatewayModels, fetchDirectModels, fetchRouterModels, fetchRouterGpu,
   searchHfModels, listHfRepoFiles, dryRunHfDownload, startHfDownload,
   listHfDownloads, cancelHfDownload, deleteLocalModel, listModelTrash, restoreModelFromTrash,
+  permanentlyDeleteTrashEntry,
 } from '../services/api';
 import { apiPath } from '../config/endpoints';
 import { GpuInfo, HfSearchResult, HfRepoFile, HfDownloadJob } from '../types';
@@ -81,16 +82,28 @@ const ModelsPage: React.FC = () => {
   const [trashDialogLoading, setTrashDialogLoading] = useState(false);
 
   // ── State: trash list ──
-  const [trashFiles, setTrashFiles] = useState<Array<{
-    trash_name: string;
-    original_name: string;
-    path: string;
-    size_bytes: number;
-    size_human: string;
-    trashed_at: string;
-  }>>([]);
-  const [trashLoading, setTrashLoading] = useState(false);
-  const [restoreLoading, setRestoreLoading] = useState<string | null>(null);
+   const [trashFiles, setTrashFiles] = useState<Array<{
+     trash_name: string;
+     original_name: string;
+     path: string;
+     size_bytes: number;
+     size_human: string;
+     trashed_at: string;
+   }>>([]);
+   const [trashLoading, setTrashLoading] = useState(false);
+   const [restoreLoading, setRestoreLoading] = useState<string | null>(null);
+ 
+   // ── State: permanent delete dialog ──
+   const [permanentDeleteConfirmOpen, setPermanentDeleteConfirmOpen] = useState(false);
+   const [permanentDeleteEntry, setPermanentDeleteEntry] = useState<{
+     trash_name: string;
+     original_name: string;
+     path: string;
+     size_bytes: number;
+     size_human: string;
+     trashed_at: string;
+   } | null>(null);
+   const [permanentDeleteLoading, setPermanentDeleteLoading] = useState<string | null>(null);
 
   // ── State: HF search ──
   const [hfQuery, setHfQuery] = useState('');
@@ -247,23 +260,34 @@ const ModelsPage: React.FC = () => {
   };
 
   // ── Load download jobs ──
-  const loadDownloadJobs = async () => {
-    if (jobsInFlightRef.current) return;
-    jobsInFlightRef.current = true;
-    setJobsLoading(true);
-
-    try {
-      const resp = await listHfDownloads();
-      setDownloadJobs(resp.jobs || []);
-      setJobsLastUpdated(Date.now());
-      setJobsError(null);
-    } catch (err) {
-      setJobsError(err instanceof Error ? err.message : 'Failed to fetch download jobs');
-    } finally {
-      setJobsLoading(false);
-      jobsInFlightRef.current = false;
-    }
-  };
+    const loadDownloadJobs = async () => {
+      if (jobsInFlightRef.current) return;
+      jobsInFlightRef.current = true;
+      setJobsLoading(true);
+  
+      try {
+        const resp = await listHfDownloads();
+        const newJobs = resp.jobs || [];
+        const hadCompleted = downloadJobs.some(j => j.status === 'complete') ||
+          newJobs.some(j => j.status === 'complete');
+  
+        setDownloadJobs(newJobs);
+        setJobsLastUpdated(Date.now());
+        setJobsError(null);
+  
+        // Refresh local models if a download just completed
+        if (!hadCompleted && newJobs.some(j => j.status === 'complete')) {
+          loadModels();
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to refresh download jobs: unknown error';
+        setJobsError(msg);
+        // Preserve last known jobs on error — do not clear downloadJobs
+      } finally {
+        setJobsLoading(false);
+        jobsInFlightRef.current = false;
+      }
+    };
 
   // ── Initial load ──
   useEffect(() => {
@@ -315,56 +339,91 @@ const ModelsPage: React.FC = () => {
   };
 
   // ── Restore from trash ──
-  const handleRestore = async (trashName: string) => {
-    setRestoreLoading(trashName);
-    try {
-      const resp = await restoreModelFromTrash(trashName);
-      if (resp.ok && resp.restored) {
-        setToastMessage(`"${resp.original_name}" restored`);
-        setToastType('success');
-        loadTrash();
-      } else {
-        setToastMessage(resp.error || 'Restore failed');
-        setToastType('error');
-      }
-    } catch (err) {
-      setToastMessage(err instanceof Error ? err.message : 'Restore failed');
-      setToastType('error');
-    } finally {
-      setRestoreLoading(null);
-    }
-  };
+   const handleRestore = async (trashName: string) => {
+     setRestoreLoading(trashName);
+     try {
+       const resp = await restoreModelFromTrash(trashName);
+       if (resp.ok && resp.restored) {
+         setToastMessage(`"${resp.original_name}" restored`);
+         setToastType('success');
+         loadTrash();
+         loadModels();
+       } else {
+         setToastMessage(resp.error || 'Restore failed');
+         setToastType('error');
+       }
+     } catch (err) {
+       setToastMessage(err instanceof Error ? err.message : 'Restore failed');
+       setToastType('error');
+     } finally {
+       setRestoreLoading(null);
+     }
+   };
+ 
+   // ── Permanent delete from trash ──
+   const handlePermanentDelete = (entry: {
+     trash_name: string;
+     original_name: string;
+     path: string;
+     size_bytes: number;
+     size_human: string;
+     trashed_at: string;
+   }) => {
+     setPermanentDeleteEntry(entry);
+     setPermanentDeleteConfirmOpen(true);
+   };
+ 
+   const confirmPermanentDelete = async (trashName: string) => {
+     setPermanentDeleteLoading(trashName);
+     try {
+       await permanentlyDeleteTrashEntry(trashName);
+       setToastMessage(`"${permanentDeleteEntry?.original_name}" permanently deleted`);
+       setToastType('success');
+       setPermanentDeleteConfirmOpen(false);
+       setPermanentDeleteEntry(null);
+       setTrashFiles(prev => prev.filter(e => e.trash_name !== trashName));
+     } catch (err) {
+       setToastMessage(err instanceof Error ? err.message : 'Permanent delete failed');
+       setToastType('error');
+     } finally {
+       setPermanentDeleteLoading(null);
+     }
+   };
 
   // ── HF Search ──
-  const handleHfSearch = async () => {
-    if (!hfQuery.trim()) return;
-    setHfSearchLoading(true);
-    setHfSearchError(null);
-    try {
-      const resp = await searchHfModels(hfQuery.trim(), hfLimit, hfSort);
-      setHfSearchResults(resp.results || []);
-      setHfLastSearchTime(Date.now());
-    } catch (err) {
-      setHfSearchError(err instanceof Error ? err.message : 'Search failed');
-    } finally {
-      setHfSearchLoading(false);
-    }
-  };
-
-  // ── Select repo ──
-  const handleSelectRepo = async (repoId: string) => {
-    setSelectedRepo(repoId);
-    setRepoFilesLoading(true);
-    setRepoFilesError(null);
-    try {
-      const resp = await listHfRepoFiles(repoId);
-      setRepoFiles(resp.files || []);
-    } catch (err) {
-      setRepoFilesError(err instanceof Error ? err.message : 'Failed to fetch repo files');
-    } finally {
-      setRepoFilesLoading(false);
-    }
-  };
+   const handleHfSearch = async () => {
+     if (!hfQuery.trim()) return;
+     setHfSearchLoading(true);
+     setHfSearchError(null);
+     try {
+       const resp = await searchHfModels(hfQuery.trim(), hfLimit, hfSort);
+       setHfSearchResults(resp.results || []);
+       setHfLastSearchTime(Date.now());
+     } catch (err) {
+       const msg = err instanceof Error ? err.message : 'HF search failed: unknown error';
+       setHfSearchError(msg);
+       // Preserve previous results on error — do not clear hfSearchResults
+     } finally {
+       setHfSearchLoading(false);
+     }
+   };
+ 
+   // ── Select repo ──
+   const handleSelectRepo = async (repoId: string) => {
+     setSelectedRepo(repoId);
+     setRepoFilesLoading(true);
+     setRepoFilesError(null);
+     try {
+       const resp = await listHfRepoFiles(repoId);
+       setRepoFiles(resp.files || []);
+     } catch (err) {
+       const msg = err instanceof Error ? err.message : 'Failed to verify repo files: unknown error';
+       setRepoFilesError(msg);
+       // Preserve previous repo files on error — do not clear repoFiles
+     } finally {
+       setRepoFilesLoading(false);
+     }
+   };
 
   // ── Download confirmation (dry-run) ──
   const handleDownloadConfirm = async (file: HfRepoFile) => {
@@ -712,12 +771,18 @@ const ModelsPage: React.FC = () => {
         />
 
         {/* ── Trash Panel ── */}
-        <TrashPanel
-          trashFiles={trashFiles}
-          trashLoading={trashLoading}
-          restoreLoading={restoreLoading}
-          onRestore={handleRestore}
-        />
+         <TrashPanel
+           trashFiles={trashFiles}
+           trashLoading={trashLoading}
+           restoreLoading={restoreLoading}
+           onRestore={handleRestore}
+           onDeletePermanent={handlePermanentDelete}
+           permanentDeleteLoading={permanentDeleteLoading}
+           onPermanentDeleteConfirm={confirmPermanentDelete}
+           onPermanentDeleteCancel={() => { setPermanentDeleteConfirmOpen(false); setPermanentDeleteEntry(null); }}
+           permanentDeleteConfirmOpen={permanentDeleteConfirmOpen}
+           permanentDeleteEntry={permanentDeleteEntry}
+         />
       </div>
 
       {/* ── Toast ── */}
@@ -730,17 +795,17 @@ const ModelsPage: React.FC = () => {
       )}
 
       {/* ── Trash Confirmation Dialog ── */}
-      <ConfirmDialog
-        open={trashDialogOpen}
-        title="Move to Trash"
-        message={`Are you sure you want to move "${trashDialogModel?.name}" to trash? This model will be removed from the local models list but can be restored later.`}
-        confirmLabel="Move to Trash"
-        cancelLabel="Cancel"
-        confirmVariant="danger"
-        onConfirm={confirmMoveToTrash}
-        onCancel={() => { setTrashDialogOpen(false); setTrashDialogModel(null); }}
-        confirmDisabled={trashDialogLoading}
-      />
+       <ConfirmDialog
+         open={trashDialogOpen}
+         title="Move to Trash"
+         message={`Are you sure you want to move "${trashDialogModel?.name}" to trash?${trashDialogModel?.fileSize && trashDialogModel.fileSize !== 'unknown' ? ` (${trashDialogModel.fileSize})` : ''} This model will be removed from the local models list but can be restored later.`}
+         confirmLabel="Move to Trash"
+         cancelLabel="Cancel"
+         confirmVariant="danger"
+         onConfirm={confirmMoveToTrash}
+         onCancel={() => { setTrashDialogOpen(false); setTrashDialogModel(null); }}
+         confirmDisabled={trashDialogLoading}
+       />
     </div>
   );
 };

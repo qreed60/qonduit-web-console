@@ -1,8 +1,8 @@
-import { Settings, ProviderType, ChatMessage, NormalizedModel, GpuStatus, RouterStatus, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse } from '../types';
+import { Settings, ProviderType, ChatMessage, NormalizedModel, GpuStatus, RouterStatus, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse } from '../types';
 import { getMode, apiPath } from '../config/endpoints';
 
 // Re-export NormalizedModel for convenience
-export type { NormalizedModel, GpuStatus, RouterStatus, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse };
+export type { NormalizedModel, GpuStatus, RouterStatus, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse };
 
 // ── Model metadata helpers ──────────────────────────────────────────────────
 
@@ -865,6 +865,28 @@ export async function restoreModelFromTrash(trashName: string): Promise<ModelRes
   );
   if (!data.ok) {
     throw new Error(`Restore failed: ${data.error || 'Unknown error'}`);
+  }
+  return data;
+}
+
+/**
+ * Permanently delete a model from trash.
+ */
+export async function permanentlyDeleteTrashEntry(
+  trashName: string
+): Promise<ModelTrashPermanentDeleteResponse> {
+  const url = apiPath('router', '/api/v1/qonduit-router/models/trash/delete');
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ trash_name: trashName, confirm: true }),
+  });
+  const data = await parseJsonSafe<ModelTrashPermanentDeleteResponse>(
+    response,
+    'Model trash permanent delete'
+  );
+  if (!data.ok) {
+    throw new Error('Permanent delete failed');
   }
   return data;
 }

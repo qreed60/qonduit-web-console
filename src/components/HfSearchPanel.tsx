@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Search, Loader2, ExternalLink, Download,
-  Cpu, ChevronDown, ChevronUp, Globe,
+  Cpu, ChevronDown, ChevronUp, Globe, ShieldCheck,
 } from 'lucide-react';
 import { HfSearchResult, HfRepoFile } from '../types';
 
@@ -70,6 +70,16 @@ const HfSearchPanel: React.FC<HfSearchPanelProps> = ({
   const [expanded, setExpanded] = React.useState(false);
 
   const sortedFiles = selectedRepo ? sortQuantFiles(repoFiles) : [];
+
+  // Determine if any results are unverified (metadata-filtered only)
+  const hasUnverified = hfSearchResults.some(r => !r.gguf_verified);
+  const allVerified = hfSearchResults.length > 0 && !hasUnverified;
+
+  // Format gguf_count display
+  const formatGgufCount = (count: number | null) => {
+    if (count === null) return '—';
+    return `${count}`;
+  };
 
   return (
     <>
@@ -159,7 +169,20 @@ const HfSearchPanel: React.FC<HfSearchPanelProps> = ({
             {/* Search results */}
             {hfSearchResults.length > 0 && (
               <div className="space-y-2">
-                <h4 className="text-xs font-medium text-text-secondary">Search Results</h4>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-medium text-text-secondary">Search Results</h4>
+                  {!allVerified && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-status-warning/10 text-status-warning font-medium">
+                      {hasUnverified ? 'Likely GGUF / metadata-filtered' : 'Likely GGUF'}
+                    </span>
+                  )}
+                  {allVerified && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-status-success/10 text-status-success font-medium flex items-center gap-0.5">
+                      <ShieldCheck className="w-2.5 h-2.5" />
+                      Verified GGUF
+                    </span>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
                   {hfSearchResults.map((result) => {
                     const isSelected = selectedRepo === result.repo_id;
@@ -177,14 +200,26 @@ const HfSearchPanel: React.FC<HfSearchPanelProps> = ({
                           <p className="text-xs font-mono text-text-primary truncate flex-1" title={result.repo_id}>
                             {result.repo_id}
                           </p>
-                          {result.gated && (
-                            <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-status-warning/10 text-status-warning font-medium">Gated</span>
-                          )}
+                          <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                            {result.gated && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-status-warning/10 text-status-warning font-medium">Gated</span>
+                            )}
+                            {result.gguf_verified ? (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-status-success/10 text-status-success font-medium flex items-center gap-0.5">
+                                <ShieldCheck className="w-2.5 h-2.5" />
+                                Verified
+                              </span>
+                            ) : (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-status-warning/10 text-status-warning font-medium">
+                                Likely GGUF
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div className="flex items-center gap-3 text-[10px] text-text-tertiary">
                           <span>{result.downloads.toLocaleString()} downloads</span>
                           <span>{result.likes} likes</span>
-                          <span>{result.gguf_count} GGUF</span>
+                          <span>{formatGgufCount(result.gguf_count)} GGUF</span>
                         </div>
                         <div className="flex items-center gap-2 mt-1 text-[10px] text-text-tertiary">
                           {result.parameter_size && result.parameter_size !== 'unknown' && (
@@ -207,22 +242,29 @@ const HfSearchPanel: React.FC<HfSearchPanelProps> = ({
             )}
 
             {/* Repo files */}
-            {selectedRepo && (
-              <div className="space-y-2 pt-2 border-t border-border-subtle">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-medium text-text-secondary">
-                    Available Quant Files ({repoFiles.length} GGUF)
-                  </h4>
-                  <span className="text-[10px] text-text-tertiary">{selectedRepo}</span>
-                </div>
+             {selectedRepo && (
+               <div className="space-y-2 pt-2 border-t border-border-subtle">
+                 <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-2">
+                     <h4 className="text-xs font-medium text-text-secondary">
+                       Verified GGUF Files ({repoFiles.length})
+                     </h4>
+                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-status-success/10 text-status-success font-medium flex items-center gap-0.5">
+                       <ShieldCheck className="w-2.5 h-2.5" />
+                       Verified
+                     </span>
+                   </div>
+                   <span className="text-[10px] text-text-tertiary">{selectedRepo}</span>
+                 </div>
 
                 {repoFilesLoading ? (
                   <div className="flex items-center justify-center py-6">
                     <Loader2 className="w-5 h-5 text-text-tertiary animate-spin" />
+                    <span className="text-xs text-text-tertiary ml-2">Verifying available GGUF files…</span>
                   </div>
                 ) : repoFilesError ? (
                   <div className="p-3 bg-status-error/5 border border-status-error/20 rounded-lg">
-                    <p className="text-xs text-status-error">{repoFilesError}</p>
+                    <p className="text-xs text-status-error">Failed to verify repo files: {repoFilesError}</p>
                   </div>
                 ) : sortedFiles.length > 0 ? (
                   <div className="space-y-1.5 max-h-72 overflow-y-auto">
@@ -249,6 +291,11 @@ const HfSearchPanel: React.FC<HfSearchPanelProps> = ({
                                 {file.parameter_size}
                               </span>
                             )}
+                            {file.parameter_size_active && file.parameter_size_active !== 'unknown' && (
+                              <span className="text-text-tertiary/60">
+                                active: {file.parameter_size_active}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <button
@@ -263,7 +310,7 @@ const HfSearchPanel: React.FC<HfSearchPanelProps> = ({
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-text-tertiary text-center py-4">No GGUF files found</p>
+                  <p className="text-xs text-text-tertiary text-center py-4">No GGUF files found in this repository</p>
                 )}
               </div>
             )}

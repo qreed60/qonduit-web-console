@@ -15,6 +15,7 @@ import {
   HardDrive,
   MemoryStick,
   Plus,
+  ArrowRight,
 } from 'lucide-react';
 
 /**
@@ -268,13 +269,21 @@ const RouterPage: React.FC = () => {
             )}
           </div>
           <p className="text-sm text-text-secondary mt-1">
-            Launch and manage local GGUF models via the Qonduit Router
-          </p>
-          {lastUpdated && !refreshing && (
-            <p className="text-[10px] text-text-tertiary mt-0.5">
-              Updated {formatTimeAgo(lastUpdated)}
-            </p>
-          )}
+             Launch and manage local GGUF models via the Qonduit Router
+           </p>
+           <button
+             onClick={() => navigate('/models')}
+             className="mt-2 inline-flex items-center gap-1.5 text-xs text-accent-primary hover:text-accent-primary-hover font-medium transition-colors"
+           >
+             <Plus className="w-3 h-3" />
+             Add model from Hugging Face
+             <ArrowRight className="w-3 h-3" />
+           </button>
+           {lastUpdated && !refreshing && (
+             <p className="text-[10px] text-text-tertiary mt-0.5">
+               Updated {formatTimeAgo(lastUpdated)}
+             </p>
+           )}
         </div>
   
         {/* Main Content */}

@@ -186,7 +186,8 @@ export interface HfSearchResult {
   pipeline_tag: string;
   private: boolean;
   gated: boolean;
-  gguf_count: number;
+  gguf_count: number | null;
+  gguf_verified: boolean;
   sample_gguf_files: string[];
   url: string;
   parameter_size: string;
@@ -272,7 +273,7 @@ export interface HfDownloadStartResponse {
 
 export interface HfDownloadJob {
   job_id: string;
-  status: 'queued' | 'downloading' | 'complete' | 'failed' | 'cancelled';
+  status: 'queued' | 'downloading' | 'complete' | 'failed' | 'cancelled' | 'interrupted';
   repo_id: string;
   filename: string;
   target_name: string;
@@ -330,4 +331,12 @@ export interface ModelRestoreResponse {
   original_name: string;
   path: string;
   error?: string | null;
+}
+
+export interface ModelTrashPermanentDeleteResponse {
+  ok: boolean;
+  deleted: boolean;
+  trash_name: string;
+  original_name: string;
+  path: string;
 }

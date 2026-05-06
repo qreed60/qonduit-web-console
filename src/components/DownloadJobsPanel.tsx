@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, X, Check, RotateCcw, FileDown, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, X, Check, RotateCcw, FileDown, AlertCircle, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import { HfDownloadJob } from '../types';
 
 interface DownloadJobsPanelProps {
@@ -11,12 +11,13 @@ interface DownloadJobsPanelProps {
   onCancel: (jobId: string) => void;
 }
 
-const statusStyles: Record<HfDownloadJob['status'], { bg: string; text: string; label: string }> = {
+const statusStyles: Record<HfDownloadJob['status'], { bg: string; text: string; label: string; icon?: React.ReactNode }> = {
   queued: { bg: 'bg-accent-primary/10', text: 'text-accent-primary', label: 'Queued' },
   downloading: { bg: 'bg-accent-secondary/10', text: 'text-accent-secondary', label: 'Downloading' },
   complete: { bg: 'bg-status-success/10', text: 'text-status-success', label: 'Complete' },
   failed: { bg: 'bg-status-error/10', text: 'text-status-error', label: 'Failed' },
   cancelled: { bg: 'bg-bg-tertiary/50', text: 'text-text-tertiary', label: 'Cancelled' },
+  interrupted: { bg: 'bg-status-warning/10', text: 'text-status-warning', label: 'Interrupted' },
 };
 
 const DownloadJobsPanel: React.FC<DownloadJobsPanelProps> = ({
@@ -30,6 +31,12 @@ const DownloadJobsPanel: React.FC<DownloadJobsPanelProps> = ({
 
   if (downloadJobs.length === 0 && !hasActiveJobs) return null;
 
+  // Format bytes to GiB
+  const toGiB = (bytes: number): string => {
+    if (bytes <= 0) return '0.0';
+    return (bytes / (1024 * 1024 * 1024)).toFixed(1);
+  };
+
   return (
     <div className="bg-bg-card rounded-xl border border-border-primary overflow-hidden">
       <button
@@ -42,6 +49,11 @@ const DownloadJobsPanel: React.FC<DownloadJobsPanelProps> = ({
           {hasActiveJobs && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-secondary/10 text-accent-secondary font-medium animate-pulse">
               Active
+            </span>
+          )}
+          {downloadJobs.filter(j => j.status === 'complete' || j.status === 'failed' || j.status === 'cancelled' || j.status === 'interrupted').length > 0 && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-tertiary/50 text-text-tertiary font-medium">
+              {downloadJobs.filter(j => j.status === 'complete' || j.status === 'failed' || j.status === 'cancelled' || j.status === 'interrupted').length}
             </span>
           )}
         </div>
@@ -100,7 +112,7 @@ const DownloadJobsPanel: React.FC<DownloadJobsPanelProps> = ({
                         <X className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    {job.status === 'failed' && (
+                    {(job.status === 'failed' || job.status === 'interrupted') && (
                       <button
                         onClick={onRefresh}
                         className="ml-2 p-1 rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-colors flex-shrink-0"
@@ -122,18 +134,38 @@ const DownloadJobsPanel: React.FC<DownloadJobsPanelProps> = ({
                       </div>
                       <div className="flex items-center justify-between text-[10px] text-text-tertiary">
                         <span>
-                          {job.bytes_downloaded > 0 ? `${(job.bytes_downloaded / (1024 * 1024)).toFixed(1)} MB` : '0 MB'}
-                          {' / '}
-                          {job.total_bytes > 0 ? `${(job.total_bytes / (1024 * 1024 * 1024)).toFixed(1)} GB` : '...'}
+                          {toGiB(job.bytes_downloaded)} GiB / {job.total_bytes > 0 ? `${toGiB(job.total_bytes)} GiB` : '...'}
+                          {job.total_bytes > 0 && job.bytes_downloaded < job.total_bytes && (
+                            <span> ({toGiB(job.total_bytes - job.bytes_downloaded)} GiB remaining)</span>
+                          )}
                         </span>
                         <span>{(job.progress * 100).toFixed(0)}%</span>
                       </div>
                     </div>
                   )}
 
+                  {/* Queued status */}
+                  {job.status === 'queued' && !isActive && (
+                    <p className="text-[10px] text-text-tertiary mt-1">Waiting in queue…</p>
+                  )}
+
                   {/* Error message for failed jobs */}
                   {job.status === 'failed' && job.error && (
                     <p className="text-[10px] text-status-error mt-1">{job.error}</p>
+                  )}
+
+                  {/* Interrupted status */}
+                  {job.status === 'interrupted' && (
+                    <div className="flex items-center gap-1 text-[10px] text-status-warning mt-1">
+                      <AlertTriangle className="w-3 h-3" />
+                      <span>Download interrupted (router may have restarted)</span>
+                      {job.error && <span className="text-text-tertiary">— {job.error}</span>}
+                    </div>
+                  )}
+
+                  {/* Cancelled status */}
+                  {job.status === 'cancelled' && (
+                    <p className="text-[10px] text-text-tertiary mt-1">Download cancelled</p>
                   )}
 
                   {/* Complete status */}
