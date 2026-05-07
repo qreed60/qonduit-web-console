@@ -6,8 +6,9 @@ import {
   permanentlyDeleteTrashEntry,
 } from '../services/api';
 import { apiPath } from '../config/endpoints';
-import { GpuInfo, HfSearchResult, HfRepoFile, HfDownloadJob } from '../types';
+import { HfSearchResult, HfRepoFile, HfDownloadJob } from '../types';
 import Toast from '../components/Toast';
+import GpuSummary from '../components/GpuSummary';
 import ConfirmDialog from '../components/ConfirmDialog';
 import HfSearchPanel from '../components/HfSearchPanel';
 import DownloadJobsPanel from '../components/DownloadJobsPanel';
@@ -43,15 +44,6 @@ interface VramData {
   free: string;
 }
 
-interface GpuRow {
-  index: number;
-  name: string;
-  total: string;
-  used: string;
-  free: string;
-  isDisplay?: boolean;
-}
-
 // ── Component ─────────────────────────────────────────────────────────
 
 const ModelsPage: React.FC = () => {
@@ -73,8 +65,7 @@ const ModelsPage: React.FC = () => {
   const [toastType, setToastType] = useState<'error' | 'success' | 'info'>('info');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [vramData, setVramData] = useState<VramData | null>(null);
-  const [vramError, setVramError] = useState<string | null>(null);
-  const [gpuRows, setGpuRows] = useState<GpuRow[]>([]);
+   const [vramError, setVramError] = useState<string | null>(null);
 
   // ── State: trash dialog ──
   const [trashDialogOpen, setTrashDialogOpen] = useState(false);
@@ -218,34 +209,22 @@ const ModelsPage: React.FC = () => {
 
   // ── Load VRAM ──
   const loadVram = async () => {
-    try {
-      const gpu = await fetchRouterGpu();
-      if (gpu.ok) {
-        setVramData({
-          total: gpu.memory_total_human,
-          used: gpu.memory_used_human,
-          free: gpu.memory_free_human,
-        });
-        const rows: GpuRow[] = gpu.gpus.map((g: GpuInfo) => {
-          const isDisplay = /quadro|display|integrated|igd/i.test(g.name);
-          return {
-            index: g.index,
-            name: g.name,
-            total: `${(g.memory_total_mib / 1024).toFixed(1)} GiB`,
-            used: `${(g.memory_used_mib / 1024).toFixed(1)} GiB`,
-            free: `${(g.memory_free_mib / 1024).toFixed(1)} GiB`,
-            isDisplay,
-          };
-        });
-        setGpuRows(rows);
-        setVramError(null);
-      } else {
-        setVramError('VRAM unavailable — GPU endpoint returned ok:false');
-      }
-    } catch (err) {
-      setVramError(err instanceof Error ? err.message : 'Failed to fetch GPU status');
-    }
-  };
+     try {
+       const gpu = await fetchRouterGpu();
+       if (gpu.ok) {
+         setVramData({
+           total: gpu.memory_total_human,
+           used: gpu.memory_used_human,
+           free: gpu.memory_free_human,
+         });
+         setVramError(null);
+       } else {
+         setVramError('VRAM unavailable — GPU endpoint returned ok:false');
+       }
+     } catch (err) {
+       setVramError(err instanceof Error ? err.message : 'Failed to fetch GPU status');
+     }
+   };
 
   // ── Load trash ──
    const loadTrash = async () => {
@@ -561,51 +540,16 @@ const ModelsPage: React.FC = () => {
       </div>
 
       {/* VRAM Summary */}
-      <div className="mb-4">
-        {vramData ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-4 p-3 bg-bg-secondary/50 border border-border-subtle rounded-lg">
-              <MemoryStick className="w-4 h-4 text-accent-primary flex-shrink-0" />
-              <div className="flex items-center gap-4 text-xs">
-                <span className="text-text-secondary font-medium">Detected GPU Memory:</span>
-                <span className="text-text-secondary">Total: <span className="font-mono text-text-primary">{vramData.total}</span></span>
-                <span className="text-text-secondary">Used: <span className="font-mono text-status-warning">{vramData.used}</span></span>
-                <span className="text-text-secondary">Free: <span className="font-mono text-status-success">{vramData.free}</span></span>
-              </div>
-            </div>
-            {gpuRows.length > 0 && (
-              <div className="bg-bg-secondary/30 border border-border-subtle rounded-lg overflow-hidden">
-                <div className="grid grid-cols-5 gap-2 px-3 py-1.5 bg-bg-tertiary/50 text-[10px] font-medium text-text-tertiary uppercase tracking-wider">
-                  <span>GPU</span>
-                  <span>Name</span>
-                  <span className="text-right">Total</span>
-                  <span className="text-right">Used</span>
-                  <span className="text-right">Free</span>
-                </div>
-                {gpuRows.map((gpu) => (
-                  <div key={gpu.index} className={`grid grid-cols-5 gap-2 px-3 py-2 text-xs border-t border-border-subtle ${gpu.isDisplay ? 'bg-status-warning/5' : ''}`}>
-                    <span className="font-mono text-text-tertiary">#{gpu.index}</span>
-                    <span className="text-text-primary truncate" title={gpu.name}>
-                      {gpu.name}
-                      {gpu.isDisplay && (
-                        <span className="ml-1 text-[10px] text-status-warning">(display)</span>
-                      )}
-                    </span>
-                    <span className="font-mono text-text-primary text-right">{gpu.total}</span>
-                    <span className="font-mono text-status-warning text-right">{gpu.used}</span>
-                    <span className="font-mono text-status-success text-right">{gpu.free}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 p-3 bg-bg-secondary/50 border border-border-subtle rounded-lg">
-            <MemoryStick className="w-4 h-4 text-text-tertiary flex-shrink-0" />
-            <span className="text-xs text-text-tertiary">{vramError || 'VRAM data unavailable'}</span>
-          </div>
-        )}
-      </div>
+       <div className="mb-4">
+         {vramData ? (
+           <GpuSummary total={vramData.total} used={vramData.used} free={vramData.free} />
+         ) : (
+           <div className="flex items-center gap-2 p-3 bg-bg-secondary/50 border border-border-subtle rounded-lg">
+             <MemoryStick className="w-4 h-4 text-text-tertiary flex-shrink-0" />
+             <span className="text-xs text-text-tertiary">{vramError || 'VRAM data unavailable'}</span>
+           </div>
+         )}
+       </div>
 
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto space-y-4">

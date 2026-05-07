@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import StatusBadge from './StatusBadge';
+import GpuSummary from './GpuSummary';
 import { GpuStatus } from '../types';
 import {
   Globe,
@@ -8,7 +9,6 @@ import {
   Server,
   RefreshCw,
   Cpu,
-  MemoryStick,
   AlertCircle,
 } from 'lucide-react';
 
@@ -212,23 +212,21 @@ const SystemOverview: React.FC<SystemOverviewProps> = ({
                 )}
   
         {/* VRAM Summary */}
-                {gpuStatus && (
-                  <div className="mt-3 flex items-center gap-3 px-3 py-2 bg-bg-secondary/50 rounded-lg border border-border-subtle">
-                    <MemoryStick className="w-3.5 h-3.5 text-accent-primary flex-shrink-0" />
-                    <div className="flex items-center gap-4 text-xs">
-                      <span className="text-text-secondary">Detected GPU Memory:</span>
-                      <span className="text-text-secondary">Total: <span className="font-mono text-text-primary">{gpuStatus.memory_total_human}</span></span>
-                      <span className="text-text-secondary">Used: <span className="font-mono text-status-warning">{gpuStatus.memory_used_human}</span></span>
-                      <span className="text-text-secondary">Free: <span className="font-mono text-status-success">{gpuStatus.memory_free_human}</span></span>
-                    </div>
-                  </div>
-                )}
-                {gpuError && !gpuStatus && (
-                  <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-status-error/5 rounded-lg border border-status-error/15">
-                    <Cpu className="w-3.5 h-3.5 text-status-error flex-shrink-0" />
-                    <span className="text-xs text-status-error">VRAM unavailable: {gpuError}</span>
-                  </div>
-                )}
+                        {gpuStatus && (
+                          <div className="mt-3">
+                            <GpuSummary
+                              total={gpuStatus.memory_total_human}
+                              used={gpuStatus.memory_used_human}
+                              free={gpuStatus.memory_free_human}
+                            />
+                          </div>
+                        )}
+                        {gpuError && !gpuStatus && (
+                          <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-status-error/5 rounded-lg border border-status-error/15">
+                            <Cpu className="w-3.5 h-3.5 text-status-error flex-shrink-0" />
+                            <span className="text-xs text-status-error">VRAM unavailable: {gpuError}</span>
+                          </div>
+                        )}
               </div>
             );
           };

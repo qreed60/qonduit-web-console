@@ -3,6 +3,8 @@ import { getSettings, getRouterStatus, fetchRouterModels, fetchRouterGpu, launch
 import { ENDPOINTS } from '../config/endpoints';
 import { GpuInfo } from '../types';
 import Toast from '../components/Toast';
+import GpuSummary from '../components/GpuSummary';
+import GpuTable from '../components/GpuTable';
 import { useNavigate } from 'react-router-dom';
 import {
   Cpu,
@@ -10,12 +12,11 @@ import {
   CheckCircle2,
   Loader2,
   Play,
-  Square,
-  RotateCcw,
-  HardDrive,
-  MemoryStick,
-  Plus,
-  ArrowRight,
+   Square,
+   RotateCcw,
+   HardDrive,
+   Plus,
+   ArrowRight,
 } from 'lucide-react';
 
 /**
@@ -324,64 +325,19 @@ const RouterPage: React.FC = () => {
           </div>
   
           {/* VRAM Summary */}
-           <div className="bg-bg-card rounded-xl border border-border-primary p-5">
-             <div className="flex items-center justify-between mb-3">
-               <h3 className="text-sm font-semibold text-text-primary">Detected GPU Memory</h3>
-               {vramData ? (
-                 <MemoryStick className="w-4 h-4 text-accent-primary" />
-               ) : (
-                 <MemoryStick className="w-4 h-4 text-text-tertiary" />
-               )}
-             </div>
-             {vramData ? (
-               <div className="space-y-3">
-                 <div className="grid grid-cols-3 gap-3">
-                   <div className="bg-bg-secondary/50 rounded-lg p-2.5 border border-border-subtle text-center">
-                     <p className="text-[10px] text-text-tertiary uppercase tracking-wider mb-1">Total</p>
-                     <p className="text-sm font-mono text-text-primary">{vramData.total}</p>
-                   </div>
-                   <div className="bg-bg-secondary/50 rounded-lg p-2.5 border border-border-subtle text-center">
-                     <p className="text-[10px] text-text-tertiary uppercase tracking-wider mb-1">Used</p>
-                     <p className="text-sm font-mono text-status-warning">{vramData.used}</p>
-                   </div>
-                   <div className="bg-bg-secondary/50 rounded-lg p-2.5 border border-border-subtle text-center">
-                     <p className="text-[10px] text-text-tertiary uppercase tracking-wider mb-1">Free</p>
-                     <p className="text-sm font-mono text-status-success">{vramData.free}</p>
-                   </div>
-                 </div>
-                 {/* Per-GPU rows */}
-                 {gpuRows.length > 0 && (
-                   <div className="bg-bg-secondary/30 border border-border-subtle rounded-lg overflow-hidden">
-                     <div className="grid grid-cols-5 gap-2 px-3 py-1.5 bg-bg-tertiary/50 text-[10px] font-medium text-text-tertiary uppercase tracking-wider">
-                       <span>GPU</span>
-                       <span>Name</span>
-                       <span className="text-right">Total</span>
-                       <span className="text-right">Used</span>
-                       <span className="text-right">Free</span>
+                     <div className="bg-bg-card rounded-xl border border-border-primary p-5">
+                       <h3 className="text-sm font-semibold text-text-primary mb-3">Detected GPU Memory</h3>
+                       {vramData ? (
+                         <div className="space-y-3">
+                           <GpuSummary total={vramData.total} used={vramData.used} free={vramData.free} />
+                           {gpuRows.length > 0 && <GpuTable rows={gpuRows} />}
+                         </div>
+                       ) : (
+                         <div className="bg-bg-secondary/50 rounded-lg p-3 border border-border-subtle">
+                           <p className="text-xs text-text-tertiary">{vramError || 'VRAM data unavailable'}</p>
+                         </div>
+                       )}
                      </div>
-                     {gpuRows.map((gpu) => (
-                       <div key={gpu.index} className={`grid grid-cols-5 gap-2 px-3 py-2 text-xs border-t border-border-subtle ${gpu.isDisplay ? 'bg-status-warning/5' : ''}`}>
-                         <span className="font-mono text-text-tertiary">#{gpu.index}</span>
-                         <span className="text-text-primary truncate" title={gpu.name}>
-                           {gpu.name}
-                           {gpu.isDisplay && (
-                             <span className="ml-1 text-[10px] text-status-warning">(display)</span>
-                           )}
-                         </span>
-                         <span className="font-mono text-text-primary text-right">{gpu.total}</span>
-                         <span className="font-mono text-status-warning text-right">{gpu.used}</span>
-                         <span className="font-mono text-status-success text-right">{gpu.free}</span>
-                       </div>
-                     ))}
-                   </div>
-                 )}
-               </div>
-             ) : (
-               <div className="bg-bg-secondary/50 rounded-lg p-3 border border-border-subtle">
-                 <p className="text-xs text-text-tertiary">{vramError || 'VRAM data unavailable'}</p>
-               </div>
-             )}
-           </div>
   
           {/* Model Cards */}
           <div className="bg-bg-card rounded-xl border border-border-primary p-5">
