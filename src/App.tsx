@@ -5,6 +5,7 @@ import ChatPage from './pages/ChatPage';
 import ModelsPage from './pages/ModelsPage';
 import RouterPage from './pages/RouterPage';
 import DiagnosticsPage from './pages/DiagnosticsPage';
+import RagPage from './pages/RagPage';
 import SettingsPage from './pages/SettingsPage';
 import { Page } from './types';
 
@@ -15,27 +16,29 @@ function AppContent() {
 
   // Map current path to page state
   const getPageFromPath = (path: string): Page => {
-    if (path === '/' || path === '/dashboard') return 'dashboard';
-    if (path === '/chat') return 'chat';
-    if (path === '/models') return 'models';
-    if (path === '/router') return 'router';
-    if (path === '/diagnostics') return 'diagnostics';
-    if (path === '/settings') return 'settings';
-    return 'dashboard';
-  };
+     if (path === '/' || path === '/dashboard') return 'dashboard';
+     if (path === '/chat') return 'chat';
+     if (path === '/models') return 'models';
+     if (path === '/router') return 'router';
+     if (path === '/diagnostics') return 'diagnostics';
+     if (path === '/rag') return 'rag';
+     if (path === '/settings') return 'settings';
+     return 'dashboard';
+   };
 
   const currentPage = getPageFromPath(location.pathname);
 
   // Update URL when page changes
   const handleChangePage = (page: Page) => {
     const pathMap: Record<Page, string> = {
-      dashboard: '/',
-      chat: '/chat',
-      models: '/models',
-      router: '/router',
-      diagnostics: '/diagnostics',
-      settings: '/settings',
-    };
+       dashboard: '/',
+       chat: '/chat',
+       models: '/models',
+       router: '/router',
+       diagnostics: '/diagnostics',
+       rag: '/rag',
+       settings: '/settings',
+     };
     navigate(pathMap[page]);
   };
 
@@ -51,7 +54,8 @@ function AppContent() {
              <Route path="/models" element={<ModelsPage />} />
              <Route path="/router" element={<RouterPage />} />
              <Route path="/diagnostics" element={<DiagnosticsPage />} />
-             <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/rag" element={<RagPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
            </Routes>
          </main>
        </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getSettings, fetchRouterModels, fetchProviderModels, fetchRouterGpu, launchModel as apiLaunchModel, stopModel as apiStopModel, restartRouterModel as apiRestartRouterModel, testEndpointWithError, testRouterHealthWithError, getRouterStatus, NormalizedModel, GpuStatus, RouterStatus } from '../services/api';
 import { Settings } from '../types';
 import { ENDPOINTS } from '../config/endpoints';
@@ -10,16 +11,17 @@ import LogsPanel from '../components/LogsPanel';
 import SystemOverview from '../components/SystemOverview';
 import ComingSoon from '../components/ComingSoon';
 import {
-  BookOpen,
   Settings2,
   Wrench,
   BarChart3,
   Shield,
   Database,
   Loader2,
+  ArrowRight,
 } from 'lucide-react';
 
 const DashboardPage: React.FC = () => {
+  const navigate = useNavigate();
   const [settings] = useState<Settings>(getSettings());
 
   // ── State: separate loading phases ──
@@ -278,43 +280,31 @@ const DashboardPage: React.FC = () => {
   const mode = settings.endpointMode;
 
   const comingSoonItems = [
-    {
-      icon: <BookOpen className="w-4 h-4" />,
-      title: 'RAG Collections',
-      description: 'Manage document collections for retrieval-augmented generation',
-      category: 'ai' as const,
-    },
-    {
-      icon: <Settings2 className="w-4 h-4" />,
-      title: 'Gateway Settings',
-      description: 'Configure memory gateway parameters and behavior',
-      category: 'infra' as const,
-    },
-    {
-      icon: <Wrench className="w-4 h-4" />,
-      title: 'Tool Toggles',
-      description: 'Enable tools and function calling for models',
-      category: 'tools' as const,
-    },
-    {
-      icon: <BarChart3 className="w-4 h-4" />,
-      title: 'Usage Analytics',
-      description: 'Track model usage, costs, and performance metrics',
-      category: 'tools' as const,
-    },
-    {
-      icon: <Shield className="w-4 h-4" />,
-      title: 'Access Control',
-      description: 'Manage user permissions and API key rotation',
-      category: 'infra' as const,
-    },
-    {
-      icon: <Database className="w-4 h-4" />,
-      title: 'Vector Store',
-      description: 'Configure and manage vector embeddings storage',
-      category: 'ai' as const,
-    },
-  ];
+     {
+       icon: <Settings2 className="w-4 h-4" />,
+       title: 'Gateway Settings',
+       description: 'Configure memory gateway parameters and behavior',
+       category: 'infra' as const,
+     },
+     {
+       icon: <Wrench className="w-4 h-4" />,
+       title: 'Tool Toggles',
+       description: 'Enable tools and function calling for models',
+       category: 'tools' as const,
+     },
+     {
+       icon: <BarChart3 className="w-4 h-4" />,
+       title: 'Usage Analytics',
+       description: 'Track model usage, costs, and performance metrics',
+       category: 'tools' as const,
+     },
+     {
+       icon: <Shield className="w-4 h-4" />,
+       title: 'Access Control',
+       description: 'Manage user permissions and API key rotation',
+       category: 'infra' as const,
+     },
+   ];
 
   const formatTimeAgo = (ts: number) => {
     const diff = Date.now() - ts;
@@ -452,11 +442,68 @@ const DashboardPage: React.FC = () => {
                  </div>
 
         {/* Live Logs */}
-        <div className="mb-6">
-          <LogsPanel routerStatus={routerStatus} />
-        </div>
-
-        {/* Coming Soon */}
+         <div className="mb-6">
+           <LogsPanel routerStatus={routerStatus} />
+         </div>
+ 
+         {/* RAG Status Card */}
+         <div className="mb-6">
+           <div className="bg-bg-card rounded-xl border border-border-primary p-5 shadow-card">
+             <div className="flex items-center justify-between mb-4">
+               <div className="flex items-center gap-2">
+                 <Database className="w-4 h-4 text-accent-primary" />
+                 <h3 className="text-sm font-semibold text-text-primary">RAG Diagnostics</h3>
+               </div>
+               <button
+                 onClick={() => navigate('/rag')}
+                 className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 transition-all duration-200 flex items-center gap-1.5"
+               >
+                 Open RAG
+                 <ArrowRight className="w-3 h-3" />
+               </button>
+             </div>
+ 
+             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+               {/* Gateway status */}
+               <div>
+                 <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Gateway</span>
+                 <div className="flex items-center gap-1.5 mt-1">
+                   {endpointHealth.gateway === true ? (
+                     <>
+                       <div className="w-2 h-2 rounded-full bg-status-success" />
+                       <span className="text-xs text-status-success">Online</span>
+                     </>
+                   ) : endpointHealth.gateway === false ? (
+                     <>
+                       <div className="w-2 h-2 rounded-full bg-status-error" />
+                       <span className="text-xs text-status-error">Offline</span>
+                     </>
+                   ) : (
+                     <span className="text-xs text-text-tertiary">Checking...</span>
+                   )}
+                 </div>
+               </div>
+ 
+               {/* Active ingestion */}
+               <div>
+                 <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Ingestion</span>
+                 <p className="text-xs text-text-secondary mt-1">
+                   {routerStatus?.running ? 'Router active' : 'Idle'}
+                 </p>
+               </div>
+ 
+               {/* Known collections */}
+               <div>
+                 <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Projects</span>
+                 <p className="text-xs text-text-secondary mt-1">
+                   5 known projects
+                 </p>
+               </div>
+             </div>
+           </div>
+         </div>
+ 
+         {/* Coming Soon */}
         <div>
           <ComingSoon items={comingSoonItems} />
         </div>

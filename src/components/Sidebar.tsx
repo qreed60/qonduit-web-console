@@ -7,6 +7,7 @@ import {
   Cpu,
   Router,
   Activity,
+  Database,
   Settings,
   X,
   Menu,
@@ -23,6 +24,7 @@ const NAV_ITEMS: { id: Page; label: string; icon: React.ReactNode }[] = [
   { id: 'models', label: 'Models', icon: <Cpu className="w-5 h-5" /> },
   { id: 'router', label: 'Router', icon: <Router className="w-5 h-5" /> },
   { id: 'diagnostics', label: 'Diagnostics', icon: <Activity className="w-5 h-5" /> },
+  { id: 'rag', label: 'RAG', icon: <Database className="w-5 h-5" /> },
   { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> },
 ];
 

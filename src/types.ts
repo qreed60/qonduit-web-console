@@ -58,7 +58,7 @@ export interface ApiError {
   code?: number;
 }
 
-export type Page = 'dashboard' | 'chat' | 'models' | 'router' | 'diagnostics' | 'settings';
+export type Page = 'dashboard' | 'chat' | 'models' | 'router' | 'diagnostics' | 'rag' | 'settings';
 
 /**
  * Chat message used for the /v1/chat/completions API.
@@ -339,4 +339,186 @@ export interface ModelTrashPermanentDeleteResponse {
   trash_name: string;
   original_name: string;
   path: string;
+}
+
+// ── RAG Diagnostics Types ────────────────────────────────────────────────────
+
+/** Generic endpoint error captured by the frontend */
+export interface RagEndpointError {
+  url: string;
+  status?: number;
+  statusText?: string;
+  bodyPreview?: string;
+  message: string;
+  timestamp: number;
+}
+
+/** Known RAG project for the project cards */
+export interface KnownRagProject {
+  project_id: string;
+  collectionName: string; // qonduit_rag__{project_id}
+}
+
+/** Normalized ingestion state */
+export type RagIngestionState = 'idle' | 'queued' | 'running' | 'success' | 'failed' | 'unknown';
+
+/** Normalized per-project ingestion status */
+export interface RagIngestionProjectStatus {
+  project_id: string;
+  state: RagIngestionState;
+  queued_position?: number;
+  current_file?: string;
+  chunks_embedded?: number;
+  chunks_written?: number;
+  files_scanned?: number;
+  skipped_files?: number;
+  last_started_at?: string | null;
+  last_finished_at?: string | null;
+  last_error?: string | null;
+  raw: Record<string, unknown>;
+  error?: RagEndpointError;
+}
+
+/** Normalized ingestion debug / queue overview */
+export interface RagIngestionDebug {
+  worker_state?: string;
+  queue_length?: number;
+  queue_project_ids?: string[];
+  active_job?: RagIngestionJob | null;
+  chunks_embedded?: number;
+  chunks_written?: number;
+  recent_completed?: Array<Record<string, unknown>>;
+  recent_failed?: Array<Record<string, unknown>>;
+  last_error?: string | null;
+  updated_at?: string;
+  raw: Record<string, unknown>;
+  error?: RagEndpointError;
+}
+
+/** Active ingestion job */
+export interface RagIngestionJob {
+  project_id?: string;
+  branch?: string;
+  current_file?: string;
+  chunks_embedded?: number;
+  chunks_written?: number;
+  started_at?: string;
+  raw: Record<string, unknown>;
+}
+
+/** Gateway health response */
+export interface RagGatewayHealthResponse {
+  status?: string;
+  version?: string;
+  qdrant_connected?: boolean;
+  embedding_model_available?: boolean;
+  [key: string]: unknown;
+}
+
+/** Gateway models response (normalized) */
+export interface GatewayModelsResponse {
+  models: Array<{ id: string; name: string; alias?: string }>;
+  error?: RagEndpointError;
+}
+
+/** RAG collection list response */
+export interface RagCollectionListResponse {
+  collections: string[];
+  project_id: string;
+  error?: RagEndpointError;
+}
+
+/** Diagnostic search request */
+export interface RagSearchRequest {
+  query: string;
+  limit: number;
+  collection?: string;
+}
+
+/** Diagnostic search result */
+export interface RagSearchResult {
+  id: string;
+  score: number;
+  text?: string;
+  payload?: Record<string, unknown>;
+  source?: string;
+  document?: string;
+  file?: string;
+  raw: Record<string, unknown>;
+}
+
+/** Diagnostic search response */
+export interface RagSearchResponse {
+  results: RagSearchResult[];
+  query: string;
+  limit: number;
+  collection?: string;
+  error?: RagEndpointError;
+}
+
+/** Embedding smoke test response */
+export interface RagEmbeddingSmokeTestResponse {
+  ok: boolean;
+  model?: string;
+  vector_length?: number;
+  error?: string;
+}
+
+/** RAG chat test request */
+export interface RagChatTestRequest {
+  model: string;
+  messages: Array<{ role: string; content: string }>;
+  rag_collection?: string;
+  project_id?: string;
+}
+
+/** RAG chat test response */
+export interface RagChatTestResponse {
+  ok: boolean;
+  content?: string;
+  model?: string;
+  error?: string;
+  raw?: Record<string, unknown>;
+}
+
+/** Full RAG page state (internal to the page component) */
+export interface RagPageState {
+  // Health
+  health: RagGatewayHealthResponse | null;
+  healthError: RagEndpointError | null;
+  healthLastChecked: number | null;
+  models: GatewayModelsResponse['models'] | null;
+  modelsError: RagEndpointError | null;
+
+  // Ingestion
+  ingestionDebug: RagIngestionDebug | null;
+  ingestionDebugError: RagEndpointError | null;
+  projectStatuses: RagIngestionProjectStatus[];
+  projectStatusesError: RagEndpointError | null;
+
+  // Collections
+  collections: RagCollectionListResponse | null;
+  collectionsError: RagEndpointError | null;
+
+  // Search
+  searchResults: RagSearchResponse | null;
+  searchError: RagEndpointError | null;
+  searchLoading: boolean;
+
+  // Embedding smoke test
+  embeddingResult: RagEmbeddingSmokeTestResponse | null;
+  embeddingError: string | null;
+  embeddingLoading: boolean;
+
+  // Chat test
+  chatResult: RagChatTestResponse | null;
+  chatError: string | null;
+  chatLoading: boolean;
+
+  // Selection
+  selectedProjectId: string | null;
+
+  // Refresh
+  refreshing: boolean;
+  lastUpdated: number | null;
 }
