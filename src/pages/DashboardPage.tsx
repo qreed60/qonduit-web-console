@@ -447,61 +447,65 @@ const DashboardPage: React.FC = () => {
          </div>
  
          {/* RAG Status Card */}
-         <div className="mb-6">
-           <div className="bg-bg-card rounded-xl border border-border-primary p-5 shadow-card">
-             <div className="flex items-center justify-between mb-4">
-               <div className="flex items-center gap-2">
-                 <Database className="w-4 h-4 text-accent-primary" />
-                 <h3 className="text-sm font-semibold text-text-primary">RAG Diagnostics</h3>
-               </div>
-               <button
-                 onClick={() => navigate('/rag')}
-                 className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 transition-all duration-200 flex items-center gap-1.5"
-               >
-                 Open RAG
-                 <ArrowRight className="w-3 h-3" />
-               </button>
-             </div>
- 
-             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-               {/* Gateway status */}
-               <div>
-                 <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Gateway</span>
-                 <div className="flex items-center gap-1.5 mt-1">
-                   {endpointHealth.gateway === true ? (
-                     <>
-                       <div className="w-2 h-2 rounded-full bg-status-success" />
-                       <span className="text-xs text-status-success">Online</span>
-                     </>
-                   ) : endpointHealth.gateway === false ? (
-                     <>
-                       <div className="w-2 h-2 rounded-full bg-status-error" />
-                       <span className="text-xs text-status-error">Offline</span>
-                     </>
-                   ) : (
-                     <span className="text-xs text-text-tertiary">Checking...</span>
-                   )}
-                 </div>
-               </div>
- 
-               {/* Active ingestion */}
-               <div>
-                 <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Ingestion</span>
-                 <p className="text-xs text-text-secondary mt-1">
-                   {routerStatus?.running ? 'Router active' : 'Idle'}
-                 </p>
-               </div>
- 
-               {/* Known collections */}
-               <div>
-                 <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Projects</span>
-                 <p className="text-xs text-text-secondary mt-1">
-                   5 known projects
-                 </p>
-               </div>
-             </div>
-           </div>
-         </div>
+                  <div className="mb-6">
+                    <div className="bg-bg-card rounded-xl border border-border-primary p-5 shadow-card">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <Database className="w-4 h-4 text-accent-primary" />
+                          <h3 className="text-sm font-semibold text-text-primary">RAG Diagnostics</h3>
+                        </div>
+                        <button
+                          onClick={() => navigate('/rag')}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 transition-all duration-200 flex items-center gap-1.5"
+                        >
+                          Open RAG Diagnostics
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      </div>
+         
+                      <p className="text-xs text-text-secondary mb-3">
+                        Use the RAG page for ingestion queue, collection status, and diagnostic search.
+                      </p>
+         
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {/* Gateway status */}
+                        <div>
+                          <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Gateway</span>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            {endpointHealth.gateway === true ? (
+                              <>
+                                <div className="w-2 h-2 rounded-full bg-status-success" />
+                                <span className="text-xs text-status-success">Online</span>
+                              </>
+                            ) : endpointHealth.gateway === false ? (
+                              <>
+                                <div className="w-2 h-2 rounded-full bg-status-error" />
+                                <span className="text-xs text-status-error">Offline</span>
+                              </>
+                            ) : (
+                              <span className="text-xs text-text-tertiary">Checking...</span>
+                            )}
+                          </div>
+                        </div>
+         
+                        {/* Ingestion status */}
+                        <div>
+                          <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Ingestion</span>
+                          <p className="text-xs text-text-secondary mt-1">
+                            View on RAG page
+                          </p>
+                        </div>
+         
+                        {/* Projects */}
+                        <div>
+                          <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Projects</span>
+                          <p className="text-xs text-text-secondary mt-1">
+                            5 known projects
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
  
          {/* Coming Soon */}
         <div>

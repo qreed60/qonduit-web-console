@@ -10,6 +10,13 @@ interface RagIngestionQueueCardProps {
   refreshing: boolean;
 }
 
+/** Convert unknown values to display-safe strings */
+function asDisplayString(value: unknown, fallback = 'unknown'): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return fallback;
+}
+
 const RagIngestionQueueCard: React.FC<RagIngestionQueueCardProps> = ({
   debug,
   debugError,
@@ -136,43 +143,43 @@ const RagIngestionQueueCard: React.FC<RagIngestionQueueCardProps> = ({
 
       {/* Recent completed */}
       {debug?.recent_completed && debug.recent_completed.length > 0 && (
-        <div className="mb-3">
-          <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Recent Completed</span>
-          <div className="mt-1 space-y-1">
-            {debug.recent_completed.slice(0, 3).map((item, idx) => (
-               <div key={idx} className="flex items-center gap-2 text-[10px] text-text-secondary">
-                 <CheckCircle2 className="w-3 h-3 text-status-success flex-shrink-0" />
-                 <span className="truncate">
-                   {String(item.project_id || item.project || item.file || 'unknown')}
-                 </span>
-                 <span className="text-text-tertiary ml-auto flex-shrink-0">
-                   {formatTimeAgo(item.completed_at as string | undefined)}
-                 </span>
-               </div>
-             ))}
-          </div>
-        </div>
-      )}
-
-      {/* Recent failed */}
-      {debug?.recent_failed && debug.recent_failed.length > 0 && (
-        <div className="mb-3">
-          <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Recent Failed</span>
-          <div className="mt-1 space-y-1">
-            {debug.recent_failed.slice(0, 3).map((item, idx) => (
-                <div key={idx} className="flex items-center gap-2 text-[10px] text-status-error">
-                  <AlertCircle className="w-3 h-3 flex-shrink-0" />
+         <div className="mb-3">
+           <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Recent Completed</span>
+           <div className="mt-1 space-y-1">
+             {debug.recent_completed.slice(0, 3).map((item, idx) => (
+                <div key={idx} className="flex items-center gap-2 text-[10px] text-text-secondary">
+                  <CheckCircle2 className="w-3 h-3 text-status-success flex-shrink-0" />
                   <span className="truncate">
-                    {String(item.project_id || item.project || item.file || 'unknown')}
+                    {asDisplayString(item.project_id ?? item.project ?? item.file)}
                   </span>
                   <span className="text-text-tertiary ml-auto flex-shrink-0">
-                    {formatTimeAgo(item.failed_at as string | undefined)}
+                    {formatTimeAgo(asDisplayString(item.completed_at))}
                   </span>
                 </div>
               ))}
-          </div>
-        </div>
-      )}
+           </div>
+         </div>
+       )}
+
+      {/* Recent failed */}
+      {debug?.recent_failed && debug.recent_failed.length > 0 && (
+              <div className="mb-3">
+                <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Recent Failed</span>
+                <div className="mt-1 space-y-1">
+                  {debug.recent_failed.slice(0, 3).map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-[10px] text-status-error">
+                        <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">
+                          {asDisplayString(item.project_id ?? item.project ?? item.file)}
+                        </span>
+                        <span className="text-text-tertiary ml-auto flex-shrink-0">
+                          {formatTimeAgo(asDisplayString(item.failed_at))}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
 
       {/* Last error */}
       {debug?.last_error && (

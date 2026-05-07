@@ -13,33 +13,36 @@ import {
   KnownRagProject,
   RagIngestionJob,
   RagIngestionState,
+  RagEndpointError,
 } from '../types';
 
-// ── RagEndpointError class ──────────────────────────────────────────────────
+// ── RagEndpointError helpers ────────────────────────────────────────────────
 
-export class RagEndpointError {
+export function makeRagEndpointError(params: {
   url: string;
   status?: number;
   statusText?: string;
   bodyPreview?: string;
   message: string;
-  timestamp: number;
+  timestamp?: number;
+}): RagEndpointError {
+  return {
+    url: params.url,
+    status: params.status,
+    statusText: params.statusText,
+    bodyPreview: params.bodyPreview,
+    message: params.message,
+    timestamp: params.timestamp ?? Date.now(),
+  };
+}
 
-  constructor(params: {
-    url: string;
-    status?: number;
-    statusText?: string;
-    bodyPreview?: string;
-    message: string;
-    timestamp?: number;
-  }) {
-    this.url = params.url;
-    this.status = params.status;
-    this.statusText = params.statusText;
-    this.bodyPreview = params.bodyPreview;
-    this.message = params.message;
-    this.timestamp = params.timestamp || Date.now();
-  }
+export function isRagEndpointError(err: unknown): err is RagEndpointError {
+  return (
+    !!err &&
+    typeof err === 'object' &&
+    'message' in err &&
+    'url' in err
+  );
 }
 
 // ── Known RAG projects ──────────────────────────────────────────────────────
@@ -75,13 +78,13 @@ async function safeFetchJsonWithPreview(
   try {
     response = await fetch(url, options);
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Connection failed';
-    throw new RagEndpointError({
-      url,
-      message: `${message} (URL: ${url})`,
-      timestamp: Date.now(),
-    });
-  }
+     const message = err instanceof Error ? err.message : 'Connection failed';
+     throw makeRagEndpointError({
+       url,
+       message: `${message} (URL: ${url})`,
+       timestamp: Date.now(),
+     });
+   }
 
   // Try to read body for preview (always, even on error)
   try {
@@ -94,30 +97,30 @@ async function safeFetchJsonWithPreview(
   // Check content type
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.includes('application/json')) {
-    throw new RagEndpointError({
-      url,
-      status: response.status,
-      statusText: response.statusText,
-      bodyPreview,
-      message: `${context || url} returned ${contentType} instead of application/json.`,
-      timestamp: Date.now(),
-    });
-  }
+     throw makeRagEndpointError({
+       url,
+       status: response.status,
+       statusText: response.statusText,
+       bodyPreview,
+       message: `${context || url} returned ${contentType} instead of application/json.`,
+       timestamp: Date.now(),
+     });
+   }
 
   // Parse JSON
   try {
-    const data = JSON.parse(bodyPreview);
-    return { data, response };
-  } catch {
-    throw new RagEndpointError({
-      url,
-      status: response.status,
-      statusText: response.statusText,
-      bodyPreview,
-      message: `JSON parse failed for ${context || url}.`,
-      timestamp: Date.now(),
-    });
-  }
+      const data = JSON.parse(bodyPreview);
+      return { data, response };
+    } catch {
+      throw makeRagEndpointError({
+        url,
+        status: response.status,
+        statusText: response.statusText,
+        bodyPreview,
+        message: `JSON parse failed for ${context || url}.`,
+        timestamp: Date.now(),
+      });
+    }
 }
 
 // ── Gateway Health ──────────────────────────────────────────────────────────

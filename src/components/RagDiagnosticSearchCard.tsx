@@ -14,6 +14,7 @@ interface RagDiagnosticSearchCardProps {
 }
 
 const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
+  projectId,
   availableCollections,
   searchResults,
   searchError,
@@ -38,12 +39,12 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
   return (
     <div className="bg-bg-card rounded-xl border border-border-primary p-5 shadow-card">
       <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2 mb-1">
-        <Search className="w-4 h-4 text-accent-primary" />
-        Diagnostic Search
-      </h3>
-      <p className="text-[10px] text-text-tertiary mb-4">
-        Uses /rag/test-search endpoint — explicit user-triggered only
-      </p>
+         <Search className="w-4 h-4 text-accent-primary" />
+         Diagnostic Search
+       </h3>
+       <p className="text-[10px] text-text-tertiary mb-4">
+         Project: <span className="font-mono">{projectId}</span> · Uses /rag/test-search endpoint — explicit user-triggered only
+       </p>
 
       {/* Search form */}
       <form onSubmit={handleSubmit} className="mb-4">
