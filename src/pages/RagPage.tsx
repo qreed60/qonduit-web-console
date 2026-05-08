@@ -114,24 +114,26 @@ const RagPage: React.FC = () => {
   }, [gatewayUrl]);
 
   const fetchProjects = useCallback(async () => {
-    try {
-      console.log('[RAG] fetching projects');
-      const result = await getRagProjects();
-      console.log('[RAG] projects response', result);
-      console.log('[RAG] normalized projects count', result.projects.length);
-      setProjects(result.projects);
-      setProjectsFetched(true);
-      setProjectsError(null);
-    } catch (err) {
-      console.error('[RAG] projects error', err);
-      setProjectsError(err instanceof Error ? {
-        url: `${gatewayUrl}/v1/rag/projects`,
-        message: err.message,
-        timestamp: Date.now(),
-      } : null);
-      setProjectsFetched(true);
-    }
-  }, [gatewayUrl]);
+     try {
+       const url = `${gatewayUrl}/v1/rag/projects`;
+       console.log('[RAG] fetching projects', url);
+       const result = await getRagProjects();
+       console.log('[RAG] projects response', result);
+       console.log('[RAG] normalized projects count', result.projects.length);
+       console.log('[RAG] normalized projects', result.projects);
+       setProjects(result.projects);
+       setProjectsFetched(true);
+       setProjectsError(null);
+     } catch (err) {
+       console.error('[RAG] projects error', err);
+       setProjectsError(err instanceof Error ? {
+         url: `${gatewayUrl}/v1/rag/projects`,
+         message: err.message,
+         timestamp: Date.now(),
+       } : null);
+       setProjectsFetched(true);
+     }
+   }, [gatewayUrl]);
 
   const fetchProjectDetail = useCallback(async (projectId: string) => {
     try {
@@ -240,26 +242,29 @@ const RagPage: React.FC = () => {
   }, [fetchHealth, fetchProjects, fetchProjectDetail, fetchProjectStats, fetchCollections, fetchDocuments, selectedProjectId]);
 
   // ── Initial load: fetch health and projects independently ──────────────────
-
-  useEffect(() => {
-    console.log('[RAG] initial load - fetching health and projects');
-    fetchHealth();
-    fetchProjects();
-  }, [fetchHealth, fetchProjects]);
+  
+    useEffect(() => {
+      console.log('[RAG] initial load - fetching health and projects');
+      console.log('[RAG] initial load - gatewayUrl:', gatewayUrl);
+      fetchHealth();
+      fetchProjects();
+    }, [fetchHealth, fetchProjects, gatewayUrl]);
 
   // ── Auto-select first existing project ─────────────────────────────────────
-
-  useEffect(() => {
-    if (!selectedProjectId && projects.length > 0 && projectsFetched) {
-      const firstExisting = projects.find(p => p.exists);
-      const firstProject = projects[0];
-      const target = firstExisting || firstProject;
-      if (target) {
-        console.log('[RAG] auto-selecting project', target.project_id);
-        setSelectedProjectId(target.project_id);
+  
+    useEffect(() => {
+      if (!selectedProjectId && projects.length > 0 && projectsFetched) {
+        const firstExisting = projects.find(p => p.exists);
+        const firstProject = projects[0];
+        const target = firstExisting || firstProject;
+        if (target) {
+          console.log('[RAG] auto-selecting project', target.project_id, '(exists:', target.exists, ')');
+          setSelectedProjectId(target.project_id);
+        } else {
+          console.warn('[RAG] auto-select failed: no valid project found');
+        }
       }
-    }
-  }, [projects, projectsFetched, selectedProjectId]);
+    }, [projects, projectsFetched, selectedProjectId]);
 
   // ── Fetch detail when project is selected ──────────────────────────────────
 
@@ -369,11 +374,11 @@ const RagPage: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Debug info */}
-          <div className="bg-bg-card rounded-xl border border-border-primary p-3">
-            <p className="text-[10px] text-text-tertiary font-mono">
-              projects.length: {projects.length} | projectsError: {projectsError?.message || 'none'} | projectsFetched: {projectsFetched ? 'yes' : 'no'} | selectedProjectId: {selectedProjectId || 'none'} | gatewayUrl: {gatewayUrl}
-            </p>
-          </div>
+           <div className="bg-yellow-900/20 border border-yellow-700/30 rounded-xl p-3">
+             <p className="text-[10px] text-yellow-400 font-mono">
+               projects.length: {projects.length} | projectsError: {projectsError?.message || 'none'} | projectsFetched: {projectsFetched ? 'yes' : 'no'} | selectedProjectId: {selectedProjectId || 'none'} | gatewayUrl: {gatewayUrl} | endpoint: {gatewayUrl}/v1/rag/projects
+             </p>
+           </div>
 
           {/* Top row: Health */}
           <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
@@ -394,23 +399,32 @@ const RagPage: React.FC = () => {
               Projects
             </h2>
             {projectsError ? (
-              <div className="flex items-center gap-2 text-xs text-status-error">
-                <span>Unable to fetch projects: {projectsError.message}</span>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-                {projects.map(project => (
-                  <RagProjectCard
-                    key={project.project_id}
-                    project={project}
-                    isSelected={selectedProjectId === project.project_id}
-                    onSelect={handleSelectProject}
-                    onRefresh={fetchAllData}
-                    refreshing={refreshing}
-                  />
-                ))}
-              </div>
-            )}
+               <div className="flex items-center gap-2 text-xs text-status-error">
+                 <span>Unable to fetch projects: {projectsError.message}</span>
+                 <span className="text-[10px] font-mono opacity-70">({gatewayUrl}/v1/rag/projects)</span>
+               </div>
+             ) : projectsFetched && projects.length === 0 ? (
+               <div className="bg-bg-card rounded-xl border border-border-primary p-6 text-center">
+                 <Database className="w-8 h-8 mx-auto text-text-tertiary/30 mb-2" />
+                 <p className="text-sm text-text-secondary">No projects returned by the backend.</p>
+                 <p className="text-xs text-text-tertiary mt-1">
+                   Expected endpoint: <code className="font-mono">{gatewayUrl}/v1/rag/projects</code>
+                 </p>
+               </div>
+             ) : (
+               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+                 {projects.map(project => (
+                   <RagProjectCard
+                     key={project.project_id}
+                     project={project}
+                     isSelected={selectedProjectId === project.project_id}
+                     onSelect={handleSelectProject}
+                     onRefresh={fetchAllData}
+                     refreshing={refreshing}
+                   />
+                 ))}
+               </div>
+             )}
           </div>
 
           {/* Detail area: Project detail + Collections + Documents + Search */}

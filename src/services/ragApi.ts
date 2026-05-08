@@ -532,8 +532,12 @@ export async function getRagHealth(): Promise<RagHealthResponse> {
 /** GET /v1/rag/projects */
 export async function getRagProjects(): Promise<RagProjectsListResponse> {
   const url = apiPath('gateway', '/v1/rag/projects');
+  console.log('[RAG API] getRagProjects URL:', url);
   const { data } = await safeFetchJsonWithPreview(url, undefined, 'Gateway /v1/rag/projects');
-  return normalizeRagProjectsList(data);
+  console.log('[RAG API] getRagProjects raw data keys:', Object.keys(data as Record<string, unknown> || {}));
+  const result = normalizeRagProjectsList(data);
+  console.log('[RAG API] getRagProjects normalized:', result);
+  return result;
 }
 
 /** GET /v1/rag/projects/{project_id} */

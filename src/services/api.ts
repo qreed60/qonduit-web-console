@@ -420,29 +420,49 @@ export async function fetchProviderModels(provider: ProviderType): Promise<Norma
 // ── Chat completions ────────────────────────────────────────────────────────
 
 /**
+ * RAG selection parameters for Gateway chat requests.
+ */
+export interface RagChatSelection {
+  projectId: string;
+  collection?: string;
+}
+
+/**
  * Send a chat request to the Gateway's /v1/chat/completions endpoint.
  *
  * @param model   — Model ID to use for completion
  * @param messages — Array of chat messages
  * @param ctxSize — Context size (optional, defaults to 8192)
+ * @param ragSelection — RAG project/collection selection (optional, Gateway mode only)
  */
 export async function fetchChatCompletions(
   model: string,
   messages: ChatMessage[],
   ctxSize: number = 8192,
+  ragSelection?: RagChatSelection,
 ): Promise<{ choices: Array<{ message: ChatMessage; finish_reason: string | null }> }> {
+  const body: Record<string, unknown> = {
+    model,
+    messages,
+    temperature: 0.7,
+    max_tokens: 4096,
+    stream: false,
+    // Pass context size if the backend supports it
+    ...(ctxSize !== 8192 && { context_size: ctxSize }),
+  };
+
+  // Attach RAG selection if provided (Gateway mode)
+  if (ragSelection) {
+    body.project_id = ragSelection.projectId;
+    if (ragSelection.collection) {
+      body.rag_collection = ragSelection.collection;
+    }
+  }
+
   const response = await fetch(apiPath('gateway', '/v1/chat/completions'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.7,
-      max_tokens: 4096,
-      stream: false,
-      // Pass context size if the backend supports it
-      ...(ctxSize !== 8192 && { context_size: ctxSize }),
-    }),
+    body: JSON.stringify(body),
   });
   if (!response.ok) {
     const body = await response.text();

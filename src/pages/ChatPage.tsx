@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { fetchProviderModels, fetchChatCompletions, getSettings, NormalizedModel } from '../services/api';
 import { ChatMessage, ProviderType } from '../types';
 import Toast from '../components/Toast';
+import RagContextSelector from '../components/RagContextSelector';
 import {
   Send,
   Loader2,
@@ -26,6 +27,13 @@ const ChatPage: React.FC = () => {
   const [currentProvider, setCurrentProvider] = useState<ProviderType>('Direct');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // RAG context selection (only used when Gateway mode is active)
+  const [ragSelection, setRagSelection] = useState<{
+    projectId: string;
+    collection: string | null;
+    enabled: boolean;
+  }>({ projectId: '', collection: null, enabled: true });
 
   // Load models when provider changes or on mount
   useEffect(() => {
@@ -68,31 +76,39 @@ const ChatPage: React.FC = () => {
     };
 
   const handleSend = async () => {
-    if (!input.trim() || !selectedModel || loading) return;
-
-    const userMessage: ChatMessage = { role: 'user', content: input.trim() };
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
-    setInput('');
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetchChatCompletions(selectedModel, newMessages);
-      const assistantMessage = response.choices?.[0]?.message;
-      if (assistantMessage) {
-        setMessages([...newMessages, assistantMessage]);
-      } else {
-        setError('No response received from model');
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to get response';
-      setError(msg);
-      setToastMessage(`Chat error: ${msg}`);
-    } finally {
-      setLoading(false);
-    }
-  };
+     if (!input.trim() || !selectedModel || loading) return;
+ 
+     const userMessage: ChatMessage = { role: 'user', content: input.trim() };
+     const newMessages = [...messages, userMessage];
+     setMessages(newMessages);
+     setInput('');
+     setLoading(true);
+     setError(null);
+ 
+     try {
+       // Build RAG selection for Gateway mode
+       const ragPayload = (currentProvider === 'Gateway' && ragSelection.enabled && ragSelection.projectId)
+         ? {
+             projectId: ragSelection.projectId,
+             collection: ragSelection.collection || undefined,
+           }
+         : undefined;
+ 
+       const response = await fetchChatCompletions(selectedModel, newMessages, undefined, ragPayload);
+       const assistantMessage = response.choices?.[0]?.message;
+       if (assistantMessage) {
+         setMessages([...newMessages, assistantMessage]);
+       } else {
+         setError('No response received from model');
+       }
+     } catch (err) {
+       const msg = err instanceof Error ? err.message : 'Failed to get response';
+       setError(msg);
+       setToastMessage(`Chat error: ${msg}`);
+     } finally {
+       setLoading(false);
+     }
+   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -184,16 +200,24 @@ const ChatPage: React.FC = () => {
                 </select>
               )}
               <button
-                onClick={() => loadModels(currentProvider)}
-                disabled={loading}
-                className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50"
-                title="Refresh models"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${modelLoading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-            {/* Settings Toggle */}
-            <button
+                 onClick={() => loadModels(currentProvider)}
+                 disabled={loading}
+                 className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50"
+                 title="Refresh models"
+               >
+                 <RefreshCw className={`w-3.5 h-3.5 ${modelLoading ? 'animate-spin' : ''}`} />
+               </button>
+             </div>
+             {/* RAG Context Selector (only in Gateway mode) */}
+             {currentProvider === 'Gateway' && (
+               <div className="relative">
+                 <RagContextSelector
+                   onSelectionChange={(selection) => setRagSelection(selection)}
+                 />
+               </div>
+             )}
+             {/* Settings Toggle */}
+             <button
               onClick={() => setShowSettings(!showSettings)}
               className={`p-1.5 rounded-lg transition-all duration-200 ${showSettings ? 'text-accent-primary bg-accent-primary/10' : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'}`}
               title="Chat settings"
@@ -204,22 +228,32 @@ const ChatPage: React.FC = () => {
         </div>
   
         {/* Settings Panel */}
-        {showSettings && (
-          <div className="px-6 py-3 border-b border-border-primary bg-bg-secondary/50">
-            {(() => {
-              const settings = getSettings();
-              return (
-                <div className="flex items-center gap-4 text-xs text-text-secondary">
-                  <span>Mode: <span className="font-medium text-text-primary">{settings.endpointMode}</span></span>
-                  <span>·</span>
-                  <span>Provider: <span className="font-medium text-text-primary">{currentProvider}</span></span>
-                  <span>·</span>
-                  <span>Models loaded: <span className="font-medium text-text-primary">{models.length}</span></span>
-                </div>
-              );
-            })()}
-          </div>
-        )}
+         {showSettings && (
+           <div className="px-6 py-3 border-b border-border-primary bg-bg-secondary/50">
+             {(() => {
+               const settings = getSettings();
+               return (
+                 <div className="flex flex-wrap items-center gap-4 text-xs text-text-secondary">
+                   <span>Mode: <span className="font-medium text-text-primary">{settings.endpointMode}</span></span>
+                   <span>·</span>
+                   <span>Provider: <span className="font-medium text-text-primary">{currentProvider}</span></span>
+                   <span>·</span>
+                   <span>Models loaded: <span className="font-medium text-text-primary">{models.length}</span></span>
+                   {currentProvider === 'Gateway' && (
+                     <>
+                       <span>·</span>
+                       <span>RAG: <span className={`font-medium ${ragSelection.enabled && ragSelection.projectId ? 'text-accent-primary' : 'text-text-tertiary'}`}>
+                         {ragSelection.enabled && ragSelection.projectId
+                           ? `${ragSelection.projectId}${ragSelection.collection ? ` / ${ragSelection.collection}` : ''}`
+                           : 'Not configured'}
+                       </span></span>
+                     </>
+                   )}
+                 </div>
+               );
+             })()}
+           </div>
+         )}
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-6 py-4">
