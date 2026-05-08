@@ -439,10 +439,11 @@ const RagPage: React.FC = () => {
                   statsError={projectStatsError}
                 />
                 <RagCollectionsCard
-                  collections={collections}
-                  collectionsError={collectionsError}
-                  projectId={selectedProjectId}
-                />
+                   collections={collections}
+                   collectionsError={collectionsError}
+                   projectId={selectedProjectId}
+                   projectDetail={projectDetail}
+                 />
               </div>
 
               {/* Right: Documents + Search */}

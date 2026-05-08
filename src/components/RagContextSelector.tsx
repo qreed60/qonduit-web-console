@@ -2,12 +2,15 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   getRagProjects,
   getRagCollections,
+  getRagProjectDetail,
 } from '../services/ragApi';
 import {
   RagProjectSummary,
   RagCollectionInfo,
   RagEndpointError,
+  RagProjectDetail,
 } from '../types';
+import { buildRagCollectionOptions } from '../utils/ragCollectionOptions';
 import { Database, RefreshCw, Loader2, ChevronDown, Sparkles } from 'lucide-react';
 
 const RAG_SELECTION_KEY = 'qonduit-rag-chat-selection';
@@ -25,11 +28,13 @@ interface RagContextSelectorProps {
 const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChange }) => {
   const [projects, setProjects] = useState<RagProjectSummary[]>([]);
   const [collections, setCollections] = useState<RagCollectionInfo[]>([]);
+  const [projectDetail, setProjectDetail] = useState<RagProjectDetail | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
-   const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
-   const [enabled, setEnabled] = useState(true);
-   const [projectsLoading, setProjectsLoading] = useState(false);
+  const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
+  const [enabled, setEnabled] = useState(true);
+  const [projectsLoading, setProjectsLoading] = useState(false);
   const [collectionsLoading, setCollectionsLoading] = useState(false);
+  const [projectDetailLoading, setProjectDetailLoading] = useState(false);
   const [projectsError, setProjectsError] = useState<RagEndpointError | null>(null);
   const [collectionsError, setCollectionsError] = useState<RagEndpointError | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -48,36 +53,6 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
       }
     } catch { /* ignore */ }
   }, []);
-
-  // Fetch projects on mount
-  useEffect(() => {
-    fetchProjects();
-  }, []);
-
-  // Fetch collections when project changes
-  useEffect(() => {
-    if (selectedProjectId) {
-      fetchCollections(selectedProjectId);
-    }
-  }, [selectedProjectId]);
-
-  // Notify parent of selection changes
-  useEffect(() => {
-    onSelectionChange({ projectId: selectedProjectId, collection: selectedCollection, enabled });
-  }, [selectedProjectId, selectedCollection, enabled, onSelectionChange]);
-
-  // Persist selection changes
-  useEffect(() => {
-    if (selectedProjectId) {
-      try {
-        localStorage.setItem(RAG_SELECTION_KEY, JSON.stringify({
-          projectId: selectedProjectId,
-          collection: selectedCollection,
-          enabled,
-        }));
-      } catch { /* ignore */ }
-    }
-  }, [selectedProjectId, selectedCollection, enabled]);
 
   const fetchProjects = useCallback(async () => {
     setProjectsLoading(true);
@@ -126,6 +101,67 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
     }
   }, [selectedCollection]);
 
+  const fetchProjectDetail = useCallback(async (projectId: string) => {
+    setProjectDetailLoading(true);
+    try {
+      const result = await getRagProjectDetail(projectId);
+      setProjectDetail(result);
+    } catch (err) {
+      console.error('[RAG Context] project detail error', err);
+      setProjectDetail(null);
+    } finally {
+      setProjectDetailLoading(false);
+    }
+  }, []);
+
+  // Fetch projects on mount
+  useEffect(() => {
+    fetchProjects();
+  }, []);
+
+  // Fetch collections and project detail when project changes
+  useEffect(() => {
+    if (selectedProjectId) {
+      fetchCollections(selectedProjectId);
+      fetchProjectDetail(selectedProjectId);
+    }
+  }, [selectedProjectId, fetchCollections, fetchProjectDetail]);
+
+  // Notify parent of selection changes
+  useEffect(() => {
+    onSelectionChange({ projectId: selectedProjectId, collection: selectedCollection, enabled });
+  }, [selectedProjectId, selectedCollection, enabled, onSelectionChange]);
+
+  // Persist selection changes
+  useEffect(() => {
+    if (selectedProjectId) {
+      try {
+        localStorage.setItem(RAG_SELECTION_KEY, JSON.stringify({
+          projectId: selectedProjectId,
+          collection: selectedCollection,
+          enabled,
+        }));
+      } catch { /* ignore */ }
+    }
+  }, [selectedProjectId, selectedCollection, enabled]);
+
+  // Build merged collection options from both sources
+  const collectionOptions = buildRagCollectionOptions(projectDetail, {
+    collections,
+    project_id: selectedProjectId,
+  });
+
+  // Validate persisted selection against merged options
+  useEffect(() => {
+    if (selectedCollection && collectionOptions.length > 0) {
+      const exists = collectionOptions.some(opt => opt.name === selectedCollection);
+      if (!exists) {
+        console.warn('[RAG Context] persisted collection no longer valid, clearing');
+        setSelectedCollection(null);
+      }
+    }
+  }, [collectionOptions, selectedCollection]);
+
   const handleProjectChange = (projectId: string) => {
     setSelectedProjectId(projectId);
     setSelectedCollection(null);
@@ -138,7 +174,14 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
   const formatNumber = (n: number): string => n.toLocaleString();
 
   const selectedProject = projects.find(p => p.project_id === selectedProjectId);
-  const selectedCollectionInfo = collections.find(c => c.name === selectedCollection);
+  const selectedCollectionInfo = collectionOptions.find(c => c.name === selectedCollection);
+
+  // Debug output
+  console.log(
+    `[RAG Context] logical: ${projectDetail?.logical_collections?.length || 0} · ` +
+    `detail: ${collections.length} · ` +
+    `merged: ${collectionOptions.length}`
+  );
 
   // Show RAG indicator text
   const ragIndicator = enabled && selectedProject
@@ -262,7 +305,7 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
               <label className="block text-[10px] text-text-tertiary uppercase tracking-wider mb-1">
                 Collection
               </label>
-              {collectionsLoading ? (
+              {collectionsLoading || projectDetailLoading ? (
                 <div className="flex items-center gap-2 px-3 py-2 bg-bg-secondary rounded-lg border border-border-primary">
                   <Loader2 className="w-3 h-3 animate-spin text-text-tertiary" />
                   <span className="text-xs text-text-tertiary">Loading collections...</span>
@@ -271,7 +314,7 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
                 <div className="px-3 py-2 bg-status-error/5 border border-status-error/20 rounded-lg">
                   <span className="text-xs text-status-error">{collectionsError.message}</span>
                 </div>
-              ) : collections.length === 0 ? (
+              ) : collectionOptions.length === 0 ? (
                 <div className="px-3 py-2 bg-bg-secondary rounded-lg border border-border-primary">
                   <span className="text-xs text-text-tertiary">No collections</span>
                 </div>
@@ -282,14 +325,16 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
                   className="w-full px-3 py-2 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent-primary/50"
                 >
                   <option value="">— Select collection —</option>
-                  {collections.map(collection => (
-                    <option key={collection.name} value={collection.name}>
-                      {collection.name}{collection.point_count ? ` (${formatNumber(collection.point_count)} pts)` : ''}
+                  {collectionOptions.map((col) => (
+                    <option key={col.name} value={col.name}>
+                      {col.name}
+                      {col.point_count !== undefined ? ` (${formatNumber(col.point_count)} pts)` : ''}
+                      {col.source === 'logical' ? ' (logical)' : ''}
                     </option>
                   ))}
                 </select>
               )}
-              {collections.length > 0 && (
+              {collectionOptions.length > 0 && (
                 <button
                   onClick={() => fetchCollections(selectedProjectId)}
                   disabled={collectionsLoading}
@@ -299,6 +344,12 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
                   <RefreshCw className={`w-3 h-3 ${collectionsLoading ? 'animate-spin' : ''}`} />
                 </button>
               )}
+              {/* Debug line */}
+              <p className="text-[9px] text-text-tertiary mt-2 font-mono">
+                logical: {projectDetail?.logical_collections?.length || 0} ·
+                detail: {collections.length} ·
+                merged: {collectionOptions.length}
+              </p>
             </div>
           )}
 
