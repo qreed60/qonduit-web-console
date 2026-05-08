@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import { Search, Loader2, FileText, Database } from 'lucide-react';
-import { RagSearchResponse, RagSearchResult, RagEndpointError } from '../types';
+import { RagSearchResponseNew, RagEndpointError } from '../types';
 import RawJsonPanel from './RawJsonPanel';
 import EndpointErrorInline from './EndpointErrorInline';
 
 interface RagDiagnosticSearchCardProps {
   projectId: string;
   availableCollections: string[];
-  searchResults: RagSearchResponse | null;
+  searchResults: RagSearchResponseNew | null;
   searchError: RagEndpointError | null;
   searchLoading: boolean;
-  onSearch: (query: string, limit: number, collection?: string) => void;
+  onSearch: (query: string, limit: number, collection?: string | null) => void;
 }
 
 const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
@@ -31,7 +31,7 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
     onSearch(query.trim(), limit, collection || undefined);
   };
 
-  const truncateText = (text: string, maxLen: number = 200) => {
+  const truncateText = (text: string, maxLen: number = 300) => {
     if (text.length <= maxLen) return text;
     return text.substring(0, maxLen) + '...';
   };
@@ -39,12 +39,12 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
   return (
     <div className="bg-bg-card rounded-xl border border-border-primary p-5 shadow-card">
       <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2 mb-1">
-         <Search className="w-4 h-4 text-accent-primary" />
-         Diagnostic Search
-       </h3>
-       <p className="text-[10px] text-text-tertiary mb-4">
-         Project: <span className="font-mono">{projectId}</span> · Uses /rag/test-search endpoint — explicit user-triggered only
-       </p>
+        <Search className="w-4 h-4 text-accent-primary" />
+        Search
+      </h3>
+      <p className="text-[10px] text-text-tertiary mb-4">
+        Project: <span className="font-mono">{projectId}</span> · Uses POST /v1/rag/projects/{projectId}/search — explicit user-triggered only
+      </p>
 
       {/* Search form */}
       <form onSubmit={handleSubmit} className="mb-4">
@@ -101,13 +101,13 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-text-tertiary">
               {searchResults.results.length} result{searchResults.results.length !== 1 ? 's' : ''} for "{searchResults.query}"
-              {searchResults.collection && (
-                <span className="ml-1">in <span className="font-mono">{searchResults.collection}</span></span>
+              {searchResults.limit > 0 && (
+                <span className="ml-1">· limit: {searchResults.limit}</span>
               )}
             </span>
           </div>
 
-          {searchResults.results.map((result: RagSearchResult, idx: number) => (
+          {searchResults.results.map((result, idx) => (
             <div
               key={result.id || idx}
               className="p-3 bg-bg-secondary border border-border-subtle rounded-lg"
@@ -124,38 +124,36 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
                 </span>
               </div>
 
+              {/* Text preview */}
               {result.text && (
                 <p className="text-xs text-text-primary mt-1 leading-relaxed">
                   {truncateText(result.text)}
                 </p>
               )}
 
-              {/* Source/document/file */}
-              {(result.source || result.document || result.file) && (
-                <div className="flex items-center gap-3 mt-2">
-                  {result.source && (
+              {/* Document info */}
+              {(result.document_name || result.file_path || result.chunk_index !== undefined) && (
+                <div className="flex items-center gap-3 mt-2 flex-wrap">
+                  {result.document_name && (
                     <div className="flex items-center gap-1">
                       <FileText className="w-3 h-3 text-text-tertiary" />
-                      <span className="text-[10px] font-mono text-text-tertiary truncate max-w-[150px]" title={result.source}>
-                        {result.source}
+                      <span className="text-[10px] font-mono text-text-tertiary truncate max-w-[150px]" title={result.document_name}>
+                        {result.document_name}
                       </span>
                     </div>
                   )}
-                  {result.file && (
-                    <div className="flex items-center gap-1">
-                      <FileText className="w-3 h-3 text-text-tertiary" />
-                      <span className="text-[10px] font-mono text-text-tertiary truncate max-w-[150px]" title={result.file}>
-                        {result.file}
-                      </span>
-                    </div>
-                  )}
-                  {result.document && (
+                  {result.file_path && (
                     <div className="flex items-center gap-1">
                       <Database className="w-3 h-3 text-text-tertiary" />
-                      <span className="text-[10px] font-mono text-text-tertiary truncate max-w-[150px]" title={result.document}>
-                        {result.document}
+                      <span className="text-[10px] font-mono text-text-tertiary truncate max-w-[150px]" title={result.file_path}>
+                        {result.file_path}
                       </span>
                     </div>
+                  )}
+                  {result.chunk_index !== undefined && (
+                    <span className="text-[10px] font-mono text-text-tertiary">
+                      chunk: {result.chunk_index}
+                    </span>
                   )}
                 </div>
               )}
@@ -175,7 +173,7 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
                 </div>
               )}
 
-              <RawJsonPanel data={result.raw} label="Raw result" />
+              <RawJsonPanel data={result as unknown as Record<string, unknown>} label="Raw result" />
             </div>
           ))}
         </div>

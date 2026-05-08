@@ -353,6 +353,132 @@ export interface RagEndpointError {
   timestamp: number;
 }
 
+// ── Phase 1 RAG Read API Types ──────────────────────────────────────────────
+
+/** GET /v1/rag/health response */
+export interface RagHealthResponse {
+  ok: boolean;
+  qdrant: {
+    ok: boolean;
+    url: string;
+    error: string | null;
+  };
+  embedding: {
+    ok: boolean;
+    base: string;
+    model: string;
+    dimension: number;
+    error: string | null;
+  };
+}
+
+/** GET /v1/rag/projects response */
+export interface RagProjectSummary {
+  project_id: string;
+  qdrant_collection: string;
+  exists: boolean;
+  points_count: number;
+  vectors_count: number;
+  status?: string;
+  error?: string | null;
+}
+
+export interface RagProjectsListResponse {
+  projects: RagProjectSummary[];
+}
+
+/** GET /v1/rag/projects/{project_id} response */
+export interface RagProjectDetail {
+  ok: boolean;
+  project_id: string;
+  qdrant_collection: string;
+  exists: boolean;
+  points_count: number;
+  vectors_count: number;
+  logical_collections?: string[];
+  error?: string | null;
+}
+
+/** GET /v1/rag/projects/{project_id}/stats response */
+export interface RagProjectStats {
+  ok: boolean;
+  exists: boolean;
+  points_count: number;
+  vectors_count: number;
+  indexed_vectors_count: number;
+  status: string;
+  error?: string | null;
+}
+
+/** GET /v1/rag/projects/{project_id}/collections response */
+export interface RagCollectionInfo {
+  name: string;
+  point_count?: number;
+  counts_are_estimated?: boolean;
+}
+
+export interface RagCollectionsResponse {
+  collections: RagCollectionInfo[];
+  project_id: string;
+}
+
+/** GET /v1/rag/projects/{project_id}/documents response */
+export interface RagDocumentSummary {
+  document_id: string;
+  document_name: string;
+  source?: string;
+  file_path?: string;
+  file_type?: string;
+  chunk_count: number;
+  first_chunk_id?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RagDocumentsResponse {
+  documents: RagDocumentSummary[];
+  project_id: string;
+}
+
+/** GET /v1/rag/projects/{project_id}/documents/{document_id}/chunks response */
+export interface RagChunk {
+  id: string;
+  chunk_index: number;
+  text: string;
+  payload?: Record<string, unknown>;
+}
+
+export interface RagChunksResponse {
+  chunks: RagChunk[];
+  document_id: string;
+  project_id: string;
+}
+
+/** POST /v1/rag/projects/{project_id}/search request */
+export interface RagSearchRequestNew {
+  query: string;
+  collection?: string | null;
+  limit?: number;
+}
+
+/** POST /v1/rag/projects/{project_id}/search response */
+export interface RagSearchResultNew {
+  id: string;
+  score: number;
+  text: string;
+  text_preview?: string;
+  payload?: Record<string, unknown>;
+  document_name?: string;
+  file_path?: string;
+  chunk_index?: number;
+}
+
+export interface RagSearchResponseNew {
+  results: RagSearchResultNew[];
+  project_id: string;
+  query: string;
+  limit: number;
+}
+
 /** Known RAG project for the project cards */
 export interface KnownRagProject {
   project_id: string;

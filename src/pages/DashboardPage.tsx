@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getSettings, fetchRouterModels, fetchProviderModels, fetchRouterGpu, launchModel as apiLaunchModel, stopModel as apiStopModel, restartRouterModel as apiRestartRouterModel, testEndpointWithError, testRouterHealthWithError, getRouterStatus, NormalizedModel, GpuStatus, RouterStatus } from '../services/api';
+import { getRagHealth, getRagProjects } from '../services/ragApi';
+import { RagHealthResponse, RagProjectSummary } from '../types';
 import { Settings } from '../types';
 import { ENDPOINTS } from '../config/endpoints';
 import StatusBar from '../components/StatusBar';
@@ -43,15 +45,22 @@ const DashboardPage: React.FC = () => {
   const [healthLoading, setHealthLoading] = useState(false);
 
   // ── State: content data (preserved across refreshes) ──
-  const [routerStatus, setRouterStatus] = useState<RouterStatus | null>(null);
-  const [routerModels, setRouterModels] = useState<NormalizedModel[]>([]);
-  const [selectedRouterModel, setSelectedRouterModel] = useState('');
-  const [ctxSize, setCtxSize] = useState(4096);
-  const [suggestedCtx, setSuggestedCtx] = useState<number | null>(null);
-  const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null);
-  const [gpuError, setGpuError] = useState<string | null>(null);
-  const [chatModels, setChatModels] = useState<NormalizedModel[]>([]);
-  const [selectedChatModel, setSelectedChatModel] = useState('');
+   const [routerStatus, setRouterStatus] = useState<RouterStatus | null>(null);
+   const [routerModels, setRouterModels] = useState<NormalizedModel[]>([]);
+   const [selectedRouterModel, setSelectedRouterModel] = useState('');
+   const [ctxSize, setCtxSize] = useState(4096);
+   const [suggestedCtx, setSuggestedCtx] = useState<number | null>(null);
+   const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null);
+   const [gpuError, setGpuError] = useState<string | null>(null);
+   const [chatModels, setChatModels] = useState<NormalizedModel[]>([]);
+   const [selectedChatModel, setSelectedChatModel] = useState('');
+ 
+   // ── State: RAG data ──
+   const [ragHealth, setRagHealth] = useState<RagHealthResponse | null>(null);
+   const [ragProjects, setRagProjects] = useState<RagProjectSummary[]>([]);
+   const ragTotalPoints = ragProjects
+     .filter(p => p.exists)
+     .reduce((sum, p) => sum + p.points_count, 0);
 
   // ── State: action feedback ──
   const [actionLoading, setActionLoading] = useState(false);
@@ -101,19 +110,35 @@ const DashboardPage: React.FC = () => {
       }
 
       // ── Content: fetch chat models — preserve old data on failure ──
-      try {
-        const providerModels = await fetchProviderModels(settings.defaultProvider);
-        setChatModels(providerModels);
-        if (providerModels.length > 0) {
-          const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
-          setSelectedChatModel(defaultModel?.id || providerModels[0].id);
-        }
-      } catch {
-        // Keep old chat models
-      }
-
-      // ── Health: test endpoint health ──
-      await testAllEndpoints();
+       try {
+         const providerModels = await fetchProviderModels(settings.defaultProvider);
+         setChatModels(providerModels);
+         if (providerModels.length > 0) {
+           const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
+           setSelectedChatModel(defaultModel?.id || providerModels[0].id);
+         }
+       } catch {
+         // Keep old chat models
+       }
+ 
+       // ── RAG: fetch health — preserve old data on failure ──
+       try {
+         const ragHealthData = await getRagHealth();
+         setRagHealth(ragHealthData);
+       } catch {
+         // Keep old RAG health data
+       }
+ 
+       // ── RAG: fetch projects — preserve old data on failure ──
+       try {
+         const ragProjectsData = await getRagProjects();
+         setRagProjects(ragProjectsData.projects);
+       } catch {
+         // Keep old RAG projects data
+       }
+ 
+       // ── Health: test endpoint health ──
+       await testAllEndpoints();
 
       setLastUpdated(Date.now());
     } finally {
@@ -446,66 +471,82 @@ const DashboardPage: React.FC = () => {
            <LogsPanel routerStatus={routerStatus} />
          </div>
  
-         {/* RAG Status Card */}
-                  <div className="mb-6">
-                    <div className="bg-bg-card rounded-xl border border-border-primary p-5 shadow-card">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                          <Database className="w-4 h-4 text-accent-primary" />
-                          <h3 className="text-sm font-semibold text-text-primary">RAG Diagnostics</h3>
-                        </div>
-                        <button
-                          onClick={() => navigate('/rag')}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 transition-all duration-200 flex items-center gap-1.5"
-                        >
-                          Open RAG Diagnostics
-                          <ArrowRight className="w-3 h-3" />
-                        </button>
-                      </div>
-         
-                      <p className="text-xs text-text-secondary mb-3">
-                        Use the RAG page for ingestion queue, collection status, and diagnostic search.
-                      </p>
-         
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        {/* Gateway status */}
-                        <div>
-                          <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Gateway</span>
-                          <div className="flex items-center gap-1.5 mt-1">
-                            {endpointHealth.gateway === true ? (
-                              <>
-                                <div className="w-2 h-2 rounded-full bg-status-success" />
-                                <span className="text-xs text-status-success">Online</span>
-                              </>
-                            ) : endpointHealth.gateway === false ? (
-                              <>
-                                <div className="w-2 h-2 rounded-full bg-status-error" />
-                                <span className="text-xs text-status-error">Offline</span>
-                              </>
-                            ) : (
-                              <span className="text-xs text-text-tertiary">Checking...</span>
-                            )}
+         {/* RAG Browser Card */}
+                    <div className="mb-6">
+                      <div className="bg-bg-card rounded-xl border border-border-primary p-5 shadow-card">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <Database className="w-4 h-4 text-accent-primary" />
+                            <h3 className="text-sm font-semibold text-text-primary">RAG Browser</h3>
                           </div>
+                          <button
+                            onClick={() => navigate('/rag')}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 transition-all duration-200 flex items-center gap-1.5"
+                          >
+                            Open RAG Browser
+                            <ArrowRight className="w-3 h-3" />
+                          </button>
                         </div>
-         
-                        {/* Ingestion status */}
-                        <div>
-                          <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Ingestion</span>
-                          <p className="text-xs text-text-secondary mt-1">
-                            View on RAG page
-                          </p>
-                        </div>
-         
-                        {/* Projects */}
-                        <div>
-                          <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Projects</span>
-                          <p className="text-xs text-text-secondary mt-1">
-                            5 known projects
-                          </p>
+           
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                          {/* Qdrant status */}
+                          <div>
+                            <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Qdrant</span>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              {ragHealth?.qdrant.ok ? (
+                                <>
+                                  <div className="w-2 h-2 rounded-full bg-status-success" />
+                                  <span className="text-xs text-status-success">Connected</span>
+                                </>
+                              ) : ragHealth?.qdrant.ok === false ? (
+                                <>
+                                  <div className="w-2 h-2 rounded-full bg-status-error" />
+                                  <span className="text-xs text-status-error">Disconnected</span>
+                                </>
+                              ) : (
+                                <span className="text-xs text-text-tertiary">Checking...</span>
+                              )}
+                            </div>
+                          </div>
+           
+                          {/* Embeddings status */}
+                          <div>
+                            <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Embeddings</span>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              {ragHealth?.embedding.ok ? (
+                                <>
+                                  <div className="w-2 h-2 rounded-full bg-status-success" />
+                                  <span className="text-xs text-status-success">Available</span>
+                                </>
+                              ) : ragHealth?.embedding.ok === false ? (
+                                <>
+                                  <div className="w-2 h-2 rounded-full bg-status-error" />
+                                  <span className="text-xs text-status-error">Unavailable</span>
+                                </>
+                              ) : (
+                                <span className="text-xs text-text-tertiary">Checking...</span>
+                              )}
+                            </div>
+                          </div>
+           
+                          {/* Projects count */}
+                          <div>
+                            <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Projects</span>
+                            <p className="text-xs text-text-secondary mt-1">
+                              {ragProjects.length} total
+                            </p>
+                          </div>
+           
+                          {/* Total points */}
+                          <div>
+                            <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Total Points</span>
+                            <p className="text-xs text-text-secondary mt-1">
+                              {ragTotalPoints.toLocaleString()}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
  
          {/* Coming Soon */}
         <div>

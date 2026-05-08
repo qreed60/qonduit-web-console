@@ -14,6 +14,19 @@ import {
   RagIngestionJob,
   RagIngestionState,
   RagEndpointError,
+  RagHealthResponse,
+  RagProjectSummary,
+  RagProjectsListResponse,
+  RagProjectDetail,
+  RagProjectStats,
+  RagCollectionInfo,
+  RagCollectionsResponse,
+  RagDocumentSummary,
+  RagDocumentsResponse,
+  RagChunk,
+  RagChunksResponse,
+  RagSearchResultNew,
+  RagSearchResponseNew,
 } from '../types';
 
 // ── RagEndpointError helpers ────────────────────────────────────────────────
@@ -177,12 +190,12 @@ export async function listRagCollections(
     headers['X-Qonduit-User'] = userId;
   }
   const { data } = await safeFetchJsonWithPreview(
-    url,
-    { method: 'GET', headers },
-    'Gateway /rag/collections'
-  );
-  return normalizeRagCollections(data, projectId);
-}
+     url,
+     { method: 'GET', headers },
+     'Gateway /rag/collections'
+   );
+   return normalizeRagCollectionsLegacy(data, projectId);
+ }
 
 // ── Diagnostic Search ───────────────────────────────────────────────────────
 
@@ -202,12 +215,12 @@ export async function searchRagCollection(
     body.collection = collection;
   }
   const { data } = await safeFetchJsonWithPreview(
-    url,
-    { method: 'POST', headers, body: JSON.stringify(body) },
-    'Gateway /rag/test-search'
-  );
-  return normalizeRagSearch(data);
-}
+      url,
+      { method: 'POST', headers, body: JSON.stringify(body) },
+      'Gateway /rag/test-search'
+    );
+    return normalizeRagSearchLegacy(data);
+  }
 
 // ── Embedding Smoke Test ────────────────────────────────────────────────────
 
@@ -403,7 +416,7 @@ function normalizeAllProjectStatuses(raw: unknown): RagIngestionProjectStatus[] 
   return [];
 }
 
-function normalizeRagCollections(raw: unknown, projectId: string): RagCollectionListResponse {
+function normalizeRagCollectionsLegacy(raw: unknown, projectId: string): RagCollectionListResponse {
   if (!raw || typeof raw !== 'object') return { collections: [], project_id: projectId };
   const obj = raw as Record<string, unknown>;
 
@@ -419,7 +432,7 @@ function normalizeRagCollections(raw: unknown, projectId: string): RagCollection
   return { collections, project_id: projectId };
 }
 
-function normalizeRagSearch(raw: unknown): RagSearchResponse {
+function normalizeRagSearchLegacy(raw: unknown): RagSearchResponse {
   if (!raw || typeof raw !== 'object') return { results: [], query: '', limit: 0 };
   const obj = raw as Record<string, unknown>;
 
@@ -499,4 +512,280 @@ function normalizeRagChatTest(raw: unknown): RagChatTestResponse {
   }
 
   return { ok: false, error: 'No choices in chat response.' };
+}
+
+// ── Phase 1 RAG Read API Functions ──────────────────────────────────────────
+
+/** GET /v1/rag/health */
+export async function getRagHealth(): Promise<RagHealthResponse> {
+  const url = apiPath('gateway', '/v1/rag/health');
+  const { data } = await safeFetchJsonWithPreview(url, undefined, 'Gateway /v1/rag/health');
+  return normalizeRagHealth(data);
+}
+
+/** GET /v1/rag/projects */
+export async function getRagProjects(): Promise<RagProjectsListResponse> {
+  const url = apiPath('gateway', '/v1/rag/projects');
+  const { data } = await safeFetchJsonWithPreview(url, undefined, 'Gateway /v1/rag/projects');
+  return normalizeRagProjectsList(data);
+}
+
+/** GET /v1/rag/projects/{project_id} */
+export async function getRagProjectDetail(projectId: string): Promise<RagProjectDetail> {
+  const url = apiPath('gateway', `/v1/rag/projects/${encodeURIComponent(projectId)}`);
+  const { data } = await safeFetchJsonWithPreview(
+    url, undefined, `Gateway /v1/rag/projects/${projectId}`
+  );
+  return normalizeRagProjectDetail(data);
+}
+
+/** GET /v1/rag/projects/{project_id}/stats */
+export async function getRagProjectStats(projectId: string): Promise<RagProjectStats> {
+  const url = apiPath('gateway', `/v1/rag/projects/${encodeURIComponent(projectId)}/stats`);
+  const { data } = await safeFetchJsonWithPreview(
+    url, undefined, `Gateway /v1/rag/projects/${projectId}/stats`
+  );
+  return normalizeRagProjectStats(data);
+}
+
+/** GET /v1/rag/projects/{project_id}/collections */
+export async function getRagCollections(projectId: string): Promise<RagCollectionsResponse> {
+  const url = apiPath('gateway', `/v1/rag/projects/${encodeURIComponent(projectId)}/collections`);
+  const { data } = await safeFetchJsonWithPreview(
+    url, undefined, `Gateway /v1/rag/projects/${projectId}/collections`
+  );
+  return normalizeRagCollections(data, projectId);
+}
+
+/** GET /v1/rag/projects/{project_id}/documents */
+export async function getRagDocuments(projectId: string): Promise<RagDocumentsResponse> {
+  const url = apiPath('gateway', `/v1/rag/projects/${encodeURIComponent(projectId)}/documents`);
+  const { data } = await safeFetchJsonWithPreview(
+    url, undefined, `Gateway /v1/rag/projects/${projectId}/documents`
+  );
+  return normalizeRagDocuments(data, projectId);
+}
+
+/** GET /v1/rag/projects/{project_id}/documents/{document_id}/chunks */
+export async function getRagDocumentChunks(
+  projectId: string,
+  documentId: string
+): Promise<RagChunksResponse> {
+  const url = apiPath('gateway',
+    `/v1/rag/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(documentId)}/chunks`
+  );
+  const { data } = await safeFetchJsonWithPreview(
+    url, undefined, `Gateway /v1/rag/projects/${projectId}/documents/${documentId}/chunks`
+  );
+  return normalizeRagChunks(data, projectId, documentId);
+}
+
+/** POST /v1/rag/projects/{project_id}/search */
+export async function searchRagProject(
+  projectId: string,
+  query: string,
+  collection?: string | null,
+  limit: number = 4
+): Promise<RagSearchResponseNew> {
+  const url = apiPath('gateway', `/v1/rag/projects/${encodeURIComponent(projectId)}/search`);
+  const { data } = await safeFetchJsonWithPreview(
+    url,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, collection, limit }),
+    },
+    `Gateway /v1/rag/projects/${projectId}/search`
+  );
+  return normalizeRagSearch(data, projectId);
+}
+
+// ── Phase 1 RAG Read API Normalization Helpers ──────────────────────────────
+
+function normalizeRagHealth(raw: unknown): RagHealthResponse {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      ok: false,
+      qdrant: { ok: false, url: '', error: 'Unexpected response' },
+      embedding: { ok: false, base: '', model: '', dimension: 0, error: 'Unexpected response' },
+    };
+  }
+  const obj = raw as Record<string, unknown>;
+  const qdrantRaw = obj.qdrant as Record<string, unknown> | undefined;
+  const embeddingRaw = obj.embedding as Record<string, unknown> | undefined;
+  return {
+    ok: obj.ok === true,
+    qdrant: {
+      ok: qdrantRaw?.ok === true,
+      url: typeof qdrantRaw?.url === 'string' ? qdrantRaw.url : '',
+      error: typeof qdrantRaw?.error === 'string' ? qdrantRaw.error : null,
+    },
+    embedding: {
+      ok: embeddingRaw?.ok === true,
+      base: typeof embeddingRaw?.base === 'string' ? embeddingRaw.base : '',
+      model: typeof embeddingRaw?.model === 'string' ? embeddingRaw.model : '',
+      dimension: typeof embeddingRaw?.dimension === 'number' ? embeddingRaw.dimension : 0,
+      error: typeof embeddingRaw?.error === 'string' ? embeddingRaw.error : null,
+    },
+  };
+}
+
+function normalizeRagProjectsList(raw: unknown): RagProjectsListResponse {
+  if (!raw || typeof raw !== 'object') return { projects: [] };
+  const obj = raw as Record<string, unknown>;
+  const projects: RagProjectSummary[] = [];
+
+  if (Array.isArray(obj.projects)) {
+    for (const item of obj.projects) {
+      if (item && typeof item === 'object') {
+        const o = item as Record<string, unknown>;
+        projects.push({
+          project_id: typeof o.project_id === 'string' ? o.project_id : 'unknown',
+          qdrant_collection: typeof o.qdrant_collection === 'string' ? o.qdrant_collection : '',
+          exists: o.exists === true,
+          points_count: typeof o.points_count === 'number' ? o.points_count : 0,
+          vectors_count: typeof o.vectors_count === 'number' ? o.vectors_count : 0,
+          status: typeof o.status === 'string' ? o.status : undefined,
+          error: typeof o.error === 'string' ? o.error : null,
+        });
+      }
+    }
+  }
+
+  return { projects };
+}
+
+function normalizeRagProjectDetail(raw: unknown): RagProjectDetail {
+  if (!raw || typeof raw !== 'object') {
+    return { ok: false, project_id: '', qdrant_collection: '', exists: false, points_count: 0, vectors_count: 0 };
+  }
+  const obj = raw as Record<string, unknown>;
+  return {
+    ok: obj.ok === true,
+    project_id: typeof obj.project_id === 'string' ? obj.project_id : '',
+    qdrant_collection: typeof obj.qdrant_collection === 'string' ? obj.qdrant_collection : '',
+    exists: obj.exists === true,
+    points_count: typeof obj.points_count === 'number' ? obj.points_count : 0,
+    vectors_count: typeof obj.vectors_count === 'number' ? obj.vectors_count : 0,
+    logical_collections: Array.isArray(obj.logical_collections)
+      ? (obj.logical_collections as string[])
+      : undefined,
+    error: typeof obj.error === 'string' ? obj.error : null,
+  };
+}
+
+function normalizeRagProjectStats(raw: unknown): RagProjectStats {
+  if (!raw || typeof raw !== 'object') {
+    return { ok: false, exists: false, points_count: 0, vectors_count: 0, indexed_vectors_count: 0, status: 'unknown' };
+  }
+  const obj = raw as Record<string, unknown>;
+  return {
+    ok: obj.ok === true,
+    exists: obj.exists === true,
+    points_count: typeof obj.points_count === 'number' ? obj.points_count : 0,
+    vectors_count: typeof obj.vectors_count === 'number' ? obj.vectors_count : 0,
+    indexed_vectors_count: typeof obj.indexed_vectors_count === 'number' ? obj.indexed_vectors_count : 0,
+    status: typeof obj.status === 'string' ? obj.status : 'unknown',
+    error: typeof obj.error === 'string' ? obj.error : null,
+  };
+}
+
+function normalizeRagCollections(raw: unknown, projectId: string): RagCollectionsResponse {
+  if (!raw || typeof raw !== 'object') return { collections: [], project_id: projectId };
+  const obj = raw as Record<string, unknown>;
+  const collections: RagCollectionInfo[] = [];
+
+  if (Array.isArray(obj.collections)) {
+    for (const item of obj.collections) {
+      if (item && typeof item === 'object') {
+        const o = item as Record<string, unknown>;
+        collections.push({
+          name: typeof o.name === 'string' ? o.name : '',
+          point_count: typeof o.point_count === 'number' ? o.point_count : undefined,
+          counts_are_estimated: o.counts_are_estimated === true,
+        });
+      }
+    }
+  }
+
+  return { collections, project_id: projectId };
+}
+
+function normalizeRagDocuments(raw: unknown, projectId: string): RagDocumentsResponse {
+  if (!raw || typeof raw !== 'object') return { documents: [], project_id: projectId };
+  const obj = raw as Record<string, unknown>;
+  const documents: RagDocumentSummary[] = [];
+
+  if (Array.isArray(obj.documents)) {
+    for (const item of obj.documents) {
+      if (item && typeof item === 'object') {
+        const o = item as Record<string, unknown>;
+        documents.push({
+          document_id: typeof o.document_id === 'string' ? o.document_id : '',
+          document_name: typeof o.document_name === 'string' ? o.document_name : '',
+          source: typeof o.source === 'string' ? o.source : undefined,
+          file_path: typeof o.file_path === 'string' ? o.file_path : undefined,
+          file_type: typeof o.file_type === 'string' ? o.file_type : undefined,
+          chunk_count: typeof o.chunk_count === 'number' ? o.chunk_count : 0,
+          first_chunk_id: typeof o.first_chunk_id === 'string' ? o.first_chunk_id : undefined,
+          metadata: o.metadata && typeof o.metadata === 'object' ? (o.metadata as Record<string, unknown>) : undefined,
+        });
+      }
+    }
+  }
+
+  return { documents, project_id: projectId };
+}
+
+function normalizeRagChunks(raw: unknown, projectId: string, documentId: string): RagChunksResponse {
+  if (!raw || typeof raw !== 'object') return { chunks: [], document_id: documentId, project_id: projectId };
+  const obj = raw as Record<string, unknown>;
+  const chunks: RagChunk[] = [];
+
+  if (Array.isArray(obj.chunks)) {
+    for (const item of obj.chunks) {
+      if (item && typeof item === 'object') {
+        const o = item as Record<string, unknown>;
+        chunks.push({
+          id: typeof o.id === 'string' ? o.id : '',
+          chunk_index: typeof o.chunk_index === 'number' ? o.chunk_index : 0,
+          text: typeof o.text === 'string' ? o.text : '',
+          payload: o.payload && typeof o.payload === 'object' ? (o.payload as Record<string, unknown>) : undefined,
+        });
+      }
+    }
+  }
+
+  return { chunks, document_id: documentId, project_id: projectId };
+}
+
+function normalizeRagSearch(raw: unknown, projectId: string): RagSearchResponseNew {
+  if (!raw || typeof raw !== 'object') return { results: [], project_id: projectId, query: '', limit: 0 };
+  const obj = raw as Record<string, unknown>;
+  const results: RagSearchResultNew[] = [];
+
+  if (Array.isArray(obj.results)) {
+    for (const item of obj.results) {
+      if (item && typeof item === 'object') {
+        const o = item as Record<string, unknown>;
+        results.push({
+          id: typeof o.id === 'string' ? o.id : '',
+          score: typeof o.score === 'number' ? o.score : 0,
+          text: typeof o.text === 'string' ? o.text : '',
+          text_preview: typeof o.text_preview === 'string' ? o.text_preview : undefined,
+          payload: o.payload && typeof o.payload === 'object' ? (o.payload as Record<string, unknown>) : undefined,
+          document_name: typeof o.document_name === 'string' ? o.document_name : undefined,
+          file_path: typeof o.file_path === 'string' ? o.file_path : undefined,
+          chunk_index: typeof o.chunk_index === 'number' ? o.chunk_index : undefined,
+        });
+      }
+    }
+  }
+
+  return {
+    results,
+    project_id: projectId,
+    query: typeof obj.query === 'string' ? obj.query : '',
+    limit: typeof obj.limit === 'number' ? obj.limit : 0,
+  };
 }

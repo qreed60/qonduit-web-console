@@ -1,43 +1,26 @@
 import React from 'react';
 import { RefreshCw, Loader2, Database } from 'lucide-react';
-import { RagIngestionProjectStatus } from '../types';
+import { RagProjectSummary } from '../types';
 import EndpointErrorInline from './EndpointErrorInline';
 
 interface RagProjectCardProps {
-  status: RagIngestionProjectStatus;
+  project: RagProjectSummary;
   isSelected: boolean;
   onSelect: (projectId: string) => void;
   onRefresh: (projectId: string) => void;
   refreshing: boolean;
 }
 
-const STATE_COLORS: Record<string, string> = {
-  idle: 'text-text-tertiary',
-  queued: 'text-status-warning',
-  running: 'text-status-warning',
-  success: 'text-status-success',
-  failed: 'text-status-error',
-  unknown: 'text-text-tertiary',
-};
-
-const STATE_BG: Record<string, string> = {
-  idle: 'bg-text-tertiary/10',
-  queued: 'bg-status-warning/10',
-  running: 'bg-status-warning/10',
-  success: 'bg-status-success/10',
-  failed: 'bg-status-error/10',
-  unknown: 'bg-text-tertiary/10',
-};
-
 const RagProjectCard: React.FC<RagProjectCardProps> = ({
-  status,
+  project,
   isSelected,
   onSelect,
   onRefresh,
   refreshing,
 }) => {
-  const stateColor = STATE_COLORS[status.state] || STATE_COLORS.unknown;
-  const stateBg = STATE_BG[status.state] || STATE_BG.unknown;
+  const formatNumber = (n: number): string => {
+    return n.toLocaleString();
+  };
 
   return (
     <div
@@ -46,22 +29,22 @@ const RagProjectCard: React.FC<RagProjectCardProps> = ({
           ? 'border-accent-primary/40 bg-accent-primary/5 shadow-card-hover'
           : 'border-border-primary'
       }`}
-      onClick={() => onSelect(status.project_id)}
+      onClick={() => onSelect(project.project_id)}
     >
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0">
           <Database className={`w-4 h-4 flex-shrink-0 ${isSelected ? 'text-accent-primary' : 'text-text-tertiary'}`} />
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-text-primary truncate">{status.project_id}</p>
-            <p className="text-[10px] font-mono text-text-tertiary truncate" title={status.project_id}>
-              qonduit_rag__{status.project_id}
+            <p className="text-sm font-semibold text-text-primary truncate">{project.project_id}</p>
+            <p className="text-[10px] font-mono text-text-tertiary truncate" title={project.qdrant_collection}>
+              {project.qdrant_collection}
             </p>
           </div>
         </div>
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onRefresh(status.project_id);
+            onRefresh(project.project_id);
           }}
           disabled={refreshing}
           className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 flex-shrink-0"
@@ -75,14 +58,22 @@ const RagProjectCard: React.FC<RagProjectCardProps> = ({
         </button>
       </div>
 
-      {/* State badge */}
+      {/* Status badge */}
       <div className="flex items-center gap-2 mb-3">
-        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${stateBg} ${stateColor}`}>
-          {status.state}
+        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+          project.exists
+            ? 'bg-status-success/10 text-status-success'
+            : 'bg-text-tertiary/10 text-text-tertiary'
+        }`}>
+          {project.exists ? 'Exists' : 'Not Found'}
         </span>
-        {status.queued_position !== undefined && (
-          <span className="text-[10px] text-text-tertiary">
-            position #{status.queued_position}
+        {project.status && (
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+            project.status === 'green'
+              ? 'bg-status-success/10 text-status-success'
+              : 'bg-status-warning/10 text-status-warning'
+          }`}>
+            {project.status}
           </span>
         )}
       </div>
@@ -90,41 +81,26 @@ const RagProjectCard: React.FC<RagProjectCardProps> = ({
       {/* Stats */}
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <span className="text-[10px] text-text-tertiary">Chunks</span>
-          <p className="text-xs font-mono text-text-primary">
-            {status.chunks_embedded ?? 0} / {status.chunks_written ?? 0}
-          </p>
+          <span className="text-[10px] text-text-tertiary">Points</span>
+          <p className="text-xs font-mono text-text-primary">{formatNumber(project.points_count)}</p>
         </div>
         <div>
-          <span className="text-[10px] text-text-tertiary">Files</span>
-          <p className="text-xs font-mono text-text-primary">
-            {status.files_scanned ?? 0} scanned
-            {status.skipped_files ? ` / ${status.skipped_files} skipped` : ''}
-          </p>
+          <span className="text-[10px] text-text-tertiary">Vectors</span>
+          <p className="text-xs font-mono text-text-primary">{formatNumber(project.vectors_count)}</p>
         </div>
       </div>
 
-      {/* Current file */}
-      {status.current_file && (
-        <div className="mt-2">
-          <span className="text-[10px] text-text-tertiary">Current file:</span>
-          <p className="text-[10px] font-mono text-text-secondary truncate" title={status.current_file}>
-            {status.current_file}
-          </p>
-        </div>
-      )}
-
-      {/* Last error */}
-      {status.last_error && (
+      {/* Error */}
+      {project.error && (
         <div className="mt-2">
           <span className="text-[10px] text-status-error">Error:</span>
-          <p className="text-[10px] text-status-error/80 font-mono truncate" title={status.last_error}>
-            {status.last_error}
+          <p className="text-[10px] text-status-error/80 font-mono truncate" title={project.error}>
+            {project.error}
           </p>
         </div>
       )}
 
-      <EndpointErrorInline error={status.error || null} compact />
+      <EndpointErrorInline error={null} compact />
     </div>
   );
 };

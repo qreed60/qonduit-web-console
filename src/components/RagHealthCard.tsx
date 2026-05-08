@@ -1,14 +1,12 @@
 import React from 'react';
 import { RefreshCw, Server, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
-import { RagGatewayHealthResponse, GatewayModelsResponse, RagEndpointError } from '../types';
+import { RagHealthResponse, RagEndpointError } from '../types';
 import EndpointErrorInline from './EndpointErrorInline';
 
 interface RagHealthCardProps {
-  health: RagGatewayHealthResponse | null;
+  health: RagHealthResponse | null;
   healthError: RagEndpointError | null;
   healthLastChecked: number | null;
-  models: GatewayModelsResponse['models'] | null;
-  modelsError: RagEndpointError | null;
   gatewayUrl: string;
   onRefresh: () => void;
   refreshing: boolean;
@@ -18,16 +16,10 @@ const RagHealthCard: React.FC<RagHealthCardProps> = ({
   health,
   healthError,
   healthLastChecked,
-  models,
-  modelsError,
   gatewayUrl,
   onRefresh,
   refreshing,
 }) => {
-  const isOnline = health?.status === 'ok' || health?.status === 'healthy';
-  const hasQdrant = health?.qdrant_connected;
-  const hasEmbeddings = health?.embedding_model_available;
-
   const formatTimeAgo = (ts: number | null) => {
     if (!ts) return null;
     const diff = Date.now() - ts;
@@ -80,13 +72,13 @@ const RagHealthCard: React.FC<RagHealthCardProps> = ({
               </>
             ) : health ? (
               <>
-                {isOnline ? (
+                {health.ok ? (
                   <CheckCircle2 className="w-3.5 h-3.5 text-status-success" />
                 ) : (
                   <XCircle className="w-3.5 h-3.5 text-status-warning" />
                 )}
-                <span className={`text-xs ${isOnline ? 'text-status-success' : 'text-status-warning'}`}>
-                  {health.status || 'unknown'}
+                <span className={`text-xs ${health.ok ? 'text-status-success' : 'text-status-warning'}`}>
+                  {health.ok ? 'OK' : 'Error'}
                 </span>
               </>
             ) : (
@@ -101,21 +93,31 @@ const RagHealthCard: React.FC<RagHealthCardProps> = ({
           <div className="flex items-center gap-1.5">
             {healthError ? (
               <span className="text-xs text-text-tertiary">Unknown</span>
-            ) : hasQdrant === true ? (
+            ) : health ? (
               <>
-                <CheckCircle2 className="w-3.5 h-3.5 text-status-success" />
-                <span className="text-xs text-status-success">Connected</span>
-              </>
-            ) : hasQdrant === false ? (
-              <>
-                <XCircle className="w-3.5 h-3.5 text-status-error" />
-                <span className="text-xs text-status-error">Disconnected</span>
+                {health.qdrant.ok ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-status-success" />
+                ) : (
+                  <XCircle className="w-3.5 h-3.5 text-status-error" />
+                )}
+                <span className={`text-xs ${health.qdrant.ok ? 'text-status-success' : 'text-status-error'}`}>
+                  {health.qdrant.ok ? 'Connected' : 'Disconnected'}
+                </span>
               </>
             ) : (
               <span className="text-xs text-text-tertiary">—</span>
             )}
           </div>
         </div>
+
+        {/* Qdrant URL */}
+        {health?.qdrant.ok && health.qdrant.url && (
+          <div className="ml-5">
+            <p className="text-[10px] font-mono text-text-tertiary truncate" title={health.qdrant.url}>
+              {health.qdrant.url}
+            </p>
+          </div>
+        )}
 
         {/* Embeddings */}
         <div className="flex items-center justify-between">
@@ -123,15 +125,16 @@ const RagHealthCard: React.FC<RagHealthCardProps> = ({
           <div className="flex items-center gap-1.5">
             {healthError ? (
               <span className="text-xs text-text-tertiary">Unknown</span>
-            ) : hasEmbeddings === true ? (
+            ) : health ? (
               <>
-                <CheckCircle2 className="w-3.5 h-3.5 text-status-success" />
-                <span className="text-xs text-status-success">Available</span>
-              </>
-            ) : hasEmbeddings === false ? (
-              <>
-                <XCircle className="w-3.5 h-3.5 text-status-error" />
-                <span className="text-xs text-status-error">Unavailable</span>
+                {health.embedding.ok ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-status-success" />
+                ) : (
+                  <XCircle className="w-3.5 h-3.5 text-status-error" />
+                )}
+                <span className={`text-xs ${health.embedding.ok ? 'text-status-success' : 'text-status-error'}`}>
+                  {health.embedding.ok ? 'Available' : 'Unavailable'}
+                </span>
               </>
             ) : (
               <span className="text-xs text-text-tertiary">—</span>
@@ -139,29 +142,21 @@ const RagHealthCard: React.FC<RagHealthCardProps> = ({
           </div>
         </div>
 
-        {/* Models */}
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-text-secondary">Models</span>
-          <div className="flex items-center gap-1.5">
-            {modelsError ? (
-              <span className="text-xs text-status-error truncate max-w-[120px]" title={modelsError.message}>
-                Error
-              </span>
-            ) : models ? (
-              <span className="text-xs text-text-secondary">
-                {models.length} loaded
-                {models.length > 0 && (
-                  <span className="text-text-tertiary ml-1 truncate max-w-[120px] block">
-                    {models.slice(0, 2).map(m => m.name).join(', ')}
-                    {models.length > 2 ? ` +${models.length - 2}` : ''}
-                  </span>
-                )}
-              </span>
-            ) : (
-              <span className="text-xs text-text-tertiary">—</span>
+        {/* Embedding model info */}
+        {health?.embedding.ok && (health.embedding.model || health.embedding.dimension > 0) && (
+          <div className="ml-5 flex items-center gap-3">
+            {health.embedding.model && (
+              <p className="text-[10px] font-mono text-text-tertiary truncate" title={health.embedding.model}>
+                {health.embedding.model}
+              </p>
+            )}
+            {health.embedding.dimension > 0 && (
+              <p className="text-[10px] text-text-tertiary">
+                dim: {health.embedding.dimension}
+              </p>
             )}
           </div>
-        </div>
+        )}
       </div>
 
       {/* Timestamps */}
@@ -175,7 +170,6 @@ const RagHealthCard: React.FC<RagHealthCardProps> = ({
 
       {/* Errors */}
       <EndpointErrorInline error={healthError} compact />
-      <EndpointErrorInline error={modelsError} compact />
     </div>
   );
 };
