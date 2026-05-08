@@ -87,10 +87,14 @@ async function safeFetchJsonWithPreview(
 ): Promise<{ data: unknown; response: Response }> {
   let response: Response;
   let bodyPreview = '';
+  let fullText = '';
 
+  console.log('[RAG API] fetching', url, options);
   try {
     response = await fetch(url, options);
+    console.log('[RAG API] fetch response status', response.status, 'url', url);
   } catch (err) {
+     console.error('[RAG API] fetch error', url, err);
      const message = err instanceof Error ? err.message : 'Connection failed';
      throw makeRagEndpointError({
        url,
@@ -99,10 +103,11 @@ async function safeFetchJsonWithPreview(
      });
    }
 
-  // Try to read body for preview (always, even on error)
+  // Read full body text (always, even on error)
   try {
-    const text = await response.text();
-    bodyPreview = text.length > 300 ? text.substring(0, 300) + '...' : text;
+    fullText = await response.text();
+    bodyPreview = fullText.length > 300 ? fullText.substring(0, 300) + '...' : fullText;
+    console.log('[RAG API] response body preview', bodyPreview.substring(0, 100));
   } catch {
     bodyPreview = '[unable to read body]';
   }
@@ -120,9 +125,10 @@ async function safeFetchJsonWithPreview(
      });
    }
 
-  // Parse JSON
+  // Parse JSON from full text (not truncated preview)
   try {
-      const data = JSON.parse(bodyPreview);
+      const data = JSON.parse(fullText);
+      console.log('[RAG API] parsed data keys', Object.keys(data as Record<string, unknown>));
       return { data, response };
     } catch {
       throw makeRagEndpointError({

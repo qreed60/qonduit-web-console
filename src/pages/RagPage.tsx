@@ -41,6 +41,7 @@ const RagPage: React.FC = () => {
   // Projects
   const [projects, setProjects] = useState<RagProjectSummary[]>([]);
   const [projectsError, setProjectsError] = useState<RagEndpointError | null>(null);
+  const [projectsFetched, setProjectsFetched] = useState(false);
 
   // Project detail
   const [projectDetail, setProjectDetail] = useState<RagProjectDetail | null>(null);
@@ -96,11 +97,14 @@ const RagPage: React.FC = () => {
 
   const fetchHealth = useCallback(async () => {
     try {
+      console.log('[RAG] fetching health');
       const result = await getRagHealth();
+      console.log('[RAG] health response', result);
       setHealth(result);
       setHealthError(null);
       setHealthLastChecked(Date.now());
     } catch (err) {
+      console.error('[RAG] health error', err);
       setHealthError(err instanceof Error ? {
         url: `${gatewayUrl}/v1/rag/health`,
         message: err.message,
@@ -111,15 +115,21 @@ const RagPage: React.FC = () => {
 
   const fetchProjects = useCallback(async () => {
     try {
+      console.log('[RAG] fetching projects');
       const result = await getRagProjects();
+      console.log('[RAG] projects response', result);
+      console.log('[RAG] normalized projects count', result.projects.length);
       setProjects(result.projects);
+      setProjectsFetched(true);
       setProjectsError(null);
     } catch (err) {
+      console.error('[RAG] projects error', err);
       setProjectsError(err instanceof Error ? {
         url: `${gatewayUrl}/v1/rag/projects`,
         message: err.message,
         timestamp: Date.now(),
       } : null);
+      setProjectsFetched(true);
     }
   }, [gatewayUrl]);
 
@@ -229,11 +239,39 @@ const RagPage: React.FC = () => {
     }
   }, [fetchHealth, fetchProjects, fetchProjectDetail, fetchProjectStats, fetchCollections, fetchDocuments, selectedProjectId]);
 
-  // ── Initial load ───────────────────────────────────────────────────────────
+  // ── Initial load: fetch health and projects independently ──────────────────
 
   useEffect(() => {
-    fetchAllData();
-  }, [fetchAllData]);
+    console.log('[RAG] initial load - fetching health and projects');
+    fetchHealth();
+    fetchProjects();
+  }, [fetchHealth, fetchProjects]);
+
+  // ── Auto-select first existing project ─────────────────────────────────────
+
+  useEffect(() => {
+    if (!selectedProjectId && projects.length > 0 && projectsFetched) {
+      const firstExisting = projects.find(p => p.exists);
+      const firstProject = projects[0];
+      const target = firstExisting || firstProject;
+      if (target) {
+        console.log('[RAG] auto-selecting project', target.project_id);
+        setSelectedProjectId(target.project_id);
+      }
+    }
+  }, [projects, projectsFetched, selectedProjectId]);
+
+  // ── Fetch detail when project is selected ──────────────────────────────────
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      console.log('[RAG] project selected, fetching detail for', selectedProjectId);
+      fetchProjectDetail(selectedProjectId);
+      fetchProjectStats(selectedProjectId);
+      fetchCollections(selectedProjectId);
+      fetchDocuments(selectedProjectId);
+    }
+  }, [selectedProjectId, fetchProjectDetail, fetchProjectStats, fetchCollections, fetchDocuments]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -330,6 +368,13 @@ const RagPage: React.FC = () => {
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-7xl mx-auto space-y-6">
+          {/* Debug info */}
+          <div className="bg-bg-card rounded-xl border border-border-primary p-3">
+            <p className="text-[10px] text-text-tertiary font-mono">
+              projects.length: {projects.length} | projectsError: {projectsError?.message || 'none'} | projectsFetched: {projectsFetched ? 'yes' : 'no'} | selectedProjectId: {selectedProjectId || 'none'} | gatewayUrl: {gatewayUrl}
+            </p>
+          </div>
+
           {/* Top row: Health */}
           <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
             <RagHealthCard
