@@ -505,182 +505,182 @@ const ModelsPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6 h-full flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
-              Available Models
-            </h2>
-            {refreshing && (
-              <span className="flex items-center gap-1 text-[10px] text-text-tertiary">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Refreshing…
-              </span>
+      <div className="px-4 py-4 sm:px-6 sm:py-6 h-full flex flex-col">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 sm:mb-6">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
+                Available Models
+              </h2>
+              {refreshing && (
+                <span className="flex items-center gap-1 text-[10px] sm:text-xs text-text-tertiary">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Refreshing…
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-text-secondary mt-0.5">
+              Models from Gateway, Direct, and Router endpoints
+            </p>
+            {lastUpdated && !refreshing && (
+              <p className="text-[10px] sm:text-xs text-text-tertiary mt-0.5">
+                Updated {formatTimeAgo(lastUpdated)}
+              </p>
             )}
           </div>
-          <p className="text-sm text-text-secondary mt-0.5">
-            Models from Gateway, Direct, and Router endpoints
-          </p>
-          {lastUpdated && !refreshing && (
-            <p className="text-[10px] text-text-tertiary mt-0.5">
-              Updated {formatTimeAgo(lastUpdated)}
-            </p>
-          )}
+          <button
+            onClick={loadModels}
+            disabled={refreshing}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 border border-border-primary text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] flex-shrink-0"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
         </div>
-        <button
-          onClick={loadModels}
-          disabled={refreshing}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 border border-border-primary text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </div>
-
-      {/* VRAM Summary */}
-       <div className="mb-4">
-         {vramData ? (
-           <GpuSummary total={vramData.total} used={vramData.used} free={vramData.free} />
-         ) : (
-           <div className="flex items-center gap-2 p-3 bg-bg-secondary/50 border border-border-subtle rounded-lg">
-             <MemoryStick className="w-4 h-4 text-text-tertiary flex-shrink-0" />
-             <span className="text-xs text-text-tertiary">{vramError || 'VRAM data unavailable'}</span>
-           </div>
-         )}
-       </div>
-
-      {/* Main Content */}
-      <div className="flex-1 overflow-y-auto space-y-4">
-        {/* ── Local Models ── */}
-        <div className="bg-bg-card rounded-xl border border-border-primary p-5">
-          <h3 className="text-sm font-semibold text-text-primary mb-3">Local Models</h3>
-          {initialLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 text-text-tertiary animate-spin" />
-            </div>
-          ) : models.length === 0 ? (
-            <div className="text-center py-8">
-              <div className="w-14 h-14 bg-bg-tertiary rounded-full flex items-center justify-center mb-4 mx-auto">
-                <Server className="w-7 h-7 text-text-tertiary" />
+  
+        {/* VRAM Summary */}
+         <div className="mb-3 sm:mb-4">
+           {vramData ? (
+             <GpuSummary total={vramData.total} used={vramData.used} free={vramData.free} />
+           ) : (
+             <div className="flex items-center gap-2 p-3 bg-bg-secondary/50 border border-border-subtle rounded-lg">
+               <MemoryStick className="w-4 h-4 text-text-tertiary flex-shrink-0" />
+               <span className="text-xs text-text-tertiary">{vramError || 'VRAM data unavailable'}</span>
+             </div>
+           )}
+         </div>
+  
+        {/* Main Content */}
+        <div className="flex-1 overflow-y-auto space-y-4">
+          {/* ── Local Models ── */}
+          <div className="bg-bg-card rounded-xl border border-border-primary p-4 sm:p-5">
+            <h3 className="text-sm font-semibold text-text-primary mb-3">Local Models</h3>
+            {initialLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 text-text-tertiary animate-spin" />
               </div>
-              <p className="text-text-secondary">No models available</p>
-              <button
-                onClick={loadModels}
-                className="mt-2 text-accent-primary hover:text-accent-primary-hover font-medium text-sm"
-              >
-                Try refreshing
-              </button>
-            </div>
-          ) : (
-            <>
-              {error && (
-                 <div className="mb-3 p-2 bg-status-error/5 border border-status-error/20 rounded-lg">
-                   <p className="text-[10px] text-status-error font-medium mb-1">Error</p>
-                   <p className="text-xs text-text-secondary whitespace-pre-wrap">{error}</p>
-                 </div>
-               )}
-               {providerErrors.length > 0 && (
-                 <div className="mb-3 p-2 bg-status-error/5 border border-status-error/20 rounded-lg">
-                   <p className="text-[10px] text-status-error font-medium mb-1">Provider Errors</p>
-                   {providerErrors.map((e, i) => (
-                     <p key={i} className="text-[10px] text-text-secondary font-mono">{e.provider}: {e.error}</p>
-                   ))}
-                 </div>
-               )}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {models.map((model) => {
-                  const cleanId = model.id.replace(/^gateway:|^direct:|^router:/, '');
-                  const isRouter = model.provider === 'Router';
-                  return (
-                    <div
-                      key={model.id}
-                      className="bg-bg-secondary/30 border border-border-subtle rounded-xl p-4 hover:border-accent-primary/30 transition-all duration-200 group relative"
-                    >
-                      {/* Move to Trash button (Router models only) */}
-                      {isRouter && (
-                        <button
-                          onClick={() => handleMoveToTrash(model)}
-                          className="absolute top-3 right-3 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-status-error/10 text-text-tertiary hover:text-status-error transition-all duration-200"
-                          title="Move to Trash"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-
-                      <div className="flex items-start justify-between mb-3 pr-8">
-                        <div className="flex items-center gap-2">
-                          <div className={`px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1 ${getProviderColor(model.provider)}`}>
-                            {getProviderIcon(model.provider)}
-                            {model.provider}
+            ) : models.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="w-14 h-14 bg-bg-tertiary rounded-full flex items-center justify-center mb-4 mx-auto">
+                  <Server className="w-7 h-7 text-text-tertiary" />
+                </div>
+                <p className="text-text-secondary">No models available</p>
+                <button
+                  onClick={loadModels}
+                  className="mt-2 text-accent-primary hover:text-accent-primary-hover font-medium text-sm"
+                >
+                  Try refreshing
+                </button>
+              </div>
+            ) : (
+              <>
+                {error && (
+                   <div className="mb-3 p-2 bg-status-error/5 border border-status-error/20 rounded-lg">
+                     <p className="text-[10px] sm:text-xs text-status-error font-medium mb-1">Error</p>
+                     <p className="text-xs text-text-secondary whitespace-pre-wrap">{error}</p>
+                   </div>
+                 )}
+                 {providerErrors.length > 0 && (
+                   <div className="mb-3 p-2 bg-status-error/5 border border-status-error/20 rounded-lg">
+                     <p className="text-[10px] sm:text-xs text-status-error font-medium mb-1">Provider Errors</p>
+                     {providerErrors.map((e, i) => (
+                       <p key={i} className="text-[10px] sm:text-xs text-text-secondary font-mono">{e.provider}: {e.error}</p>
+                     ))}
+                   </div>
+                 )}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {models.map((model) => {
+                    const cleanId = model.id.replace(/^gateway:|^direct:|^router:/, '');
+                    const isRouter = model.provider === 'Router';
+                    return (
+                      <div
+                        key={model.id}
+                        className="bg-bg-secondary/30 border border-border-subtle rounded-xl p-4 hover:border-accent-primary/30 transition-all duration-200 group relative"
+                      >
+                        {/* Move to Trash button (Router models only) — always visible on mobile */}
+                        {isRouter && (
+                          <button
+                            onClick={() => handleMoveToTrash(model)}
+                            className="absolute top-3 right-3 p-2 rounded-lg hover:bg-status-error/10 text-text-tertiary hover:text-status-error transition-all duration-200 min-h-[36px] min-w-[36px] flex items-center justify-center"
+                            title="Move to Trash"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+  
+                        <div className="flex items-start justify-between mb-3 pr-8">
+                          <div className="flex items-center gap-2">
+                            <div className={`px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1 ${getProviderColor(model.provider)}`}>
+                              {getProviderIcon(model.provider)}
+                              {model.provider}
+                            </div>
+                            {model.created && (
+                              <span className="text-[10px] sm:text-xs text-text-tertiary">
+                                {new Date(model.created * 1000).toLocaleDateString()}
+                              </span>
+                            )}
                           </div>
-                          {model.created && (
-                            <span className="text-[10px] text-text-tertiary">
-                              {new Date(model.created * 1000).toLocaleDateString()}
+                        </div>
+  
+                        <div className="bg-bg-secondary/50 rounded-lg p-2.5 border border-border-subtle mb-3">
+                          <p className="text-xs font-mono text-text-primary truncate" title={cleanId}>
+                            {cleanId}
+                          </p>
+                          {model.path && (
+                            <p className="text-[10px] sm:text-xs font-mono text-text-tertiary truncate mt-1" title={model.path}>
+                              {model.path}
+                            </p>
+                          )}
+                        </div>
+  
+                        <div className="flex items-center gap-2 mb-3 text-[10px] sm:text-xs text-text-tertiary flex-wrap">
+                          {model.parameterSize && model.parameterSize !== 'unknown' ? (
+                            <span className="flex items-center gap-1">
+                              <Cpu className="w-3 h-3" />
+                              {model.parameterSize}
+                            </span>
+                          ) : (
+                            <span className="text-text-tertiary/50">Param: unknown</span>
+                          )}
+                          {model.fileSize && model.fileSize !== 'unknown' ? (
+                            <span className="flex items-center gap-1">
+                              <HardDrive className="w-3 h-3" />
+                              {model.fileSize}
+                            </span>
+                          ) : (
+                            <span className="text-text-tertiary/50">
+                              <HardDrive className="w-3 h-3 inline" />
+                              Size: unknown
                             </span>
                           )}
                         </div>
-                      </div>
-
-                      <div className="bg-bg-secondary/50 rounded-lg p-2.5 border border-border-subtle mb-3">
-                        <p className="text-xs font-mono text-text-primary truncate" title={cleanId}>
-                          {cleanId}
-                        </p>
-                        {model.path && (
-                          <p className="text-[10px] font-mono text-text-tertiary truncate mt-1" title={model.path}>
-                            {model.path}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2 mb-3 text-[10px] text-text-tertiary flex-wrap">
-                        {model.parameterSize && model.parameterSize !== 'unknown' ? (
-                          <span className="flex items-center gap-1">
-                            <Cpu className="w-3 h-3" />
-                            {model.parameterSize}
-                          </span>
-                        ) : (
-                          <span className="text-text-tertiary/50">Param: unknown</span>
-                        )}
-                        {model.fileSize && model.fileSize !== 'unknown' ? (
-                          <span className="flex items-center gap-1">
-                            <HardDrive className="w-3 h-3" />
-                            {model.fileSize}
-                          </span>
-                        ) : (
-                          <span className="text-text-tertiary/50">
-                            <HardDrive className="w-3 h-3 inline" />
-                            Size: unknown
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 text-xs text-text-tertiary">
-                          <span>{model.provider === 'Router' ? 'GGUF' : model.ownedBy || model.id}</span>
-                          <span>·</span>
-                          <span>{model.provider === 'Router' ? 'Launchable' : model.provider}</span>
+  
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 text-xs text-text-tertiary">
+                            <span className="truncate">{model.provider === 'Router' ? 'GGUF' : model.ownedBy || model.id}</span>
+                            <span className="hidden sm:inline">·</span>
+                            <span>{model.provider === 'Router' ? 'Launchable' : model.provider}</span>
+                          </div>
+                          <button
+                            onClick={() => handleCopyId(model.id)}
+                            className="p-2 rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-all duration-200 opacity-0 group-hover:opacity-100 sm:opacity-100 min-h-[36px] min-w-[36px] flex items-center justify-center"
+                            title="Copy ID"
+                          >
+                            {copiedId === model.id ? (
+                              <CheckCircle2 className="w-4 h-4 text-status-success" />
+                            ) : (
+                              <Copy className="w-4 h-4" />
+                            )}
+                          </button>
                         </div>
-                        <button
-                          onClick={() => handleCopyId(model.id)}
-                          className="p-1 rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-all duration-200 opacity-0 group-hover:opacity-100"
-                          title="Copy ID"
-                        >
-                          {copiedId === model.id ? (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-status-success" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5" />
-                          )}
-                        </button>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
 
         {/* ── Hugging Face Search Panel ── */}
         <HfSearchPanel

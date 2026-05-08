@@ -38,10 +38,10 @@ const LogsPanel: React.FC<LogsPanelProps> = ({ routerStatus }) => {
   const abortControllerRef = useRef<AbortController | null>(null);
   const maxLinesRef = useRef(maxLines);
 
-  // Load expanded state from localStorage
+  // Load expanded state from localStorage — default to collapsed on mobile
   useEffect(() => {
     const saved = localStorage.getItem('qonduit-logs-expanded');
-    if (saved === 'true') setIsExpanded(true);
+    if (saved !== null) setIsExpanded(saved === 'true');
   }, []);
 
   const saveExpandedState = (expanded: boolean) => {
@@ -139,87 +139,87 @@ const LogsPanel: React.FC<LogsPanelProps> = ({ routerStatus }) => {
     return 'text-text-secondary';
   };
 
-  const containerHeight = isExpanded ? 'h-[calc(100vh-200px)]' : 'h-64';
-
-  return (
-    <div className="bg-bg-card rounded-xl border border-border-primary shadow-card">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 pb-2">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Terminal className="w-4 h-4 text-text-tertiary" />
-            <h3 className="text-sm font-semibold text-text-primary">Terminal</h3>
-          </div>
-          {routerStatus?.running && (
-            <div className="flex items-center gap-1.5">
-              {error ? (
-                <>
-                  <div className="w-1.5 h-1.5 rounded-full bg-status-error" />
-                  <span className="text-[10px] text-status-error">Error</span>
-                </>
-              ) : isPaused ? (
-                <>
-                  <div className="w-1.5 h-1.5 rounded-full bg-status-warning" />
-                  <span className="text-[10px] text-status-warning">Paused</span>
-                </>
-              ) : (
-                <>
-                  <div className="w-1.5 h-1.5 rounded-full bg-status-success animate-pulse-dot" />
-                  <span className="text-[10px] text-status-success">Polling</span>
-                </>
-              )}
-            </div>
-          )}
-          <span className="text-[10px] text-text-tertiary">
-            {filteredLogs.length} / {logs.length} lines
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          {routerStatus?.running && (
-            <>
-              <button
-                 onClick={() => setIsPaused(!isPaused)}
-                 className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200"
-                 title={isPaused ? 'Resume' : 'Pause'}
-               >
-                 {isPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
-               </button>
-              <button
-                onClick={fetchLogs}
-                className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200"
-                title="Refresh"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
-              {error && (
-                <button
-                  onClick={fetchLogs}
-                  className="p-1.5 rounded-lg text-status-warning hover:bg-status-warning/10 transition-all duration-200"
-                  title="Retry"
+  const containerHeight = isExpanded ? 'h-[calc(100vh-200px)]' : 'h-48 sm:h-64';
+ 
+   return (
+     <div className="bg-bg-card rounded-xl border border-border-primary shadow-card">
+       {/* Header */}
+       <div className="flex items-center justify-between p-4 pb-2">
+         <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+           <div className="flex items-center gap-2 flex-shrink-0">
+             <Terminal className="w-4 h-4 text-text-tertiary" />
+             <h3 className="text-sm font-semibold text-text-primary">Terminal</h3>
+           </div>
+           {routerStatus?.running && (
+             <div className="hidden sm:flex items-center gap-1.5">
+               {error ? (
+                 <>
+                   <div className="w-1.5 h-1.5 rounded-full bg-status-error" />
+                   <span className="text-[10px] text-status-error">Error</span>
+                 </>
+               ) : isPaused ? (
+                 <>
+                   <div className="w-1.5 h-1.5 rounded-full bg-status-warning" />
+                   <span className="text-[10px] text-status-warning">Paused</span>
+                 </>
+               ) : (
+                 <>
+                   <div className="w-1.5 h-1.5 rounded-full bg-status-success animate-pulse-dot" />
+                   <span className="text-[10px] text-status-success">Polling</span>
+                 </>
+               )}
+             </div>
+           )}
+           <span className="text-[10px] sm:text-xs text-text-tertiary flex-shrink-0">
+             {filteredLogs.length} / {logs.length} lines
+           </span>
+         </div>
+         <div className="flex items-center gap-1 flex-shrink-0">
+           {routerStatus?.running && (
+             <>
+               <button
+                  onClick={() => setIsPaused(!isPaused)}
+                  className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200"
+                  title={isPaused ? 'Resume' : 'Pause'}
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
+                  {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
                 </button>
-              )}
-            </>
-          )}
-          {logs.length > 0 && (
-            <button
-              onClick={handleCopyAll}
-              className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200"
-              title="Copy all logs"
-            >
-              {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-status-success" /> : <Copy className="w-3.5 h-3.5" />}
-            </button>
-          )}
-          <button
-            onClick={() => saveExpandedState(!isExpanded)}
-            className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200"
-            title={isExpanded ? 'Collapse' : 'Expand'}
-          >
-            {isExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-          </button>
-        </div>
-      </div>
+               <button
+                 onClick={fetchLogs}
+                 className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200"
+                 title="Refresh"
+               >
+                 <RotateCcw className="w-4 h-4" />
+               </button>
+               {error && (
+                 <button
+                   onClick={fetchLogs}
+                   className="p-2 rounded-lg text-status-warning hover:bg-status-warning/10 transition-all duration-200"
+                   title="Retry"
+                 >
+                   <RotateCcw className="w-4 h-4" />
+                 </button>
+               )}
+             </>
+           )}
+           {logs.length > 0 && (
+             <button
+               onClick={handleCopyAll}
+               className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200"
+               title="Copy all logs"
+             >
+               {copied ? <CheckCircle2 className="w-4 h-4 text-status-success" /> : <Copy className="w-4 h-4" />}
+             </button>
+           )}
+           <button
+             onClick={() => saveExpandedState(!isExpanded)}
+             className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200"
+             title={isExpanded ? 'Collapse' : 'Expand'}
+           >
+             {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+           </button>
+         </div>
+       </div>
 
       {/* Search Bar */}
       {logs.length > 0 && (

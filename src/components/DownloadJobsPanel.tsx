@@ -38,29 +38,29 @@ const DownloadJobsPanel: React.FC<DownloadJobsPanelProps> = ({
   };
 
   return (
-    <div className="bg-bg-card rounded-xl border border-border-primary">
-      <div className="px-5 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <FileDown className="w-4 h-4 text-accent-secondary" />
-          <h3 className="text-sm font-semibold text-text-primary">Download Jobs</h3>
-          {hasActiveJobs && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-secondary/10 text-accent-secondary font-medium animate-pulse">
-              Active
-            </span>
-          )}
-          {completedCount > 0 && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-tertiary/50 text-text-tertiary font-medium">
-              {completedCount}
+      <div className="bg-bg-card rounded-xl border border-border-primary">
+        <div className="px-4 py-3 sm:px-5 sm:py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FileDown className="w-4 h-4 text-accent-secondary" />
+            <h3 className="text-sm font-semibold text-text-primary">Download Jobs</h3>
+            {hasActiveJobs && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-secondary/10 text-accent-secondary font-medium animate-pulse">
+                Active
+              </span>
+            )}
+            {completedCount > 0 && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-tertiary/50 text-text-tertiary font-medium">
+                {completedCount}
+              </span>
+            )}
+          </div>
+          {jobsLastUpdated && (
+            <span className="text-[10px] sm:text-xs text-text-tertiary flex-shrink-0">
+              Updated {Math.floor((Date.now() - jobsLastUpdated) / 1000)}s ago
             </span>
           )}
         </div>
-        {jobsLastUpdated && (
-          <span className="text-[10px] text-text-tertiary">
-            Updated {Math.floor((Date.now() - jobsLastUpdated) / 1000)}s ago
-          </span>
-        )}
-      </div>
-      <div className="px-5 pb-5 space-y-3 border-t border-border-subtle pt-4">
+        <div className="px-4 pb-4 sm:px-5 sm:pb-5 space-y-3 border-t border-border-subtle pt-4">
         {/* Error */}
         {jobsError && (
           <div className="p-2 bg-status-warning/5 border border-status-warning/20 rounded-lg">

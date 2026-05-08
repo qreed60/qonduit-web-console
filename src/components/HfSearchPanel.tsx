@@ -89,44 +89,45 @@ const HfSearchPanel: React.FC<HfSearchPanelProps> = ({
          </div>
          <div className="px-5 pb-5 space-y-4 border-t border-border-subtle pt-4">
             {/* Search input */}
-            <div className="flex items-center gap-2">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" />
-                <input
-                  type="text"
-                  value={hfQuery}
-                  onChange={(e) => setHfQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && onSearch()}
-                  placeholder="Search Hugging Face models (e.g., 'qwen gguf')"
-                  className="w-full pl-10 pr-4 py-2.5 bg-bg-secondary border border-border-subtle rounded-lg text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent-primary/50 transition-colors"
-                />
-              </div>
-              <select
-                value={hfSort}
-                onChange={(e) => setHfSort(e.target.value as 'downloads' | 'likes' | 'lastModified')}
-                className="px-3 py-2.5 bg-bg-secondary border border-border-subtle rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent-primary/50 transition-colors"
-              >
-                <option value="downloads">Downloads</option>
-                <option value="likes">Likes</option>
-                <option value="lastModified">Last Modified</option>
-              </select>
-              <select
-                value={hfLimit}
-                onChange={(e) => setHfLimit(Number(e.target.value))}
-                className="px-3 py-2.5 bg-bg-secondary border border-border-subtle rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent-primary/50 transition-colors"
-              >
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
-              <button
-                onClick={onSearch}
-                disabled={hfSearchLoading || !hfQuery.trim()}
-                className="px-4 py-2.5 bg-accent-primary/10 text-accent-primary border border-accent-primary/30 rounded-lg text-sm font-medium hover:bg-accent-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {hfSearchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-              </button>
-            </div>
+             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+               <div className="flex-1 relative">
+                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" />
+                 <input
+                   type="text"
+                   value={hfQuery}
+                   onChange={(e) => setHfQuery(e.target.value)}
+                   onKeyDown={(e) => e.key === 'Enter' && onSearch()}
+                   placeholder="Search Hugging Face models (e.g., 'qwen gguf')"
+                   className="w-full pl-10 pr-4 py-2.5 bg-bg-secondary border border-border-subtle rounded-lg text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent-primary/50 transition-colors"
+                 />
+               </div>
+               <select
+                 value={hfSort}
+                 onChange={(e) => setHfSort(e.target.value as 'downloads' | 'likes' | 'lastModified')}
+                 className="px-3 py-2.5 bg-bg-secondary border border-border-subtle rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent-primary/50 transition-colors min-h-[44px]"
+               >
+                 <option value="downloads">Downloads</option>
+                 <option value="likes">Likes</option>
+                 <option value="lastModified">Last Modified</option>
+               </select>
+               <select
+                 value={hfLimit}
+                 onChange={(e) => setHfLimit(Number(e.target.value))}
+                 className="px-3 py-2.5 bg-bg-secondary border border-border-subtle rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent-primary/50 transition-colors min-h-[44px]"
+               >
+                 <option value={10}>10</option>
+                 <option value={20}>20</option>
+                 <option value={50}>50</option>
+               </select>
+               <button
+                 onClick={onSearch}
+                 disabled={hfSearchLoading || !hfQuery.trim()}
+                 className="px-4 py-2.5 bg-accent-primary/10 text-accent-primary border border-accent-primary/30 rounded-lg text-sm font-medium hover:bg-accent-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] flex items-center justify-center gap-2"
+               >
+                 {hfSearchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                 <span className="hidden sm:inline">Search</span>
+               </button>
+             </div>
 
             {/* HF search link */}
             {hfLastSearchTime && (
@@ -169,7 +170,7 @@ const HfSearchPanel: React.FC<HfSearchPanelProps> = ({
                     </span>
                   )}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+                <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto">
                   {hfSearchResults.map((result) => {
                     const isSelected = selectedRepo === result.repo_id;
                     return (

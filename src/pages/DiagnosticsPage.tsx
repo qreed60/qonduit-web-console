@@ -119,118 +119,168 @@ const DiagnosticsPage: React.FC = () => {
    };
 
   return (
-    <div className="flex flex-col h-screen bg-bg-primary text-text-primary">
-      <StatusBar settings={settings} />
-      <div className="flex-1 overflow-y-auto p-6">
-        {/* Header */}
-        <div className="mb-6">
-          <h2 className="text-xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
-            Diagnostics
-          </h2>
-          <p className="text-sm text-text-secondary mt-1">
-            Test connectivity and monitor service health
-          </p>
-        </div>
-
-        {/* Test All Button */}
-        <div className="mb-4 flex items-center justify-between">
-          <button
-            onClick={performAllChecks}
-            disabled={isChecking}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isChecking ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Testing...
-              </>
-            ) : (
-              <>
-                <Activity className="w-4 h-4" />
-                Test All
-              </>
+      <div className="flex flex-col h-screen bg-bg-primary text-text-primary">
+        <StatusBar settings={settings} />
+        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+          {/* Header */}
+          <div className="mb-4 sm:mb-6">
+            <h2 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
+              Diagnostics
+            </h2>
+            <p className="text-sm text-text-secondary mt-1">
+              Test connectivity and monitor service health
+            </p>
+          </div>
+  
+          {/* Test All Button */}
+          <div className="mb-4">
+            <button
+              onClick={performAllChecks}
+              disabled={isChecking}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+            >
+              {isChecking ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Testing...
+                </>
+              ) : (
+                <>
+                  <Activity className="w-4 h-4" />
+                  Test All
+                </>
+              )}
+            </button>
+            {lastCheck && (
+              <span className="text-xs text-text-tertiary mt-2 block">
+                Last check: {lastCheck.toLocaleTimeString()}
+              </span>
             )}
-          </button>
-          {lastCheck && (
-            <span className="text-xs text-text-tertiary">
-              Last check: {lastCheck.toLocaleTimeString()}
-            </span>
-          )}
-        </div>
-
-        {/* Results Table */}
-        <div className="bg-bg-card rounded-xl border border-border-primary overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border-subtle">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-text-tertiary uppercase tracking-wider">Service</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-text-tertiary uppercase tracking-wider hidden sm:table-cell">Endpoint</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-text-tertiary uppercase tracking-wider">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-text-tertiary uppercase tracking-wider hidden md:table-cell">Latency</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-text-tertiary uppercase tracking-wider hidden lg:table-cell">Failures</th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center">
-                      <Loader2 className="w-6 h-6 text-text-tertiary animate-spin mx-auto mb-2" />
-                      <p className="text-text-tertiary text-sm">Running initial checks...</p>
-                    </td>
+          </div>
+  
+          {/* Results — stacked cards on mobile, table on desktop */}
+          <div className="bg-bg-card rounded-xl border border-border-primary overflow-hidden">
+            {/* Desktop: table view */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border-subtle">
+                    <th className="text-left px-4 py-3 text-xs font-medium text-text-tertiary uppercase tracking-wider">Service</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-text-tertiary uppercase tracking-wider">Endpoint</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-text-tertiary uppercase tracking-wider">Status</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-text-tertiary uppercase tracking-wider">Latency</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-text-tertiary uppercase tracking-wider">Failures</th>
                   </tr>
-                ) : (
-                  results.map((result) => (
-                    <tr
-                      key={result.service}
-                      className="border-b border-border-subtle last:border-0 hover:bg-bg-secondary/30 transition-colors"
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          {getStatusIcon(result)}
-                          <span className="text-sm font-medium text-text-primary">{getServiceLabel(result.service)}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 hidden sm:table-cell">
-                        <span className="text-xs font-mono text-text-tertiary truncate max-w-[200px] block" title={result.endpoint}>
-                          {result.endpoint}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                          result.status === 'online'
-                            ? 'bg-status-success/10 text-status-success'
-                            : (consecutiveFailures[result.service] || 0) > 2
-                            ? 'bg-status-error/10 text-status-error'
-                            : 'bg-bg-tertiary text-text-tertiary'
-                        }`}>
-                          {getStatusText(result)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 hidden md:table-cell">
-                        {result.latency !== null ? (
-                          <span className="text-xs text-text-secondary flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {result.latency}ms
-                          </span>
-                        ) : (
-                          <span className="text-xs text-text-tertiary">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 hidden lg:table-cell">
-                        {(consecutiveFailures[result.service] || 0) > 0 ? (
-                          <span className="text-xs text-status-warning">{consecutiveFailures[result.service]}</span>
-                        ) : (
-                          <span className="text-xs text-status-success">0</span>
-                        )}
+                </thead>
+                <tbody>
+                  {results.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-12 text-center">
+                        <Loader2 className="w-6 h-6 text-text-tertiary animate-spin mx-auto mb-2" />
+                        <p className="text-text-tertiary text-sm">Running initial checks...</p>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    results.map((result) => (
+                      <tr
+                        key={result.service}
+                        className="border-b border-border-subtle last:border-0 hover:bg-bg-secondary/30 transition-colors"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            {getStatusIcon(result)}
+                            <span className="text-sm font-medium text-text-primary">{getServiceLabel(result.service)}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs font-mono text-text-tertiary truncate max-w-[200px] block" title={result.endpoint}>
+                            {result.endpoint}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                            result.status === 'online'
+                              ? 'bg-status-success/10 text-status-success'
+                              : (consecutiveFailures[result.service] || 0) > 2
+                              ? 'bg-status-error/10 text-status-error'
+                              : 'bg-bg-tertiary text-text-tertiary'
+                          }`}>
+                            {getStatusText(result)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {result.latency !== null ? (
+                            <span className="text-xs text-text-secondary flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {result.latency}ms
+                            </span>
+                          ) : (
+                            <span className="text-xs text-text-tertiary">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {(consecutiveFailures[result.service] || 0) > 0 ? (
+                            <span className="text-xs text-status-warning">{consecutiveFailures[result.service]}</span>
+                          ) : (
+                            <span className="text-xs text-status-success">0</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+  
+            {/* Mobile: stacked cards */}
+            <div className="md:hidden space-y-2 p-4">
+              {results.length === 0 ? (
+                <div className="text-center py-8">
+                  <Loader2 className="w-6 h-6 text-text-tertiary animate-spin mx-auto mb-2" />
+                  <p className="text-text-tertiary text-sm">Running initial checks...</p>
+                </div>
+              ) : (
+                results.map((result) => (
+                  <div
+                    key={result.service}
+                    className="bg-bg-secondary/30 border border-border-subtle rounded-lg p-3"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        {getStatusIcon(result)}
+                        <span className="text-sm font-medium text-text-primary">{getServiceLabel(result.service)}</span>
+                      </div>
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                        result.status === 'online'
+                          ? 'bg-status-success/10 text-status-success'
+                          : (consecutiveFailures[result.service] || 0) > 2
+                          ? 'bg-status-error/10 text-status-error'
+                          : 'bg-bg-tertiary text-text-tertiary'
+                      }`}>
+                        {getStatusText(result)}
+                      </span>
+                    </div>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-text-tertiary">Endpoint</span>
+                        <span className="font-mono text-text-primary truncate ml-2" title={result.endpoint}>{result.endpoint}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-text-tertiary">Latency</span>
+                        <span className="text-text-primary">{result.latency !== null ? `${result.latency}ms` : '—'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-text-tertiary">Failures</span>
+                        <span className={consecutiveFailures[result.service] > 0 ? 'text-status-warning' : 'text-status-success'}>
+                          {consecutiveFailures[result.service] || 0}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
-        </div>
 
         {/* Error Details */}
         {results.some((r) => r.error) && (

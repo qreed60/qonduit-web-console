@@ -61,22 +61,22 @@ const RagProjectDetailPanel: React.FC<RagProjectDetailPanelProps> = ({
       </div>
 
       {/* Stats from /stats endpoint */}
-      {stats && (
-        <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-bg-secondary rounded-lg border border-border-subtle">
-          <div>
-            <span className="text-[10px] text-text-tertiary">Points</span>
-            <p className="text-sm font-mono text-text-primary">{formatNumber(stats.points_count)}</p>
-          </div>
-          <div>
-            <span className="text-[10px] text-text-tertiary">Vectors</span>
-            <p className="text-sm font-mono text-text-primary">{formatNumber(stats.vectors_count)}</p>
-          </div>
-          <div>
-            <span className="text-[10px] text-text-tertiary">Indexed</span>
-            <p className="text-sm font-mono text-text-primary">{formatNumber(stats.indexed_vectors_count)}</p>
-          </div>
-        </div>
-      )}
+       {stats && (
+         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 p-3 bg-bg-secondary rounded-lg border border-border-subtle">
+           <div>
+             <span className="text-[10px] sm:text-xs text-text-tertiary">Points</span>
+             <p className="text-sm font-mono text-text-primary">{formatNumber(stats.points_count)}</p>
+           </div>
+           <div>
+             <span className="text-[10px] sm:text-xs text-text-tertiary">Vectors</span>
+             <p className="text-sm font-mono text-text-primary">{formatNumber(stats.vectors_count)}</p>
+           </div>
+           <div>
+             <span className="text-[10px] sm:text-xs text-text-tertiary">Indexed</span>
+             <p className="text-sm font-mono text-text-primary">{formatNumber(stats.indexed_vectors_count)}</p>
+           </div>
+         </div>
+       )}
 
       {/* Status from /stats endpoint */}
       {stats && (

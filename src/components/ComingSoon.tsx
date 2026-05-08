@@ -56,24 +56,24 @@ const ComingSoon: React.FC<ComingSoonProps> = ({ items }) => {
   }, {});
 
   return (
-    <div>
-      <h2 className="text-base font-semibold text-text-primary mb-4">Upcoming Features</h2>
-      <div className="space-y-5">
-        {Object.entries(grouped).map(([category, categoryItems]) => (
-          <div key={category}>
-            <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-3">
-              {CATEGORY_LABELS[category] || category}
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {categoryItems.map((item, idx) => (
-                <ComingSoonCard key={idx} {...item} />
-              ))}
+      <div>
+        <h2 className="text-base font-semibold text-text-primary mb-3 sm:mb-4">Upcoming Features</h2>
+        <div className="space-y-4 sm:space-y-5">
+          {Object.entries(grouped).map(([category, categoryItems]) => (
+            <div key={category}>
+              <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-2 sm:mb-3">
+                {CATEGORY_LABELS[category] || category}
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {categoryItems.map((item, idx) => (
+                  <ComingSoonCard key={idx} {...item} />
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
-    </div>
-  );
+    );
 };
 
 export default ComingSoon;

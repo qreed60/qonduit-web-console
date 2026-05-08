@@ -150,82 +150,82 @@ const ChatPage: React.FC = () => {
   };
 
   return (
-      <div className="flex flex-col h-full bg-bg-primary">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-3 border-b border-border-primary bg-bg-card">
-          <div className="flex items-center gap-3">
-            <MessageSquare className="w-5 h-5 text-accent-primary" />
-            <h2 className="text-lg font-semibold text-text-primary">Chat</h2>
-            {!selectedModel && !modelLoading && (
-              <span className="text-xs text-status-warning flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" />
-                No models available
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {/* Provider Selector */}
-            <div className="flex items-center gap-2">
-              <Globe className="w-3.5 h-3.5 text-text-tertiary" />
-              <select
-                value={currentProvider}
-                onChange={(e) => setCurrentProvider(e.target.value as ProviderType)}
-                disabled={modelLoading || loading}
-                className="px-3 py-1.5 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <option value="Direct">Direct</option>
-                <option value="Gateway">Gateway</option>
-              </select>
-            </div>
-            {/* Model Selector */}
-            <div className="flex items-center gap-2">
-              {modelLoading ? (
-                <Loader2 className="w-4 h-4 text-text-tertiary animate-spin" />
-              ) : (
-                <select
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  disabled={loading}
-                  className="px-3 py-1.5 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed max-w-[200px] truncate"
-                >
-                  {models.length === 0 ? (
-                    <option value="">No models</option>
-                  ) : (
-                    models.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.id}
-                      </option>
-                    ))
-                  )}
-                </select>
+        <div className="flex flex-col h-full bg-bg-primary">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 px-4 py-3 sm:px-6 sm:py-3 border-b border-border-primary bg-bg-card">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <MessageSquare className="w-5 h-5 text-accent-primary flex-shrink-0" />
+              <h2 className="text-base sm:text-lg font-semibold text-text-primary">Chat</h2>
+              {!selectedModel && !modelLoading && (
+                <span className="text-xs text-status-warning flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  No models
+                </span>
               )}
-              <button
-                 onClick={() => loadModels(currentProvider)}
-                 disabled={loading}
-                 className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50"
-                 title="Refresh models"
-               >
-                 <RefreshCw className={`w-3.5 h-3.5 ${modelLoading ? 'animate-spin' : ''}`} />
-               </button>
-             </div>
-             {/* RAG Context Selector (only in Gateway mode) */}
-             {currentProvider === 'Gateway' && (
-               <div className="relative">
-                 <RagContextSelector
-                   onSelectionChange={(selection) => setRagSelection(selection)}
-                 />
+            </div>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+              {/* Provider Selector */}
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <Globe className="w-3.5 h-3.5 text-text-tertiary flex-shrink-0" />
+                <select
+                  value={currentProvider}
+                  onChange={(e) => setCurrentProvider(e.target.value as ProviderType)}
+                  disabled={modelLoading || loading}
+                  className="flex-1 sm:flex-initial px-3 py-2 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed min-h-[40px]"
+                >
+                  <option value="Direct">Direct</option>
+                  <option value="Gateway">Gateway</option>
+                </select>
+              </div>
+              {/* Model Selector */}
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                {modelLoading ? (
+                  <Loader2 className="w-4 h-4 text-text-tertiary animate-spin flex-shrink-0" />
+                ) : (
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    disabled={loading}
+                    className="flex-1 sm:flex-initial px-3 py-2 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed truncate min-h-[40px]"
+                  >
+                    {models.length === 0 ? (
+                      <option value="">No models</option>
+                    ) : (
+                      models.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.id}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                )}
+                <button
+                   onClick={() => loadModels(currentProvider)}
+                   disabled={loading}
+                   className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-h-[40px] min-w-[40px] flex items-center justify-center"
+                   title="Refresh models"
+                 >
+                   <RefreshCw className={`w-4 h-4 ${modelLoading ? 'animate-spin' : ''}`} />
+                 </button>
                </div>
-             )}
-             {/* Settings Toggle */}
-             <button
-              onClick={() => setShowSettings(!showSettings)}
-              className={`p-1.5 rounded-lg transition-all duration-200 ${showSettings ? 'text-accent-primary bg-accent-primary/10' : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'}`}
-              title="Chat settings"
-            >
-              <Settings2 className="w-3.5 h-3.5" />
-            </button>
+               {/* RAG Context Selector (only in Gateway mode) */}
+               {currentProvider === 'Gateway' && (
+                 <div className="w-full sm:w-auto">
+                   <RagContextSelector
+                     onSelectionChange={(selection) => setRagSelection(selection)}
+                   />
+                 </div>
+               )}
+               {/* Settings Toggle */}
+               <button
+                onClick={() => setShowSettings(!showSettings)}
+                className={`p-2 rounded-lg transition-all duration-200 min-h-[40px] min-w-[40px] flex items-center justify-center ${showSettings ? 'text-accent-primary bg-accent-primary/10' : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'}`}
+                title="Chat settings"
+              >
+                <Settings2 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-        </div>
   
         {/* Settings Panel */}
          {showSettings && (
@@ -256,69 +256,69 @@ const ChatPage: React.FC = () => {
          )}
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-6 py-4">
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="w-16 h-16 bg-accent-primary/10 rounded-2xl flex items-center justify-center mb-4 border border-accent-primary/20">
-              <MessageSquare className="w-8 h-8 text-accent-primary" />
-            </div>
-            <h3 className="text-lg font-semibold text-text-primary mb-2">Start a Conversation</h3>
-            <p className="text-sm text-text-secondary max-w-md">
-              Send a message to chat with your AI model through the Memory Gateway.
-              {models.length === 0 && ' No models are currently available — check your Gateway endpoint.'}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4 max-w-3xl mx-auto">
-            {messages.map((msg, idx) => (
-              <div
-                key={idx}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[80%] rounded-xl px-4 py-3 ${
-                    msg.role === 'user'
-                      ? 'bg-accent-primary/10 border border-accent-primary/20 text-text-primary'
-                      : 'bg-bg-card border border-border-primary text-text-primary'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
-                    {msg.role === 'assistant' && (
-                      <button
-                        onClick={() => handleCopyMessage(msg.content)}
-                        className="p-1 rounded hover:bg-white/10 text-text-tertiary hover:text-text-primary transition-all duration-200 flex-shrink-0 opacity-0 group-hover:opacity-100"
-                        title="Copy message"
-                      >
-                        <Copy className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                  <p className={`text-[10px] mt-1.5 ${
-                    msg.role === 'user' ? 'text-accent-primary/60' : 'text-text-tertiary'
-                  }`}>
-                    {msg.role === 'user' ? 'You' : selectedModel || 'Model'}
-                  </p>
-                </div>
-              </div>
-            ))}
-
-            {/* Loading Indicator */}
-            {loading && (
-              <div className="flex justify-start">
-                <div className="bg-bg-card border border-border-primary rounded-xl px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 text-accent-primary animate-spin" />
-                    <span className="text-xs text-text-secondary">Thinking...</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-        )}
-      </div>
+       <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-4">
+         {messages.length === 0 ? (
+           <div className="flex flex-col items-center justify-center h-full text-center">
+             <div className="w-16 h-16 bg-accent-primary/10 rounded-2xl flex items-center justify-center mb-4 border border-accent-primary/20">
+               <MessageSquare className="w-8 h-8 text-accent-primary" />
+             </div>
+             <h3 className="text-lg font-semibold text-text-primary mb-2">Start a Conversation</h3>
+             <p className="text-sm text-text-secondary max-w-md">
+               Send a message to chat with your AI model through the Memory Gateway.
+               {models.length === 0 && ' No models are currently available — check your Gateway endpoint.'}
+             </p>
+           </div>
+         ) : (
+           <div className="space-y-4 max-w-3xl mx-auto">
+             {messages.map((msg, idx) => (
+               <div
+                 key={idx}
+                 className={`flex group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+               >
+                 <div
+                   className={`max-w-[90%] sm:max-w-[80%] rounded-xl px-4 py-3 ${
+                     msg.role === 'user'
+                       ? 'bg-accent-primary/10 border border-accent-primary/20 text-text-primary'
+                       : 'bg-bg-card border border-border-primary text-text-primary'
+                   }`}
+                 >
+                   <div className="flex items-start justify-between gap-2">
+                     <p className="text-sm whitespace-pre-wrap break-words flex-1">{msg.content}</p>
+                     {msg.role === 'assistant' && (
+                       <button
+                         onClick={() => handleCopyMessage(msg.content)}
+                         className="p-1.5 rounded hover:bg-white/10 text-text-tertiary hover:text-text-primary transition-all duration-200 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                         title="Copy message"
+                       >
+                         <Copy className="w-4 h-4" />
+                       </button>
+                     )}
+                   </div>
+                   <p className={`text-[10px] sm:text-xs mt-1.5 ${
+                     msg.role === 'user' ? 'text-accent-primary/60' : 'text-text-tertiary'
+                   }`}>
+                     {msg.role === 'user' ? 'You' : selectedModel || 'Model'}
+                   </p>
+                 </div>
+               </div>
+             ))}
+ 
+             {/* Loading Indicator */}
+             {loading && (
+               <div className="flex justify-start">
+                 <div className="bg-bg-card border border-border-primary rounded-xl px-4 py-3">
+                   <div className="flex items-center gap-2">
+                     <Loader2 className="w-4 h-4 text-accent-primary animate-spin" />
+                     <span className="text-xs text-text-secondary">Thinking...</span>
+                   </div>
+                 </div>
+               </div>
+             )}
+ 
+             <div ref={messagesEndRef} />
+           </div>
+         )}
+       </div>
 
       {/* Error Banner */}
       {error && (
@@ -347,49 +347,49 @@ const ChatPage: React.FC = () => {
       )}
 
       {/* Input Area */}
-      <div className="px-6 py-4 border-t border-border-primary bg-bg-card">
-        <div className="max-w-3xl mx-auto">
-          <div className="flex items-end gap-3">
-            <div className="flex-1 relative">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={handleTextareaInput}
-                onKeyDown={handleKeyDown}
-                placeholder={models.length === 0 ? 'No models available — check your Gateway endpoint' : 'Type a message... (Enter to send, Shift+Enter for new line)'}
-                disabled={loading || models.length === 0}
-                rows={1}
-                className="w-full px-4 py-3 bg-bg-secondary border border-border-primary rounded-xl text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-              />
+        <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-border-primary bg-bg-card">
+          <div className="max-w-3xl mx-auto">
+            <div className="flex items-end gap-2 sm:gap-3">
+              <div className="flex-1 relative">
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={handleTextareaInput}
+                  onKeyDown={handleKeyDown}
+                  placeholder={models.length === 0 ? 'No models available — check your Gateway endpoint' : 'Type a message... (Enter to send, Shift+Enter for new line)'}
+                  disabled={loading || models.length === 0}
+                  rows={1}
+                  className="w-full px-4 py-3 bg-bg-secondary border border-border-primary rounded-xl text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                />
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={handleClearChat}
+                  disabled={loading || messages.length === 0}
+                  className="p-3 rounded-xl text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px] min-w-[48px] flex items-center justify-center"
+                  title="Clear chat"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleSend}
+                  disabled={loading || !input.trim() || models.length === 0}
+                  className="p-3 rounded-xl bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 hover:shadow-accent-primary/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none min-h-[48px] min-w-[48px] flex items-center justify-center"
+                  title="Send message"
+                >
+                  {loading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleClearChat}
-                disabled={loading || messages.length === 0}
-                className="p-3 rounded-xl text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Clear chat"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleSend}
-                disabled={loading || !input.trim() || models.length === 0}
-                className="p-3 rounded-xl bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 hover:shadow-accent-primary/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
-                title="Send message"
-              >
-                {loading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-              </button>
-            </div>
+            <p className="text-[10px] sm:text-xs text-text-tertiary mt-2 text-center">
+              Responses are generated by the selected model via the Memory Gateway
+            </p>
           </div>
-          <p className="text-[10px] text-text-tertiary mt-2 text-center">
-            Responses are generated by the selected model via the Memory Gateway
-          </p>
         </div>
-      </div>
 
       {/* Toast */}
       {toastMessage && (

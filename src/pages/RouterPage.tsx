@@ -5,6 +5,7 @@ import { GpuInfo } from '../types';
 import Toast from '../components/Toast';
 import GpuSummary from '../components/GpuSummary';
 import GpuTable from '../components/GpuTable';
+import MobileAccordionSection from '../components/MobileAccordionSection';
 import { useNavigate } from 'react-router-dom';
 import {
   Cpu,
@@ -249,43 +250,43 @@ const RouterPage: React.FC = () => {
   };
 
   return (
-      <div className={`p-6 h-full flex flex-col ${isStale ? 'opacity-80' : ''}`}>
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
-              Router
-            </h2>
-            {refreshing && (
-              <span className="flex items-center gap-1 text-[10px] text-text-tertiary">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Refreshing…
-              </span>
-            )}
-            {isStale && (
-              <span className="flex items-center gap-1 text-[10px] text-status-warning bg-status-warning/10 px-2 py-0.5 rounded-full">
-                <AlertCircle className="w-3 h-3" />
-                Data stale
-              </span>
-            )}
-          </div>
-          <p className="text-sm text-text-secondary mt-1">
-             Launch and manage local GGUF models via the Qonduit Router
-           </p>
-           <button
-             onClick={() => navigate('/models')}
-             className="mt-2 inline-flex items-center gap-1.5 text-xs text-accent-primary hover:text-accent-primary-hover font-medium transition-colors"
-           >
-             <Plus className="w-3 h-3" />
-             Add model from Hugging Face
-             <ArrowRight className="w-3 h-3" />
-           </button>
-           {lastUpdated && !refreshing && (
-             <p className="text-[10px] text-text-tertiary mt-0.5">
-               Updated {formatTimeAgo(lastUpdated)}
+        <div className={`px-4 py-4 sm:px-6 sm:py-6 h-full flex flex-col ${isStale ? 'opacity-80' : ''}`}>
+          {/* Header */}
+          <div className="mb-4 sm:mb-6">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
+                Router
+              </h2>
+              {refreshing && (
+                <span className="flex items-center gap-1 text-[10px] sm:text-xs text-text-tertiary">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Refreshing…
+                </span>
+              )}
+              {isStale && (
+                <span className="flex items-center gap-1 text-[10px] sm:text-xs text-status-warning bg-status-warning/10 px-2 py-0.5 rounded-full">
+                  <AlertCircle className="w-3 h-3" />
+                  Data stale
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-text-secondary mt-1">
+               Launch and manage local GGUF models via the Qonduit Router
              </p>
-           )}
-        </div>
+             <button
+               onClick={() => navigate('/models')}
+               className="mt-2 inline-flex items-center gap-1.5 text-xs text-accent-primary hover:text-accent-primary-hover font-medium transition-colors"
+             >
+               <Plus className="w-3 h-3" />
+               Add model from Hugging Face
+               <ArrowRight className="w-3 h-3" />
+             </button>
+             {lastUpdated && !refreshing && (
+               <p className="text-[10px] sm:text-xs text-text-tertiary mt-0.5">
+                 Updated {formatTimeAgo(lastUpdated)}
+               </p>
+             )}
+          </div>
   
         {/* Main Content */}
         <div className="flex-1 overflow-y-auto space-y-4">
@@ -447,93 +448,94 @@ const RouterPage: React.FC = () => {
             )}
   
             {/* Context Size Selector */}
-            {routerModels.length > 0 && (
-              <div className="mb-4 pt-4 border-t border-border-subtle">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-medium text-text-secondary">Context Size</label>
-                  <span className="text-xs font-mono text-accent-primary font-semibold">{ctxSize.toLocaleString()}</span>
-                </div>
-                <div className="flex gap-1.5 mb-2">
-                  {PRESET_CTX.map((ctx) => (
-                    <button
-                      key={ctx}
-                      onClick={() => handlePresetClick(ctx)}
-                      disabled={actionLoading}
-                      className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
-                        ctxSize === ctx
-                          ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/30'
-                          : 'bg-bg-secondary border border-border-subtle text-text-tertiary hover:text-text-primary hover:border-border-primary disabled:opacity-50 disabled:cursor-not-allowed'
-                      }`}
-                    >
-                      {ctx >= 1000 ? `${ctx / 1000}k` : ctx}
-                    </button>
-                  ))}
-                </div>
-                {suggestedCtx && ctxSize !== suggestedCtx && (
-                  <p className="text-[10px] text-accent-primary">Suggested: {suggestedCtx}</p>
-                )}
-                {ctxChanged && (
-                  <p className="text-[10px] text-status-warning flex items-center gap-1 mt-1">
-                    <AlertCircle className="w-3 h-3" />
-                    Context changed from {runningCtxSize?.toLocaleString()} — restart to apply
-                  </p>
-                )}
-              </div>
-            )}
+             {routerModels.length > 0 && (
+               <div className="mb-4 pt-4 border-t border-border-subtle">
+                 <div className="flex items-center justify-between mb-2">
+                   <label className="text-xs font-medium text-text-secondary">Context Size</label>
+                   <span className="text-xs font-mono text-accent-primary font-semibold">{ctxSize.toLocaleString()}</span>
+                 </div>
+                 {/* Horizontal scroll on mobile */}
+                 <div className="flex gap-1.5 mb-2 overflow-x-auto pb-1 -mx-1 px-1 sm:flex-nowrap sm:overflow-visible">
+                   {PRESET_CTX.map((ctx) => (
+                     <button
+                       key={ctx}
+                       onClick={() => handlePresetClick(ctx)}
+                       disabled={actionLoading}
+                       className={`flex-shrink-0 min-w-[60px] sm:flex-1 px-2 py-2 rounded-md text-xs font-medium transition-all duration-200 ${
+                         ctxSize === ctx
+                           ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/30'
+                           : 'bg-bg-secondary border border-border-subtle text-text-tertiary hover:text-text-primary hover:border-border-primary disabled:opacity-50 disabled:cursor-not-allowed'
+                       }`}
+                     >
+                       {ctx >= 1000 ? `${ctx / 1000}k` : ctx}
+                     </button>
+                   ))}
+                 </div>
+                 {suggestedCtx && ctxSize !== suggestedCtx && (
+                   <p className="text-[10px] sm:text-xs text-accent-primary">Suggested: {suggestedCtx}</p>
+                 )}
+                 {ctxChanged && (
+                   <p className="text-[10px] sm:text-xs text-status-warning flex items-center gap-1 mt-1">
+                     <AlertCircle className="w-3 h-3" />
+                     Context changed from {runningCtxSize?.toLocaleString()} — restart to apply
+                   </p>
+                 )}
+               </div>
+             )}
   
-            {/* Action Buttons */}
-            <div className="flex gap-3">
-              <button
-                onClick={handleLaunch}
-                disabled={!canLaunch}
-                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
-                  canLaunch
-                    ? 'bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20'
-                    : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
-                }`}
-              >
-                {actionLoading && actionStatus === 'launching' ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Play className="w-4 h-4" />
-                )}
-                {actionLoading && actionStatus === 'launching' ? 'Launching...' : 'Start'}
-              </button>
-              <button
-                onClick={handleRestart}
-                disabled={!canRestart}
-                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
-                  canRestart
-                    ? ctxChanged
-                      ? 'bg-status-warning/10 text-status-warning border border-status-warning/30 hover:bg-status-warning/20 animate-pulse'
-                      : 'bg-accent-secondary/10 text-accent-secondary border border-accent-secondary/20 hover:bg-accent-secondary/20'
-                    : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
-                }`}
-              >
-                {actionLoading && actionStatus === 'restarting' ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <RotateCcw className="w-4 h-4" />
-                )}
-                {actionLoading && actionStatus === 'restarting' ? 'Restarting...' : 'Restart'}
-              </button>
-              <button
-                onClick={handleStop}
-                disabled={!canStop}
-                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
-                  canStop
-                    ? 'bg-status-error/10 text-status-error border border-status-error/20 hover:bg-status-error/20'
-                    : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
-                }`}
-              >
-                {actionLoading && actionStatus === 'stopping' ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Square className="w-4 h-4" />
-                )}
-                {actionLoading && actionStatus === 'stopping' ? 'Stopping...' : 'Stop'}
-              </button>
-            </div>
+            {/* Action Buttons — stacked on mobile */}
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                <button
+                  onClick={handleLaunch}
+                  disabled={!canLaunch}
+                  className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
+                    canLaunch
+                      ? 'bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20'
+                      : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
+                  }`}
+                >
+                  {actionLoading && actionStatus === 'launching' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Play className="w-4 h-4" />
+                  )}
+                  {actionLoading && actionStatus === 'launching' ? 'Launching...' : 'Start'}
+                </button>
+                <button
+                  onClick={handleRestart}
+                  disabled={!canRestart}
+                  className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
+                    canRestart
+                      ? ctxChanged
+                        ? 'bg-status-warning/10 text-status-warning border border-status-warning/30 hover:bg-status-warning/20 animate-pulse'
+                        : 'bg-accent-secondary/10 text-accent-secondary border border-accent-secondary/20 hover:bg-accent-secondary/20'
+                      : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
+                  }`}
+                >
+                  {actionLoading && actionStatus === 'restarting' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-4 h-4" />
+                  )}
+                  {actionLoading && actionStatus === 'restarting' ? 'Restarting...' : 'Restart'}
+                </button>
+                <button
+                  onClick={handleStop}
+                  disabled={!canStop}
+                  className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
+                    canStop
+                      ? 'bg-status-error/10 text-status-error border border-status-error/20 hover:bg-status-error/20'
+                      : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
+                  }`}
+                >
+                  {actionLoading && actionStatus === 'stopping' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Square className="w-4 h-4" />
+                  )}
+                  {actionLoading && actionStatus === 'stopping' ? 'Stopping...' : 'Stop'}
+                </button>
+              </div>
   
             {/* Action Message */}
             {actionMessage && (
@@ -559,19 +561,18 @@ const RouterPage: React.FC = () => {
             </p>
           </div>
   
-          {/* About the Router */}
-           <div className="bg-bg-card rounded-xl border border-border-primary p-5">
-             <h3 className="text-sm font-semibold text-text-primary mb-3">About the Router</h3>
-             <p className="text-xs text-text-secondary leading-relaxed">
-               The Qonduit Router is a control-plane service that manages model lifecycle.
-               It launches and stops llama.cpp servers that serve GGUF models via the Direct endpoint.
-               Router operation is independent of your chat provider setting (Gateway or Direct) —
-               you can launch models from the Dashboard at any time.
-             </p>
-             <p className="text-[10px] text-text-tertiary mt-2">
-               Note: GPU memory shown includes all detected GPUs (including display adapters). Not all detected VRAM may be available for inference.
-             </p>
-           </div>
+          {/* About the Router — collapsed by default on mobile */}
+            <MobileAccordionSection title="About the Router" defaultOpen={false} localStorageKey="qonduit-router-about">
+              <p className="text-xs sm:text-sm text-text-secondary leading-relaxed">
+                The Qonduit Router is a control-plane service that manages model lifecycle.
+                It launches and stops llama.cpp servers that serve GGUF models via the Direct endpoint.
+                Router operation is independent of your chat provider setting (Gateway or Direct) —
+                you can launch models from the Dashboard at any time.
+              </p>
+              <p className="text-[10px] sm:text-xs text-text-tertiary mt-2">
+                Note: GPU memory shown includes all detected GPUs (including display adapters). Not all detected VRAM may be available for inference.
+              </p>
+            </MobileAccordionSection>
         </div>
   
         {/* Toast */}

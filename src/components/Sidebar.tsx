@@ -115,9 +115,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onChangePage }) => {
               }`}
             >
               <span className={`flex-shrink-0 ${currentPage === item.id ? 'text-accent-primary' : 'text-text-tertiary group-hover:text-text-primary'}`}>
-                {item.icon}
-              </span>
-              <span className="text-sm font-medium">{item.label}</span>
+                  {item.icon}
+                </span>
+                <span className="text-sm font-medium">{item.label}</span>
             </button>
           ))}
         </nav>

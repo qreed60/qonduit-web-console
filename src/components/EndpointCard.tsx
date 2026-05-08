@@ -59,82 +59,82 @@ const EndpointCard: React.FC<EndpointCardProps> = ({
   const statusLabel = status === 'loading' ? 'Checking...' : status === 'online' ? 'Online' : status === 'offline' ? 'Offline' : 'Pending';
 
   return (
-    <div
-      className={`bg-bg-card rounded-xl border border-border-primary border-l-2 p-5 shadow-card hover:shadow-card-hover transition-all duration-200 ${borderClass}`}
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 bg-bg-secondary rounded-lg flex items-center justify-center border border-border-subtle flex-shrink-0">
-            <span className="text-base">{icon}</span>
-          </div>
-          <div className="min-w-0">
-            <h3 className="font-semibold text-text-primary text-sm">{name}</h3>
-            <p className="text-xs text-text-tertiary mt-0.5 truncate">{description}</p>
+      <div
+        className={`bg-bg-card rounded-xl border border-border-primary border-l-2 p-4 sm:p-5 shadow-card hover:shadow-card-hover transition-all duration-200 ${borderClass}`}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 bg-bg-secondary rounded-lg flex items-center justify-center border border-border-subtle flex-shrink-0">
+              <span className="text-base">{icon}</span>
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-semibold text-text-primary text-sm">{name}</h3>
+              <p className="text-xs text-text-tertiary mt-0.5 truncate">{description}</p>
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* URL Row */}
-      <div className="mb-4 flex items-center gap-2">
-        <p className="text-xs font-mono text-text-tertiary truncate flex-1" title={url}>
-          {url}
-        </p>
-        <button
-          onClick={handleCopy}
-          className="p-1 rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-all duration-200 flex-shrink-0"
-          title={copied ? 'Copied!' : 'Copy URL'}
-        >
-          {copied ? (
-            <CheckCircle2 className="w-3.5 h-3.5 text-status-success" />
-          ) : (
-            <Copy className="w-3.5 h-3.5" />
-          )}
-        </button>
-        {externalUrl && (
-          <a
-            href={externalUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-1 rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-all duration-200 flex-shrink-0"
-            title="Open in new tab"
+  
+        {/* URL Row */}
+        <div className="mb-3 sm:mb-4 flex items-center gap-2">
+          <p className="text-xs font-mono text-text-tertiary truncate flex-1 break-all" title={url}>
+            {url}
+          </p>
+          <button
+            onClick={handleCopy}
+            className="p-2 rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-all duration-200 flex-shrink-0 min-h-[32px] min-w-[32px] flex items-center justify-center"
+            title={copied ? 'Copied!' : 'Copy URL'}
           >
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
-        )}
-      </div>
-
-      {/* Footer */}
-       <div className="flex items-center justify-between">
-         <div className="flex items-center gap-2">
-           <StatusBadge status={status} label={statusLabel} />
-           {checkedAt && (
-             <span className="flex items-center gap-1 text-[10px] text-text-tertiary">
-               <Clock className="w-2.5 h-2.5" />
-               {(() => {
-                 const diff = Math.floor((Date.now() - checkedAt.getTime()) / 1000);
-                 return diff < 60 ? `${diff}s ago` : `${Math.floor(diff / 60)}m ago`;
-               })()}
-             </span>
-           )}
+            {copied ? (
+              <CheckCircle2 className="w-4 h-4 text-status-success" />
+            ) : (
+              <Copy className="w-4 h-4" />
+            )}
+          </button>
+          {externalUrl && (
+            <a
+              href={externalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2 rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-all duration-200 flex-shrink-0 min-h-[32px] min-w-[32px] flex items-center justify-center"
+              title="Open in new tab"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          )}
+        </div>
+  
+        {/* Footer */}
+         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+           <div className="flex items-center gap-2">
+             <StatusBadge status={status} label={statusLabel} />
+             {checkedAt && (
+               <span className="text-[10px] sm:text-xs text-text-tertiary hidden sm:inline-flex items-center gap-1">
+                 <Clock className="w-2.5 h-2.5" />
+                 {(() => {
+                   const diff = Math.floor((Date.now() - checkedAt.getTime()) / 1000);
+                   return diff < 60 ? `${diff}s ago` : `${Math.floor(diff / 60)}m ago`;
+                 })()}
+               </span>
+             )}
+           </div>
+           <button
+             onClick={handleTest}
+             disabled={testLoading}
+             className="px-4 py-2 rounded-lg text-xs font-medium border border-border-primary text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 min-h-[40px] w-full sm:w-auto"
+           >
+             {testLoading ? 'Testing...' : 'Test'}
+           </button>
          </div>
-         <button
-           onClick={handleTest}
-           disabled={testLoading}
-           className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border-primary text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-         >
-           {testLoading ? 'Testing...' : 'Test'}
-         </button>
+  
+         {/* Error Detail */}
+         {error && (
+           <div className="mt-3 p-2.5 bg-status-error/5 border border-status-error/15 rounded-lg">
+             <p className="text-[10px] sm:text-xs text-status-error font-mono break-all leading-relaxed">{error}</p>
+           </div>
+         )}
        </div>
- 
-       {/* Error Detail */}
-       {error && (
-         <div className="mt-3 p-2.5 bg-status-error/5 border border-status-error/15 rounded-lg">
-           <p className="text-[10px] text-status-error font-mono break-all leading-relaxed">{error}</p>
-         </div>
-       )}
-     </div>
-   );
+     );
  };
 
 export default EndpointCard;

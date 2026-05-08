@@ -37,63 +37,63 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
   };
 
   return (
-    <div className="bg-bg-card rounded-xl border border-border-primary p-5 shadow-card">
-      <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2 mb-1">
-        <Search className="w-4 h-4 text-accent-primary" />
-        Search
-      </h3>
-      <p className="text-[10px] text-text-tertiary mb-4">
-        Project: <span className="font-mono">{projectId}</span> · Uses POST /v1/rag/projects/{projectId}/search — explicit user-triggered only
-      </p>
-
-      {/* Search form */}
-      <form onSubmit={handleSubmit} className="mb-4">
-        <div className="flex flex-col sm:flex-row gap-2">
+      <div className="bg-bg-card rounded-xl border border-border-primary p-4 sm:p-5 shadow-card">
+        <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2 mb-1">
+          <Search className="w-4 h-4 text-accent-primary" />
+          Search
+        </h3>
+        <p className="text-[10px] sm:text-xs text-text-tertiary mb-3">
+          Project: <span className="font-mono">{projectId}</span> · Uses POST /v1/rag/projects/{projectId}/search — explicit user-triggered only
+        </p>
+  
+        {/* Search form — stacked on mobile */}
+        <form onSubmit={handleSubmit} className="mb-4 space-y-2">
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search query..."
-            className="flex-1 px-3 py-2 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 transition-all duration-200"
+            className="w-full px-3 py-2.5 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 transition-all duration-200 min-h-[44px]"
           />
-          <select
-            value={limit}
-            onChange={(e) => setLimit(Number(e.target.value))}
-            className="px-3 py-2 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 transition-all duration-200"
-          >
-            {[2, 4, 8, 12, 20].map(n => (
-              <option key={n} value={n}>{n} results</option>
-            ))}
-          </select>
-          <select
-            value={collection || ''}
-            onChange={(e) => setCollection(e.target.value || undefined)}
-            className="px-3 py-2 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 transition-all duration-200"
-          >
-            <option value="">All collections</option>
-            {availableCollections.map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+          <div className="flex gap-2">
+            <select
+              value={limit}
+              onChange={(e) => setLimit(Number(e.target.value))}
+              className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 transition-all duration-200 min-h-[44px]"
+            >
+              {[2, 4, 8, 12, 20].map(n => (
+                <option key={n} value={n}>{n} results</option>
+              ))}
+            </select>
+            <select
+              value={collection || ''}
+              onChange={(e) => setCollection(e.target.value || undefined)}
+              className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 transition-all duration-200 min-h-[44px]"
+            >
+              <option value="">All collections</option>
+              {availableCollections.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
           <button
             type="submit"
             disabled={searchLoading || !query.trim()}
-            className="px-4 py-2 rounded-lg text-xs font-medium bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 transition-all duration-200 disabled:opacity-50 disabled:shadow-none flex items-center gap-1.5"
+            className="w-full px-4 py-3 rounded-lg text-xs font-medium bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 transition-all duration-200 disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-1.5 min-h-[44px]"
           >
             {searchLoading ? (
               <>
-                <Loader2 className="w-3 h-3 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin" />
                 Searching...
               </>
             ) : (
               <>
-                <Search className="w-3 h-3" />
+                <Search className="w-4 h-4" />
                 Search
               </>
             )}
           </button>
-        </div>
-      </form>
+        </form>
 
       {/* Results */}
       {searchResults && searchResults.results.length > 0 && (

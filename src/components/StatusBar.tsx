@@ -42,40 +42,40 @@ const StatusBar: React.FC<StatusBarProps> = ({ settings, onGoToDashboard }) => {
    ];
 
   return (
-    <header className="h-14 bg-bg-secondary border-b border-border-subtle flex items-center px-4 space-x-3 flex-shrink-0">
-      {/* Dashboard CTA */}
-      {onGoToDashboard && (
-        <button
-          onClick={onGoToDashboard}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-all duration-200"
-        >
-          <LayoutDashboard className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">Dashboard</span>
-        </button>
-      )}
-
-      {/* Mode Badge */}
-      <div className="flex items-center space-x-2 flex-shrink-0">
-        <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${modeColor}`}>
-          {modeLabel}
-        </span>
-      </div>
-
-      {/* Provider Pill */}
-      <div className="flex items-center space-x-1.5 flex-shrink-0">
-        <div className="px-2.5 py-1 rounded-lg text-xs font-medium bg-accent-primary/10 text-accent-primary border border-accent-primary/20">
-          {settings.defaultProvider}
-        </div>
-      </div>
-
-      {/* Model Pill */}
-      <div className="flex items-center space-x-1.5 flex-shrink-0">
-        <div className="px-2.5 py-1 rounded-lg text-xs font-medium bg-bg-tertiary text-text-primary border border-border-subtle truncate max-w-[160px]" title={settings.defaultModel}>
-          {settings.defaultModel}
-        </div>
-      </div>
-
-      {/* Endpoints Dropdown */}
+    <header className="h-14 bg-bg-secondary border-b border-border-subtle flex items-center px-4 space-x-2 sm:space-x-3 flex-shrink-0">
+       {/* Dashboard CTA */}
+       {onGoToDashboard && (
+         <button
+           onClick={onGoToDashboard}
+           className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-text-secondary hover:bg-bg-tertiary hover:text-text-primary transition-all duration-200"
+         >
+           <LayoutDashboard className="w-3.5 h-3.5" />
+           <span className="hidden sm:inline">Dashboard</span>
+         </button>
+       )}
+ 
+       {/* Mode Badge */}
+       <div className="flex items-center space-x-2 flex-shrink-0">
+         <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${modeColor}`}>
+           {modeLabel}
+         </span>
+       </div>
+ 
+       {/* Provider Pill */}
+       <div className="flex items-center space-x-1.5 flex-shrink-0">
+         <div className="px-2.5 py-1 rounded-lg text-xs font-medium bg-accent-primary/10 text-accent-primary border border-accent-primary/20">
+           {settings.defaultProvider}
+         </div>
+       </div>
+ 
+       {/* Model Pill — hidden on mobile to save space */}
+       <div className="hidden sm:flex items-center space-x-1.5 flex-shrink-0">
+         <div className="px-2.5 py-1 rounded-lg text-xs font-medium bg-bg-tertiary text-text-primary border border-border-subtle truncate max-w-[160px]" title={settings.defaultModel}>
+           {settings.defaultModel}
+         </div>
+       </div>
+ 
+       {/* Endpoints Dropdown */}
       <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => setShowEndpoints(!showEndpoints)}

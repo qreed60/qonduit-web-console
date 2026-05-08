@@ -341,54 +341,54 @@ const DashboardPage: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-bg-primary">
-      {/* Status Bar */}
-      <StatusBar settings={settings} />
-
-      {/* Dashboard Content */}
-      <div className="flex-1 overflow-y-auto p-6">
-        {/* Page Header */}
-        <div className="mb-6">
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
-              Qonduit Control Center
-            </h1>
-            {contentRefreshing && (
-              <span className="flex items-center gap-1 text-[10px] text-text-tertiary">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Refreshing…
-              </span>
-            )}
-          </div>
-          <p className="text-text-secondary mt-1">
-            Monitor and manage your AI infrastructure
-          </p>
-          {lastUpdated && !contentRefreshing && (
-            <p className="text-[10px] text-text-tertiary mt-0.5">
-              Updated {formatTimeAgo(lastUpdated)}
-            </p>
-          )}
-        </div>
-
-        {/* System Overview */}
-                 <div className="mb-6">
-                   <SystemOverview
-                     endpointHealth={endpointHealth}
-                     healthLoading={healthLoading}
-                     routerStatus={routerStatus}
-                     chatModel={selectedChatModel}
-                     routerRunningModel={routerStatus?.running_model || undefined}
-                     gpuStatus={gpuStatus}
-                     gpuError={gpuError}
-                     endpointErrors={endpointErrors}
-                     onRefresh={testAllEndpoints}
-                   />
-                 </div>
-
-        {/* Endpoint Cards */}
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold text-text-primary mb-4">Endpoints</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+     <div className="flex flex-col h-full bg-bg-primary">
+       {/* Status Bar */}
+       <StatusBar settings={settings} />
+ 
+       {/* Dashboard Content */}
+       <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+         {/* Page Header */}
+         <div className="mb-4 sm:mb-6">
+           <div className="flex items-center gap-2">
+             <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
+               Qonduit Control Center
+             </h1>
+             {contentRefreshing && (
+               <span className="flex items-center gap-1 text-[10px] sm:text-xs text-text-tertiary">
+                 <Loader2 className="w-3 h-3 animate-spin" />
+                 Refreshing…
+               </span>
+             )}
+           </div>
+           <p className="text-sm sm:text-base text-text-secondary mt-1">
+             Monitor and manage your AI infrastructure
+           </p>
+           {lastUpdated && !contentRefreshing && (
+             <p className="text-[10px] sm:text-xs text-text-tertiary mt-0.5">
+               Updated {formatTimeAgo(lastUpdated)}
+             </p>
+           )}
+         </div>
+ 
+         {/* System Overview */}
+                  <div className="mb-4 sm:mb-6">
+                    <SystemOverview
+                      endpointHealth={endpointHealth}
+                      healthLoading={healthLoading}
+                      routerStatus={routerStatus}
+                      chatModel={selectedChatModel}
+                      routerRunningModel={routerStatus?.running_model || undefined}
+                      gpuStatus={gpuStatus}
+                      gpuError={gpuError}
+                      endpointErrors={endpointErrors}
+                      onRefresh={testAllEndpoints}
+                    />
+                  </div>
+ 
+         {/* Endpoint Cards */}
+         <div className="mb-4 sm:mb-6">
+           <h2 className="text-base sm:text-lg font-semibold text-text-primary mb-3 sm:mb-4">Endpoints</h2>
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
             <EndpointCard
               name="Memory Gateway"
               icon="🌐"
@@ -472,81 +472,81 @@ const DashboardPage: React.FC = () => {
          </div>
  
          {/* RAG Browser Card */}
-                    <div className="mb-6">
-                      <div className="bg-bg-card rounded-xl border border-border-primary p-5 shadow-card">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2">
-                            <Database className="w-4 h-4 text-accent-primary" />
-                            <h3 className="text-sm font-semibold text-text-primary">RAG Browser</h3>
-                          </div>
-                          <button
-                            onClick={() => navigate('/rag')}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 transition-all duration-200 flex items-center gap-1.5"
-                          >
-                            Open RAG Browser
-                            <ArrowRight className="w-3 h-3" />
-                          </button>
-                        </div>
-           
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                          {/* Qdrant status */}
-                          <div>
-                            <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Qdrant</span>
-                            <div className="flex items-center gap-1.5 mt-1">
-                              {ragHealth?.qdrant.ok ? (
-                                <>
-                                  <div className="w-2 h-2 rounded-full bg-status-success" />
-                                  <span className="text-xs text-status-success">Connected</span>
-                                </>
-                              ) : ragHealth?.qdrant.ok === false ? (
-                                <>
-                                  <div className="w-2 h-2 rounded-full bg-status-error" />
-                                  <span className="text-xs text-status-error">Disconnected</span>
-                                </>
-                              ) : (
-                                <span className="text-xs text-text-tertiary">Checking...</span>
-                              )}
-                            </div>
-                          </div>
-           
-                          {/* Embeddings status */}
-                          <div>
-                            <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Embeddings</span>
-                            <div className="flex items-center gap-1.5 mt-1">
-                              {ragHealth?.embedding.ok ? (
-                                <>
-                                  <div className="w-2 h-2 rounded-full bg-status-success" />
-                                  <span className="text-xs text-status-success">Available</span>
-                                </>
-                              ) : ragHealth?.embedding.ok === false ? (
-                                <>
-                                  <div className="w-2 h-2 rounded-full bg-status-error" />
-                                  <span className="text-xs text-status-error">Unavailable</span>
-                                </>
-                              ) : (
-                                <span className="text-xs text-text-tertiary">Checking...</span>
-                              )}
-                            </div>
-                          </div>
-           
-                          {/* Projects count */}
-                          <div>
-                            <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Projects</span>
-                            <p className="text-xs text-text-secondary mt-1">
-                              {ragProjects.length} total
-                            </p>
-                          </div>
-           
-                          {/* Total points */}
-                          <div>
-                            <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Total Points</span>
-                            <p className="text-xs text-text-secondary mt-1">
-                              {ragTotalPoints.toLocaleString()}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                     <div className="mb-4 sm:mb-6">
+                       <div className="bg-bg-card rounded-xl border border-border-primary p-4 sm:p-5 shadow-card">
+                         <div className="flex items-center justify-between mb-3 sm:mb-4">
+                           <div className="flex items-center gap-2">
+                             <Database className="w-4 h-4 text-accent-primary" />
+                             <h3 className="text-sm font-semibold text-text-primary">RAG Browser</h3>
+                           </div>
+                           <button
+                             onClick={() => navigate('/rag')}
+                             className="px-3 py-2 rounded-lg text-xs font-medium bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 transition-all duration-200 flex items-center gap-1.5 min-h-[44px]"
+                           >
+                             Open RAG Browser
+                             <ArrowRight className="w-3 h-3" />
+                           </button>
+                         </div>
+ 
+                         <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                           {/* Qdrant status */}
+                           <div>
+                             <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Qdrant</span>
+                             <div className="flex items-center gap-1.5 mt-1">
+                               {ragHealth?.qdrant.ok ? (
+                                 <>
+                                   <div className="w-2 h-2 rounded-full bg-status-success" />
+                                   <span className="text-xs text-status-success">Connected</span>
+                                 </>
+                               ) : ragHealth?.qdrant.ok === false ? (
+                                 <>
+                                   <div className="w-2 h-2 rounded-full bg-status-error" />
+                                   <span className="text-xs text-status-error">Disconnected</span>
+                                 </>
+                               ) : (
+                                 <span className="text-xs text-text-tertiary">Checking...</span>
+                               )}
+                             </div>
+                           </div>
+ 
+                           {/* Embeddings status */}
+                           <div>
+                             <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Embeddings</span>
+                             <div className="flex items-center gap-1.5 mt-1">
+                               {ragHealth?.embedding.ok ? (
+                                 <>
+                                   <div className="w-2 h-2 rounded-full bg-status-success" />
+                                   <span className="text-xs text-status-success">Available</span>
+                                 </>
+                               ) : ragHealth?.embedding.ok === false ? (
+                                 <>
+                                   <div className="w-2 h-2 rounded-full bg-status-error" />
+                                   <span className="text-xs text-status-error">Unavailable</span>
+                                 </>
+                               ) : (
+                                 <span className="text-xs text-text-tertiary">Checking...</span>
+                               )}
+                             </div>
+                           </div>
+ 
+                           {/* Projects count */}
+                           <div>
+                             <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Projects</span>
+                             <p className="text-xs sm:text-sm text-text-secondary mt-1">
+                               {ragProjects.length} total
+                             </p>
+                           </div>
+ 
+                           {/* Total points */}
+                           <div>
+                             <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Total Points</span>
+                             <p className="text-xs sm:text-sm text-text-secondary mt-1">
+                               {ragTotalPoints.toLocaleString()}
+                             </p>
+                           </div>
+                         </div>
+                       </div>
+                     </div>
  
          {/* Coming Soon */}
         <div>

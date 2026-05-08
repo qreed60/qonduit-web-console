@@ -140,31 +140,31 @@ const SystemOverview: React.FC<SystemOverviewProps> = ({
       </div>
 
       {/* Health Cards Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        {healthCards.map(({ label, icon: Icon, status, loadingLabel, onlineLabel, offlineLabel, unknownLabel }) => (
-          <div
-            key={label}
-            className={`flex items-center gap-3 px-3 py-2.5 bg-bg-secondary rounded-lg border border-border-subtle ${
-              routerOffline && label === 'Router' ? 'border-status-warning/30' : ''
-            }`}
-          >
-            <Icon className="w-4 h-4 text-text-tertiary flex-shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-medium text-text-tertiary uppercase tracking-wider">{label}</p>
-              <StatusBadge
-                status={getStatus(status)}
-                label={
-                  status === null && healthLoading ? loadingLabel :
-                  status === true ? onlineLabel :
-                  status === false ? offlineLabel :
-                  unknownLabel
-                }
-                size="sm"
-              />
-            </div>
-          </div>
-        ))}
-      </div>
+       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+         {healthCards.map(({ label, icon: Icon, status, loadingLabel, onlineLabel, offlineLabel, unknownLabel }) => (
+           <div
+             key={label}
+             className={`flex items-center gap-3 px-3 py-3 bg-bg-secondary rounded-lg border border-border-subtle ${
+               routerOffline && label === 'Router' ? 'border-status-warning/30' : ''
+             }`}
+           >
+             <Icon className="w-5 h-5 text-text-tertiary flex-shrink-0" />
+             <div className="min-w-0 flex-1">
+               <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">{label}</p>
+               <StatusBadge
+                 status={getStatus(status)}
+                 label={
+                   status === null && healthLoading ? loadingLabel :
+                   status === true ? onlineLabel :
+                   status === false ? offlineLabel :
+                   unknownLabel
+                 }
+                 size="sm"
+               />
+             </div>
+           </div>
+         ))}
+       </div>
 
       {/* Error Details */}
        {endpointErrors && Object.values(endpointErrors).some((e) => e) && (
@@ -183,33 +183,33 @@ const SystemOverview: React.FC<SystemOverviewProps> = ({
        )}
  
        {/* Model Info Bar */}
-                {(chatModel || routerRunningDisplay) && (
-                  <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary/50 rounded-lg border border-border-subtle">
-                    <div className="flex items-center gap-3">
-                      <Server className="w-3.5 h-3.5 text-text-tertiary" />
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-text-secondary">Chat:</span>
-                        <span className="text-xs font-mono text-text-primary truncate max-w-[150px]" title={chatModel || ''}>
-                          {chatModel || '—'}
-                        </span>
-                      </div>
-                      {routerRunningDisplay && (
-                        <>
-                          <span className="text-text-tertiary">·</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-text-secondary">Router:</span>
-                            <span className="text-xs font-mono text-text-primary truncate max-w-[150px]" title={routerRunningDisplay}>
-                              {routerRunningDisplay}
-                            </span>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    <span className="text-[10px] text-text-tertiary">
-                      Last checked: {new Date(lastChecked).toLocaleTimeString()}
-                    </span>
-                  </div>
-                )}
+                 {(chatModel || routerRunningDisplay) && (
+                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-3 py-2.5 bg-bg-secondary/50 rounded-lg border border-border-subtle">
+                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                       <div className="flex items-center gap-2">
+                         <Server className="w-3.5 h-3.5 text-text-tertiary flex-shrink-0" />
+                         <div className="flex items-center gap-1.5">
+                           <span className="text-xs text-text-secondary">Chat:</span>
+                           <span className="text-xs font-mono text-text-primary truncate max-w-[120px] sm:max-w-[200px]" title={chatModel || ''}>
+                             {chatModel || '—'}
+                           </span>
+                         </div>
+                       </div>
+                       {routerRunningDisplay && (
+                         <div className="flex items-center gap-1.5">
+                           <span className="text-text-tertiary hidden sm:inline">·</span>
+                           <span className="text-xs text-text-secondary sm:hidden">Router:</span>
+                           <span className="text-xs font-mono text-text-primary truncate max-w-[120px] sm:max-w-[200px]" title={routerRunningDisplay}>
+                             {routerRunningDisplay}
+                           </span>
+                         </div>
+                       )}
+                     </div>
+                     <span className="text-[10px] sm:text-xs text-text-tertiary flex-shrink-0">
+                       Last checked: {new Date(lastChecked).toLocaleTimeString()}
+                     </span>
+                   </div>
+                 )}
   
         {/* VRAM Summary */}
                         {gpuStatus && (

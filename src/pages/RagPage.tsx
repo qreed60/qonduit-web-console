@@ -335,165 +335,165 @@ const RagPage: React.FC = () => {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col h-full bg-bg-primary">
-      {/* Header */}
-      <div className="px-6 py-4 border-b border-border-subtle flex items-center justify-between flex-shrink-0">
-        <div>
-          <div className="flex items-center gap-2">
-            <Database className="w-5 h-5 text-accent-primary" />
-            <h1 className="text-xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
-              RAG Browser
-            </h1>
+      <div className="flex flex-col h-full bg-bg-primary">
+        {/* Header */}
+        <div className="px-4 py-3 sm:px-6 sm:py-4 border-b border-border-subtle flex items-center justify-between flex-shrink-0">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <Database className="w-5 h-5 text-accent-primary flex-shrink-0" />
+              <h1 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent truncate">
+                RAG Browser
+              </h1>
+            </div>
+            <p className="text-xs text-text-secondary mt-0.5 hidden sm:block">
+              Memory Gateway Phase 1 RAG Read API — browse projects, documents, chunks, and search
+            </p>
           </div>
-          <p className="text-xs text-text-secondary mt-0.5">
-            Memory Gateway Phase 1 RAG Read API — browse projects, documents, chunks, and search
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {lastUpdated && !refreshing && (
-            <span className="text-[10px] text-text-tertiary">
-              Updated {formatTimeAgo(lastUpdated)}
-            </span>
-          )}
-          <button
-            onClick={fetchAllData}
-            disabled={refreshing}
-            className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50"
-            title="Refresh all RAG data"
-          >
-            {refreshing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
+          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 ml-3">
+            {lastUpdated && !refreshing && (
+              <span className="text-[10px] sm:text-xs text-text-tertiary hidden sm:inline">
+                Updated {formatTimeAgo(lastUpdated)}
+              </span>
             )}
-          </button>
+            <button
+              onClick={fetchAllData}
+              disabled={refreshing}
+              className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-h-[40px] min-w-[40px] flex items-center justify-center"
+              title="Refresh all RAG data"
+            >
+              {refreshing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+            </button>
+          </div>
         </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-7xl mx-auto space-y-6">
-          {/* Debug info */}
-           <div className="bg-yellow-900/20 border border-yellow-700/30 rounded-xl p-3">
-             <p className="text-[10px] text-yellow-400 font-mono">
-               projects.length: {projects.length} | projectsError: {projectsError?.message || 'none'} | projectsFetched: {projectsFetched ? 'yes' : 'no'} | selectedProjectId: {selectedProjectId || 'none'} | gatewayUrl: {gatewayUrl} | endpoint: {gatewayUrl}/v1/rag/projects
-             </p>
-           </div>
-
-          {/* Top row: Health */}
-          <div className="grid grid-cols-1 lg:grid-cols-1 gap-6">
-            <RagHealthCard
-              health={health}
-              healthError={healthError}
-              healthLastChecked={healthLastChecked}
-              gatewayUrl={gatewayUrl}
-              onRefresh={fetchAllData}
-              refreshing={refreshing}
-            />
-          </div>
-
-          {/* Projects Overview */}
-          <div>
-            <h2 className="text-sm font-semibold text-text-primary mb-3 flex items-center gap-2">
-              <Database className="w-4 h-4 text-accent-primary" />
-              Projects
-            </h2>
-            {projectsError ? (
-               <div className="flex items-center gap-2 text-xs text-status-error">
-                 <span>Unable to fetch projects: {projectsError.message}</span>
-                 <span className="text-[10px] font-mono opacity-70">({gatewayUrl}/v1/rag/projects)</span>
-               </div>
-             ) : projectsFetched && projects.length === 0 ? (
-               <div className="bg-bg-card rounded-xl border border-border-primary p-6 text-center">
-                 <Database className="w-8 h-8 mx-auto text-text-tertiary/30 mb-2" />
-                 <p className="text-sm text-text-secondary">No projects returned by the backend.</p>
-                 <p className="text-xs text-text-tertiary mt-1">
-                   Expected endpoint: <code className="font-mono">{gatewayUrl}/v1/rag/projects</code>
-                 </p>
-               </div>
-             ) : (
-               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-                 {projects.map(project => (
-                   <RagProjectCard
-                     key={project.project_id}
-                     project={project}
-                     isSelected={selectedProjectId === project.project_id}
-                     onSelect={handleSelectProject}
-                     onRefresh={fetchAllData}
-                     refreshing={refreshing}
-                   />
-                 ))}
-               </div>
-             )}
-          </div>
-
-          {/* Detail area: Project detail + Collections + Documents + Search */}
-          {selectedProjectId && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left: Project detail */}
-              <div className="lg:col-span-1 space-y-6">
-                <RagProjectDetailPanel
-                  detail={projectDetail}
-                  stats={projectStats}
-                  detailError={projectDetailError}
-                  statsError={projectStatsError}
-                />
-                <RagCollectionsCard
-                   collections={collections}
-                   collectionsError={collectionsError}
-                   projectId={selectedProjectId}
-                   projectDetail={projectDetail}
-                 />
-              </div>
-
-              {/* Right: Documents + Search */}
-              <div className="lg:col-span-2 space-y-6">
-                <RagDocumentsCard
-                  documents={documents}
-                  documentsError={documentsError}
-                  projectId={selectedProjectId}
-                  selectedDocumentId={selectedDocumentId}
-                  onSelectDocument={handleSelectDocument}
-                  loading={false}
-                  onRefresh={() => fetchDocuments(selectedProjectId)}
-                  refreshing={refreshing}
-                />
-
-                {/* Chunk Viewer */}
-                {selectedDocumentId && selectedDocument && (
-                  <RagChunkViewer
-                    chunks={chunks}
-                    chunksError={chunksError}
-                    chunksLoading={chunksLoading}
-                    documentName={selectedDocument.document_name}
+  
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+          <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
+            {/* Debug info — hidden in production */}
+             <div className="hidden bg-yellow-900/20 border border-yellow-700/30 rounded-xl p-3">
+               <p className="text-[10px] text-yellow-400 font-mono">
+                 projects.length: {projects.length} | projectsError: {projectsError?.message || 'none'} | projectsFetched: {projectsFetched ? 'yes' : 'no'} | selectedProjectId: {selectedProjectId || 'none'} | gatewayUrl: {gatewayUrl}
+               </p>
+             </div>
+  
+            {/* Top row: Health */}
+            <div className="grid grid-cols-1 gap-4 sm:gap-6">
+              <RagHealthCard
+                health={health}
+                healthError={healthError}
+                healthLastChecked={healthLastChecked}
+                gatewayUrl={gatewayUrl}
+                onRefresh={fetchAllData}
+                refreshing={refreshing}
+              />
+            </div>
+  
+            {/* Projects Overview */}
+            <div>
+              <h2 className="text-sm font-semibold text-text-primary mb-3 flex items-center gap-2">
+                <Database className="w-4 h-4 text-accent-primary" />
+                Projects
+              </h2>
+              {projectsError ? (
+                 <div className="flex items-center gap-2 text-xs text-status-error">
+                   <span>Unable to fetch projects: {projectsError.message}</span>
+                   <span className="text-[10px] font-mono opacity-70">({gatewayUrl}/v1/rag/projects)</span>
+                 </div>
+               ) : projectsFetched && projects.length === 0 ? (
+                 <div className="bg-bg-card rounded-xl border border-border-primary p-6 text-center">
+                   <Database className="w-8 h-8 mx-auto text-text-tertiary/30 mb-2" />
+                   <p className="text-sm text-text-secondary">No projects returned by the backend.</p>
+                   <p className="text-xs text-text-tertiary mt-1">
+                     Expected endpoint: <code className="font-mono">{gatewayUrl}/v1/rag/projects</code>
+                   </p>
+                 </div>
+               ) : (
+                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                   {projects.map(project => (
+                     <RagProjectCard
+                       key={project.project_id}
+                       project={project}
+                       isSelected={selectedProjectId === project.project_id}
+                       onSelect={handleSelectProject}
+                       onRefresh={fetchAllData}
+                       refreshing={refreshing}
+                     />
+                   ))}
+                 </div>
+               )}
+            </div>
+  
+            {/* Detail area: Project detail + Collections + Documents + Search */}
+            {selectedProjectId && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+                {/* Left: Project detail */}
+                <div className="lg:col-span-1 space-y-4 sm:space-y-6">
+                  <RagProjectDetailPanel
+                    detail={projectDetail}
+                    stats={projectStats}
+                    detailError={projectDetailError}
+                    statsError={projectStatsError}
                   />
-                )}
-
-                <RagDiagnosticSearchCard
-                  projectId={selectedProjectId}
-                  availableCollections={availableCollections}
-                  searchResults={searchResults}
-                  searchError={searchError}
-                  searchLoading={searchLoading}
-                  onSearch={handleSearch}
-                />
+                  <RagCollectionsCard
+                     collections={collections}
+                     collectionsError={collectionsError}
+                     projectId={selectedProjectId}
+                     projectDetail={projectDetail}
+                   />
+                </div>
+  
+                {/* Right: Documents + Search */}
+                <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+                  <RagDocumentsCard
+                    documents={documents}
+                    documentsError={documentsError}
+                    projectId={selectedProjectId}
+                    selectedDocumentId={selectedDocumentId}
+                    onSelectDocument={handleSelectDocument}
+                    loading={false}
+                    onRefresh={() => fetchDocuments(selectedProjectId)}
+                    refreshing={refreshing}
+                  />
+  
+                  {/* Chunk Viewer */}
+                  {selectedDocumentId && selectedDocument && (
+                    <RagChunkViewer
+                      chunks={chunks}
+                      chunksError={chunksError}
+                      chunksLoading={chunksLoading}
+                      documentName={selectedDocument.document_name}
+                    />
+                  )}
+  
+                  <RagDiagnosticSearchCard
+                    projectId={selectedProjectId}
+                    availableCollections={availableCollections}
+                    searchResults={searchResults}
+                    searchError={searchError}
+                    searchLoading={searchLoading}
+                    onSearch={handleSearch}
+                  />
+                </div>
               </div>
-            </div>
-          )}
-
-          {/* No project selected message */}
-          {!selectedProjectId && (
-            <div className="bg-bg-card rounded-xl border border-border-primary p-8 text-center">
-              <Database className="w-10 h-10 mx-auto text-text-tertiary/30 mb-3" />
-              <p className="text-sm text-text-secondary">
-                Select a project above to view details, documents, chunks, and search.
-              </p>
-            </div>
-          )}
+            )}
+  
+            {/* No project selected message */}
+            {!selectedProjectId && (
+              <div className="bg-bg-card rounded-xl border border-border-primary p-6 sm:p-8 text-center">
+                <Database className="w-10 h-10 mx-auto text-text-tertiary/30 mb-3" />
+                <p className="text-sm text-text-secondary">
+                  Select a project above to view details, documents, chunks, and search.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
 };
 
 export default RagPage;

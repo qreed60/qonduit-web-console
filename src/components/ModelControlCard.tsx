@@ -173,171 +173,171 @@ const ModelControlCard: React.FC<ModelControlCardProps> = ({
       </div>
 
       {/* Context Size */}
-      <div className="mb-5">
-        <div className="flex items-center justify-between mb-1.5">
-          <label className="block text-xs font-medium text-text-secondary">
-            Context Size
-          </label>
-          <span className="text-xs font-mono text-accent-primary font-semibold">{ctxSize.toLocaleString()}</span>
-        </div>
+       <div className="mb-5">
+         <div className="flex items-center justify-between mb-1.5">
+           <label className="block text-xs font-medium text-text-secondary">
+             Context Size
+           </label>
+           <span className="text-xs font-mono text-accent-primary font-semibold">{ctxSize.toLocaleString()}</span>
+         </div>
+ 
+         {/* Preset Buttons — horizontal scroll on mobile */}
+         <div className="flex gap-1.5 mb-2 overflow-x-auto pb-1 -mx-1 px-1 sm:flex-nowrap sm:overflow-visible">
+           {PRESET_CTX.map((ctx) => (
+             <button
+               key={ctx}
+               onClick={() => handlePresetClick(ctx)}
+               disabled={loading}
+               className={`flex-shrink-0 min-w-[60px] sm:flex-1 px-2 py-2 rounded-md text-xs font-medium transition-all duration-200 ${
+                 ctxSize === ctx
+                   ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/30'
+                   : 'bg-bg-secondary border border-border-subtle text-text-tertiary hover:text-text-primary hover:border-border-primary disabled:opacity-50 disabled:cursor-not-allowed'
+               }`}
+             >
+               {ctx >= 1000 ? `${ctx / 1000}k` : ctx}
+             </button>
+           ))}
+         </div>
+ 
+         {/* Custom Input */}
+         <div className="flex gap-2 mb-2">
+           <input
+             type="number"
+             min={SLIDER_MIN}
+             max={SLIDER_MAX}
+             step={SLIDER_STEP}
+             value={customCtxInput}
+             onChange={handleCustomCtxChange}
+             onKeyDown={handleCustomCtxKeyDown}
+             placeholder="Custom (multiple of 512)"
+             disabled={loading}
+             className="flex-1 px-3 py-2 bg-bg-secondary border border-border-primary rounded-md text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
+           />
+           <button
+             onClick={handleCustomCtxSubmit}
+             disabled={loading || !customCtxInput}
+             className="px-4 py-2 bg-bg-secondary border border-border-primary rounded-md text-xs font-medium text-text-secondary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+           >
+             Apply
+           </button>
+         </div>
+ 
+         {/* Slider */}
+         <div className="relative">
+           <input
+             type="range"
+             min={String(SLIDER_MIN)}
+             max={String(SLIDER_MAX)}
+             step={String(SLIDER_STEP)}
+             value={ctxSize}
+             onChange={(e) => onCtxChange(Number(e.target.value))}
+             disabled={loading}
+             className="w-full h-1.5 bg-bg-secondary rounded-lg appearance-none cursor-pointer accent-accent-primary disabled:opacity-50 disabled:cursor-not-allowed"
+           />
+           {suggestedCtx && !isPreset && (
+             <div className="flex items-center gap-1 mt-1">
+               <Info className="w-3 h-3 text-accent-primary flex-shrink-0" />
+               <span className="text-[10px] sm:text-xs text-accent-primary">
+                 Suggested: {suggestedCtx}
+               </span>
+             </div>
+           )}
+           {ctxChanged && (
+             <div className="flex items-center gap-1 mt-1">
+               <AlertCircle className="w-3 h-3 text-status-warning flex-shrink-0" />
+               <span className="text-[10px] sm:text-xs text-status-warning">
+                 Context changed from {runningCtxSize.toLocaleString()} — restart to apply
+               </span>
+             </div>
+           )}
+         </div>
+       </div>
 
-        {/* Preset Buttons */}
-        <div className="flex gap-1.5 mb-2">
-          {PRESET_CTX.map((ctx) => (
-            <button
-              key={ctx}
-              onClick={() => handlePresetClick(ctx)}
-              disabled={loading}
-              className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
-                ctxSize === ctx
-                  ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/30'
-                  : 'bg-bg-secondary border border-border-subtle text-text-tertiary hover:text-text-primary hover:border-border-primary disabled:opacity-50 disabled:cursor-not-allowed'
-              }`}
-            >
-              {ctx >= 1000 ? `${ctx / 1000}k` : ctx}
-            </button>
-          ))}
-        </div>
-
-        {/* Custom Input */}
-        <div className="flex gap-2 mb-2">
-          <input
-            type="number"
-            min={SLIDER_MIN}
-            max={SLIDER_MAX}
-            step={SLIDER_STEP}
-            value={customCtxInput}
-            onChange={handleCustomCtxChange}
-            onKeyDown={handleCustomCtxKeyDown}
-            placeholder="Custom (multiple of 512)"
-            disabled={loading}
-            className="flex-1 px-3 py-1.5 bg-bg-secondary border border-border-primary rounded-md text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
-          />
+      {/* Action Buttons — stacked on mobile */}
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mb-4">
           <button
-            onClick={handleCustomCtxSubmit}
-            disabled={loading || !customCtxInput}
-            className="px-3 py-1.5 bg-bg-secondary border border-border-primary rounded-md text-xs font-medium text-text-secondary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+            onClick={onLaunch}
+            disabled={!canLaunch}
+            className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
+              canLaunch
+                ? 'bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 hover:shadow-accent-primary/30'
+                : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
+            }`}
+            title={launchDisabledReason()}
           >
-            Apply
+            {loading && actionStatus === 'launching' ? (
+              <>
+                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.825 3 7.938l3-2.647z" />
+                </svg>
+                <span>Launching...</span>
+              </>
+            ) : isRunning ? (
+              <>
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Running</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4" />
+                <span>Launch Model</span>
+              </>
+            )}
+          </button>
+          <button
+            onClick={onRestart}
+            disabled={!canRestart}
+            className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
+              canRestart
+                ? ctxChanged
+                  ? 'bg-status-warning/10 text-status-warning border border-status-warning/30 hover:bg-status-warning/20 animate-pulse'
+                  : 'bg-accent-secondary/10 text-accent-secondary border border-accent-secondary/20 hover:bg-accent-secondary/20'
+                : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
+            }`}
+            title={restartDisabledReason()}
+          >
+            {loading && actionStatus === 'restarting' ? (
+              <>
+                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.825 3 7.938l3-2.647z" />
+                </svg>
+                <span>Restarting...</span>
+              </>
+            ) : (
+              <>
+                <RotateCcw className="w-4 h-4" />
+                <span>Restart</span>
+              </>
+            )}
+          </button>
+          <button
+            onClick={onStop}
+            disabled={!canStop}
+            className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
+              canStop
+                ? 'bg-status-error/10 text-status-error border border-status-error/20 hover:bg-status-error/20'
+                : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
+            }`}
+            title={canStop ? 'Stop the running model' : 'Model is not running'}
+          >
+            {loading && actionStatus === 'stopping' ? (
+              <>
+                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.825 3 7.938l3-2.647z" />
+                </svg>
+                <span>Stopping...</span>
+              </>
+            ) : (
+              <>
+                <Square className="w-4 h-4" />
+                <span>Stop</span>
+              </>
+            )}
           </button>
         </div>
-
-        {/* Slider */}
-        <div className="relative">
-          <input
-            type="range"
-            min={String(SLIDER_MIN)}
-            max={String(SLIDER_MAX)}
-            step={String(SLIDER_STEP)}
-            value={ctxSize}
-            onChange={(e) => onCtxChange(Number(e.target.value))}
-            disabled={loading}
-            className="w-full h-1.5 bg-bg-secondary rounded-lg appearance-none cursor-pointer accent-accent-primary disabled:opacity-50 disabled:cursor-not-allowed"
-          />
-          {suggestedCtx && !isPreset && (
-            <div className="flex items-center gap-1 mt-1">
-              <Info className="w-3 h-3 text-accent-primary flex-shrink-0" />
-              <span className="text-[10px] text-accent-primary">
-                Suggested: {suggestedCtx}
-              </span>
-            </div>
-          )}
-          {ctxChanged && (
-            <div className="flex items-center gap-1 mt-1">
-              <AlertCircle className="w-3 h-3 text-status-warning flex-shrink-0" />
-              <span className="text-[10px] text-status-warning">
-                Context changed from {runningCtxSize.toLocaleString()} — restart to apply
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="flex gap-3 mb-4">
-        <button
-          onClick={onLaunch}
-          disabled={!canLaunch}
-          className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
-            canLaunch
-              ? 'bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 hover:shadow-accent-primary/30'
-              : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
-          }`}
-          title={launchDisabledReason()}
-        >
-          {loading && actionStatus === 'launching' ? (
-            <>
-              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.825 3 7.938l3-2.647z" />
-              </svg>
-              <span>Launching...</span>
-            </>
-          ) : isRunning ? (
-            <>
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Running</span>
-            </>
-          ) : (
-            <>
-              <Play className="w-4 h-4" />
-              <span>Launch Model</span>
-            </>
-          )}
-        </button>
-        <button
-          onClick={onRestart}
-          disabled={!canRestart}
-          className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
-            canRestart
-              ? ctxChanged
-                ? 'bg-status-warning/10 text-status-warning border border-status-warning/30 hover:bg-status-warning/20 animate-pulse'
-                : 'bg-accent-secondary/10 text-accent-secondary border border-accent-secondary/20 hover:bg-accent-secondary/20'
-              : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
-          }`}
-          title={restartDisabledReason()}
-        >
-          {loading && actionStatus === 'restarting' ? (
-            <>
-              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.825 3 7.938l3-2.647z" />
-              </svg>
-              <span>Restarting...</span>
-            </>
-          ) : (
-            <>
-              <RotateCcw className="w-4 h-4" />
-              <span>Restart</span>
-            </>
-          )}
-        </button>
-        <button
-          onClick={onStop}
-          disabled={!canStop}
-          className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all duration-200 ${
-            canStop
-              ? 'bg-status-error/10 text-status-error border border-status-error/20 hover:bg-status-error/20'
-              : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
-          }`}
-          title={canStop ? 'Stop the running model' : 'Model is not running'}
-        >
-          {loading && actionStatus === 'stopping' ? (
-            <>
-              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.825 3 7.938l3-2.647z" />
-              </svg>
-              <span>Stopping...</span>
-            </>
-          ) : (
-            <>
-              <Square className="w-4 h-4" />
-              <span>Stop</span>
-            </>
-          )}
-        </button>
-      </div>
 
       {/* Action Message */}
       {actionMessage && (
