@@ -58,7 +58,7 @@ export interface ApiError {
   code?: number;
 }
 
-export type Page = 'dashboard' | 'chat' | 'models' | 'router' | 'diagnostics' | 'rag' | 'gateway-settings' | 'settings';
+export type Page = 'dashboard' | 'chat' | 'models' | 'router' | 'diagnostics' | 'rag' | 'settings';
 
 /**
  * Chat message used for the /v1/chat/completions API.

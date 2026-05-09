@@ -7,7 +7,6 @@ import RouterPage from './pages/RouterPage';
 import DiagnosticsPage from './pages/DiagnosticsPage';
 import RagPage from './pages/RagPage';
 import SettingsPage from './pages/SettingsPage';
-import GatewaySettingsPage from './pages/GatewaySettingsPage';
 import { Page } from './types';
 
 // Navigation wrapper component to sync URL with state
@@ -24,8 +23,7 @@ function AppContent() {
       if (path === '/diagnostics') return 'diagnostics';
       if (path === '/rag') return 'rag';
       if (path === '/settings') return 'settings';
-      if (path === '/gateway-settings') return 'gateway-settings';
-      return 'dashboard';
+       return 'dashboard';
     };
 
   const currentPage = getPageFromPath(location.pathname);
@@ -39,9 +37,8 @@ function AppContent() {
         router: '/router',
         diagnostics: '/diagnostics',
         rag: '/rag',
-        settings: '/settings',
-        'gateway-settings': '/gateway-settings',
-      };
+         settings: '/settings',
+       };
     navigate(pathMap[page]);
   };
 
@@ -59,8 +56,7 @@ function AppContent() {
              <Route path="/diagnostics" element={<DiagnosticsPage />} />
               <Route path="/rag" element={<RagPage />} />
                <Route path="/settings" element={<SettingsPage />} />
-               <Route path="/gateway-settings" element={<GatewaySettingsPage />} />
-            </Routes>
+               </Routes>
          </main>
        </div>
      </div>
