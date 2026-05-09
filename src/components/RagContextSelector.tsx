@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   getRagProjects,
   getRagCollections,
@@ -132,35 +132,49 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
     onSelectionChange({ projectId: selectedProjectId, collection: selectedCollection, enabled });
   }, [selectedProjectId, selectedCollection, enabled, onSelectionChange]);
 
-  // Persist selection changes
-  useEffect(() => {
-    if (selectedProjectId) {
-      try {
-        localStorage.setItem(RAG_SELECTION_KEY, JSON.stringify({
-          projectId: selectedProjectId,
-          collection: selectedCollection,
-          enabled,
-        }));
-      } catch { /* ignore */ }
-    }
-  }, [selectedProjectId, selectedCollection, enabled]);
+  // Persist selection changes (deduped to avoid unnecessary writes)
+   useEffect(() => {
+     if (selectedProjectId) {
+       try {
+         const toSave = JSON.stringify({
+           projectId: selectedProjectId,
+           collection: selectedCollection,
+           enabled,
+         });
+         const prev = localStorage.getItem(RAG_SELECTION_KEY);
+         if (prev !== toSave) {
+           localStorage.setItem(RAG_SELECTION_KEY, toSave);
+         }
+       } catch { /* ignore */ }
+     }
+   }, [selectedProjectId, selectedCollection, enabled]);
 
-  // Build merged collection options from both sources
-  const collectionOptions = buildRagCollectionOptions(projectDetail, {
-    collections,
-    project_id: selectedProjectId,
-  });
-
-  // Validate persisted selection against merged options
-  useEffect(() => {
-    if (selectedCollection && collectionOptions.length > 0) {
-      const exists = collectionOptions.some(opt => opt.name === selectedCollection);
-      if (!exists) {
-        console.warn('[RAG Context] persisted collection no longer valid, clearing');
-        setSelectedCollection(null);
-      }
-    }
-  }, [collectionOptions, selectedCollection]);
+  // Build merged collection options from both sources (memoized to avoid re-creating on every render)
+   const collectionOptions = useMemo(
+     () => buildRagCollectionOptions(projectDetail, {
+       collections,
+       project_id: selectedProjectId,
+     }),
+     [projectDetail, collections, selectedProjectId]
+   );
+ 
+   // Diagnostic log — fires only on meaningful state changes (not every render)
+   useEffect(() => {
+     console.log(
+       `[RAG Selector] project=${selectedProjectId} collection=${selectedCollection} enabled=${enabled} logical=${projectDetail?.logical_collections?.length || 0} merged=${collectionOptions.length}`
+     );
+   }, [selectedProjectId, selectedCollection, enabled, projectDetail?.logical_collections?.length, collectionOptions.length]);
+ 
+   // Validate persisted selection against merged options
+   useEffect(() => {
+     if (selectedCollection && collectionOptions.length > 0) {
+       const exists = collectionOptions.some(opt => opt.name === selectedCollection);
+       if (!exists) {
+         console.warn('[RAG Context] persisted collection no longer valid, clearing');
+         setSelectedCollection(null);
+       }
+     }
+   }, [collectionOptions, selectedCollection]);
 
   const handleProjectChange = (projectId: string) => {
     setSelectedProjectId(projectId);
@@ -174,16 +188,9 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
   const formatNumber = (n: number): string => n.toLocaleString();
 
   const selectedProject = projects.find(p => p.project_id === selectedProjectId);
-  const selectedCollectionInfo = collectionOptions.find(c => c.name === selectedCollection);
-
-  // Debug output
-  console.log(
-    `[RAG Context] logical: ${projectDetail?.logical_collections?.length || 0} · ` +
-    `detail: ${collections.length} · ` +
-    `merged: ${collectionOptions.length}`
-  );
-
-  // Show RAG indicator text
+   const selectedCollectionInfo = collectionOptions.find(c => c.name === selectedCollection);
+ 
+   // Show RAG indicator text
   const ragIndicator = enabled && selectedProject
     ? `RAG: ${selectedProject.project_id}${selectedCollectionInfo ? ` / ${selectedCollectionInfo.name}` : ''}`
     : null;
@@ -222,9 +229,9 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
         <Database className={`w-3.5 h-3.5 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`} />
       </button>
 
-      {/* Expanded panel */}
-      {expanded && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-bg-card border border-border-primary rounded-xl shadow-card z-50 p-4 space-y-3">
+      {/* Expanded panel — dropdown on desktop, bottom sheet on mobile */}
+       {expanded && (
+         <div className="fixed bottom-0 left-0 right-0 max-h-[70vh] overflow-y-auto rounded-t-xl bg-bg-card border border-border-primary shadow-card z-50 p-4 space-y-3 lg:static lg:max-h-none lg:overflow-visible lg:rounded-xl lg:right-0 lg:top-full lg:mt-2 lg:w-80">
           <div className="flex items-center justify-between mb-2">
             <h4 className="text-xs font-semibold text-text-primary flex items-center gap-1.5">
               <Database className="w-3.5 h-3.5 text-accent-primary" />
@@ -335,23 +342,17 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
                 </select>
               )}
               {collectionOptions.length > 0 && (
-                <button
-                  onClick={() => fetchCollections(selectedProjectId)}
-                  disabled={collectionsLoading}
-                  className="mt-1 p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50"
-                  title="Refresh collections"
-                >
-                  <RefreshCw className={`w-3 h-3 ${collectionsLoading ? 'animate-spin' : ''}`} />
-                </button>
-              )}
-              {/* Debug line */}
-              <p className="text-[9px] text-text-tertiary mt-2 font-mono">
-                logical: {projectDetail?.logical_collections?.length || 0} ·
-                detail: {collections.length} ·
-                merged: {collectionOptions.length}
-              </p>
-            </div>
-          )}
+                 <button
+                   onClick={() => fetchCollections(selectedProjectId)}
+                   disabled={collectionsLoading}
+                   className="mt-1 p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50"
+                   title="Refresh collections"
+                 >
+                   <RefreshCw className={`w-3 h-3 ${collectionsLoading ? 'animate-spin' : ''}`} />
+                 </button>
+               )}
+             </div>
+           )}
 
           {/* Selected RAG info */}
           {selectedProject && (

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Layers, AlertCircle } from 'lucide-react';
 import { RagCollectionsResponse, RagEndpointError, RagProjectDetail } from '../types';
 import { buildRagCollectionOptions } from '../utils/ragCollectionOptions';
@@ -19,13 +19,10 @@ const RagCollectionsCard: React.FC<RagCollectionsCardProps> = ({
 }) => {
   const formatNumber = (n: number): string => n.toLocaleString();
 
-  const collectionOptions = buildRagCollectionOptions(projectDetail, collections);
-
-  // Debug output
-  console.log(
-    `[RAG Collections] logical: ${projectDetail?.logical_collections?.length || 0} · ` +
-    `detail: ${collections?.collections.length || 0} · ` +
-    `merged: ${collectionOptions.length}`
+  // Memoized to avoid re-creating on every render (prevents render-loop log spam)
+  const collectionOptions = useMemo(
+    () => buildRagCollectionOptions(projectDetail, collections),
+    [projectDetail, collections]
   );
 
   return (

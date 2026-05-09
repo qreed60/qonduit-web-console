@@ -29,6 +29,7 @@ import RagCollectionsCard from '../components/RagCollectionsCard';
 import RagDocumentsCard from '../components/RagDocumentsCard';
 import RagChunkViewer from '../components/RagChunkViewer';
 import RagDiagnosticSearchCard from '../components/RagDiagnosticSearchCard';
+import MobileAccordionSection from '../components/MobileAccordionSection';
 
 const RagPage: React.FC = () => {
   // ── State ──────────────────────────────────────────────────────────────────
@@ -96,44 +97,37 @@ const RagPage: React.FC = () => {
   // ── Fetch functions ────────────────────────────────────────────────────────
 
   const fetchHealth = useCallback(async () => {
-    try {
-      console.log('[RAG] fetching health');
-      const result = await getRagHealth();
-      console.log('[RAG] health response', result);
-      setHealth(result);
-      setHealthError(null);
-      setHealthLastChecked(Date.now());
-    } catch (err) {
-      console.error('[RAG] health error', err);
-      setHealthError(err instanceof Error ? {
-        url: `${gatewayUrl}/v1/rag/health`,
-        message: err.message,
-        timestamp: Date.now(),
-      } : null);
-    }
-  }, [gatewayUrl]);
-
-  const fetchProjects = useCallback(async () => {
      try {
-       const url = `${gatewayUrl}/v1/rag/projects`;
-       console.log('[RAG] fetching projects', url);
-       const result = await getRagProjects();
-       console.log('[RAG] projects response', result);
-       console.log('[RAG] normalized projects count', result.projects.length);
-       console.log('[RAG] normalized projects', result.projects);
-       setProjects(result.projects);
-       setProjectsFetched(true);
-       setProjectsError(null);
+       const result = await getRagHealth();
+       setHealth(result);
+       setHealthError(null);
+       setHealthLastChecked(Date.now());
      } catch (err) {
-       console.error('[RAG] projects error', err);
-       setProjectsError(err instanceof Error ? {
-         url: `${gatewayUrl}/v1/rag/projects`,
+       console.error('[RAG] health error', err);
+       setHealthError(err instanceof Error ? {
+         url: `${gatewayUrl}/v1/rag/health`,
          message: err.message,
          timestamp: Date.now(),
        } : null);
-       setProjectsFetched(true);
      }
    }, [gatewayUrl]);
+
+  const fetchProjects = useCallback(async () => {
+       try {
+         const result = await getRagProjects();
+         setProjects(result.projects);
+         setProjectsFetched(true);
+         setProjectsError(null);
+       } catch (err) {
+         console.error('[RAG] projects error', err);
+         setProjectsError(err instanceof Error ? {
+           url: `${gatewayUrl}/v1/rag/projects`,
+           message: err.message,
+           timestamp: Date.now(),
+         } : null);
+         setProjectsFetched(true);
+       }
+     }, [gatewayUrl]);
 
   const fetchProjectDetail = useCallback(async (projectId: string) => {
     try {
@@ -243,40 +237,36 @@ const RagPage: React.FC = () => {
 
   // ── Initial load: fetch health and projects independently ──────────────────
   
-    useEffect(() => {
-      console.log('[RAG] initial load - fetching health and projects');
-      console.log('[RAG] initial load - gatewayUrl:', gatewayUrl);
-      fetchHealth();
-      fetchProjects();
-    }, [fetchHealth, fetchProjects, gatewayUrl]);
-
-  // ── Auto-select first existing project ─────────────────────────────────────
+      useEffect(() => {
+        fetchHealth();
+        fetchProjects();
+      }, [fetchHealth, fetchProjects, gatewayUrl]);
+  
+    // ── Auto-select first existing project ─────────────────────────────────────
+  
+      useEffect(() => {
+        if (!selectedProjectId && projects.length > 0 && projectsFetched) {
+          const firstExisting = projects.find(p => p.exists);
+          const firstProject = projects[0];
+          const target = firstExisting || firstProject;
+          if (target) {
+            setSelectedProjectId(target.project_id);
+          } else {
+            console.warn('[RAG] auto-select failed: no valid project found');
+          }
+        }
+      }, [projects, projectsFetched, selectedProjectId]);
+  
+    // ── Fetch detail when project is selected ──────────────────────────────────
   
     useEffect(() => {
-      if (!selectedProjectId && projects.length > 0 && projectsFetched) {
-        const firstExisting = projects.find(p => p.exists);
-        const firstProject = projects[0];
-        const target = firstExisting || firstProject;
-        if (target) {
-          console.log('[RAG] auto-selecting project', target.project_id, '(exists:', target.exists, ')');
-          setSelectedProjectId(target.project_id);
-        } else {
-          console.warn('[RAG] auto-select failed: no valid project found');
-        }
+      if (selectedProjectId) {
+        fetchProjectDetail(selectedProjectId);
+        fetchProjectStats(selectedProjectId);
+        fetchCollections(selectedProjectId);
+        fetchDocuments(selectedProjectId);
       }
-    }, [projects, projectsFetched, selectedProjectId]);
-
-  // ── Fetch detail when project is selected ──────────────────────────────────
-
-  useEffect(() => {
-    if (selectedProjectId) {
-      console.log('[RAG] project selected, fetching detail for', selectedProjectId);
-      fetchProjectDetail(selectedProjectId);
-      fetchProjectStats(selectedProjectId);
-      fetchCollections(selectedProjectId);
-      fetchDocuments(selectedProjectId);
-    }
-  }, [selectedProjectId, fetchProjectDetail, fetchProjectStats, fetchCollections, fetchDocuments]);
+    }, [selectedProjectId, fetchProjectDetail, fetchProjectStats, fetchCollections, fetchDocuments]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -429,35 +419,41 @@ const RagPage: React.FC = () => {
   
             {/* Detail area: Project detail + Collections + Documents + Search */}
             {selectedProjectId && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-                {/* Left: Project detail */}
-                <div className="lg:col-span-1 space-y-4 sm:space-y-6">
-                  <RagProjectDetailPanel
-                    detail={projectDetail}
-                    stats={projectStats}
-                    detailError={projectDetailError}
-                    statsError={projectStatsError}
-                  />
-                  <RagCollectionsCard
-                     collections={collections}
-                     collectionsError={collectionsError}
-                     projectId={selectedProjectId}
-                     projectDetail={projectDetail}
-                   />
-                </div>
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+                            {/* Left: Project detail + Collections */}
+                            <div className="lg:col-span-1 space-y-4 sm:space-y-6">
+                              <MobileAccordionSection title="Project Detail" defaultOpen={false} localStorageKey="rag-detail">
+                                <RagProjectDetailPanel
+                                  detail={projectDetail}
+                                  stats={projectStats}
+                                  detailError={projectDetailError}
+                                  statsError={projectStatsError}
+                                />
+                              </MobileAccordionSection>
+                              <MobileAccordionSection title="Collections" defaultOpen={false} localStorageKey="rag-collections">
+                                <RagCollectionsCard
+                                   collections={collections}
+                                   collectionsError={collectionsError}
+                                   projectId={selectedProjectId}
+                                   projectDetail={projectDetail}
+                                 />
+                              </MobileAccordionSection>
+                            </div>
   
                 {/* Right: Documents + Search */}
-                <div className="lg:col-span-2 space-y-4 sm:space-y-6">
-                  <RagDocumentsCard
-                    documents={documents}
-                    documentsError={documentsError}
-                    projectId={selectedProjectId}
-                    selectedDocumentId={selectedDocumentId}
-                    onSelectDocument={handleSelectDocument}
-                    loading={false}
-                    onRefresh={() => fetchDocuments(selectedProjectId)}
-                    refreshing={refreshing}
-                  />
+                                <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+                                  <MobileAccordionSection title="Documents" defaultOpen={false} localStorageKey="rag-documents">
+                                    <RagDocumentsCard
+                                      documents={documents}
+                                      documentsError={documentsError}
+                                      projectId={selectedProjectId}
+                                      selectedDocumentId={selectedDocumentId}
+                                      onSelectDocument={handleSelectDocument}
+                                      loading={false}
+                                      onRefresh={() => fetchDocuments(selectedProjectId)}
+                                      refreshing={refreshing}
+                                    />
+                                  </MobileAccordionSection>
   
                   {/* Chunk Viewer */}
                   {selectedDocumentId && selectedDocument && (

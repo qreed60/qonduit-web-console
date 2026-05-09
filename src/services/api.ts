@@ -452,14 +452,20 @@ export async function fetchChatCompletions(
   };
 
   // Attach RAG selection if provided (Gateway mode)
-  if (ragSelection) {
-    body.project_id = ragSelection.projectId;
-    if (ragSelection.collection) {
-      body.rag_collection = ragSelection.collection;
+    if (ragSelection) {
+      body.project_id = ragSelection.projectId;
+      if (ragSelection.collection) {
+        body.rag_collection = ragSelection.collection;
+      }
+      // Dev-only diagnostic: one log per message send (not per render)
+      if (import.meta.env.DEV) {
+        console.log(
+          `[RAG Send] enabled=true project=${ragSelection.projectId} collection=${ragSelection.collection || '(none)'} attached=true`
+        );
+      }
     }
-  }
-
-  const response = await fetch(apiPath('gateway', '/v1/chat/completions'), {
+  
+    const response = await fetch(apiPath('gateway', '/v1/chat/completions'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
