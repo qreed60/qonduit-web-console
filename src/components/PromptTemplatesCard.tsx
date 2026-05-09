@@ -51,8 +51,7 @@ const PromptTemplatesCard: React.FC<PromptTemplatesCardProps> = ({ activeTemplat
     try {
       await activatePromptTemplate(template.id);
       setToastMessage(`Activated "${template.name}"`);
-      setTimeout(() => setToastMessage(null), 3000);
-      await loadTemplates();
+        await loadTemplates();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to activate template';
       setToastMessage(msg);
@@ -63,8 +62,7 @@ const PromptTemplatesCard: React.FC<PromptTemplatesCardProps> = ({ activeTemplat
     try {
       await duplicatePromptTemplate(template.id);
       setToastMessage(`Duplicated "${template.name}"`);
-      setTimeout(() => setToastMessage(null), 3000);
-      await loadTemplates();
+         await loadTemplates();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to duplicate template';
       setToastMessage(msg);
@@ -76,8 +74,7 @@ const PromptTemplatesCard: React.FC<PromptTemplatesCardProps> = ({ activeTemplat
     try {
       await deletePromptTemplate(deletingTemplate.id);
       setToastMessage(`Deleted "${deletingTemplate.name}"`);
-      setTimeout(() => setToastMessage(null), 3000);
-      await loadTemplates();
+         await loadTemplates();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to delete template';
       setToastMessage(msg);
@@ -250,7 +247,13 @@ const PromptTemplatesCard: React.FC<PromptTemplatesCardProps> = ({ activeTemplat
         )}
       </div>
 
-      <Toast message={toastMessage || ''} type={toastMessage ? 'error' : 'success'} onClose={() => setToastMessage(null)} />
+      {toastMessage && (
+          <Toast
+            message={toastMessage}
+            type={toastMessage.startsWith('Failed') ? 'error' : 'success'}
+            onClose={() => setToastMessage(null)}
+          />
+        )}
 
       <PromptEditorModal
         open={showEditor}

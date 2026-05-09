@@ -130,8 +130,7 @@ const GatewayDefaultsCard: React.FC<GatewayDefaultsCardProps> = ({ onSettingsCha
       // Refresh settings and templates to reflect the new active template
       await load();
       setToastMessage('Template activated');
-      setTimeout(() => setToastMessage(null), 3000);
-    } catch (err) {
+     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to activate template';
       setToastMessage(msg);
     } finally {
@@ -148,8 +147,7 @@ const GatewayDefaultsCard: React.FC<GatewayDefaultsCardProps> = ({ onSettingsCha
       setDraft({ ...updated });
       onSettingsChange?.(updated);
       setToastMessage('Gateway settings saved');
-      setTimeout(() => setToastMessage(null), 3000);
-    } catch (err) {
+     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to save settings';
       setToastMessage(msg);
     } finally {
@@ -168,8 +166,7 @@ const GatewayDefaultsCard: React.FC<GatewayDefaultsCardProps> = ({ onSettingsCha
       setDraft({ ...updated });
       onSettingsChange?.(updated);
       setToastMessage('Gateway settings reset to defaults');
-      setTimeout(() => setToastMessage(null), 3000);
-    } catch (err) {
+      } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to reset settings';
       setToastMessage(msg);
     }
@@ -489,7 +486,13 @@ const GatewayDefaultsCard: React.FC<GatewayDefaultsCardProps> = ({ onSettingsCha
         </div>
       </div>
 
-      <Toast message={toastMessage || ''} type={toastMessage ? 'error' : 'success'} onClose={() => setToastMessage(null)} />
+      {toastMessage && (
+         <Toast
+           message={toastMessage}
+           type={toastMessage.startsWith('Failed') ? 'error' : 'success'}
+           onClose={() => setToastMessage(null)}
+         />
+       )}
       <ConfirmDialog
         open={showResetConfirm}
         title="Reset Gateway Settings"
