@@ -177,8 +177,8 @@ const GatewayDefaultsCard: React.FC<GatewayDefaultsCardProps> = ({ onSettingsCha
   };
 
   const activeTemplate = templates.find(
-    (t) => t.id === settings?.active_prompt_template || t.name === settings?.active_prompt_template
-  );
+     (t) => t.id === settings?.active_prompt_template_id || t.name === settings?.active_prompt_template_id
+   );
 
   const currentRagProject = draft?.default_rag_project || settings?.default_rag_project || '';
 
@@ -238,18 +238,17 @@ const GatewayDefaultsCard: React.FC<GatewayDefaultsCardProps> = ({ onSettingsCha
               </div>
             )}
             <select
-              value={settings?.active_prompt_template || ''}
-              onChange={(e) => handleActiveTemplateChange(e.target.value)}
-              disabled={activating}
-              className="w-full px-4 py-3 bg-bg-secondary border border-border-primary rounded-xl text-text-primary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 transition-all duration-200 min-h-[48px] disabled:opacity-60"
-            >
-              <option value="">Select a template…</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id} disabled={t.is_active}>
-                  {t.name}{t.is_active ? ' (active)' : ''}
-                </option>
-              ))}
-            </select>
+               value={settings?.active_prompt_template_id || ''}
+               onChange={(e) => handleActiveTemplateChange(e.target.value)}
+               disabled={activating}
+               className="w-full px-4 py-3 bg-bg-secondary border border-border-primary rounded-xl text-text-primary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 transition-all duration-200 min-h-[48px] disabled:opacity-60"
+             >
+               {templates.map((t) => (
+                 <option key={t.id} value={t.id} disabled={t.is_active}>
+                   {t.name}{t.is_active ? ' (active)' : ''}
+                 </option>
+               ))}
+             </select>
           </div>
 
           {/* Default Model */}

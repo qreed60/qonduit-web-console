@@ -26,7 +26,7 @@ const GatewaySettingsPage: React.FC = () => {
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl space-y-4 sm:space-y-6">
-          <GatewayDefaultsCard onSettingsChange={(settings) => setActiveTemplate(settings.active_prompt_template)} />
+          <GatewayDefaultsCard onSettingsChange={(settings) => setActiveTemplate(settings.active_prompt_template_id)} />
           <PromptTemplatesCard activeTemplateId={activeTemplate} />
         </div>
       </div>

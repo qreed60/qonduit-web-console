@@ -665,19 +665,19 @@ export interface RagPageState {
  }
  
  export interface GatewaySettings {
-   active_prompt_template?: string;
-   default_model?: string;
-   max_tokens?: number;
-   temperature?: number;
-   stream_default?: boolean;
-   rag_enabled_default?: boolean;
-   default_rag_project?: string;
-   default_rag_collection?: string;
-   rag_search_limit?: number;
- }
+    active_prompt_template_id?: string;
+    default_model?: string;
+    max_tokens?: number;
+    temperature?: number;
+    stream_default?: boolean;
+    rag_enabled_default?: boolean;
+    default_rag_project?: string;
+    default_rag_collection?: string;
+    rag_search_limit?: number;
+  }
  
  export interface GatewaySettingsUpdate {
-   active_prompt_template?: string;
+    active_prompt_template_id?: string;
    default_model?: string;
    max_tokens?: number;
    temperature?: number;
