@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronDown } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 
 export interface CardMetric {
@@ -20,7 +20,7 @@ export interface StatusBadgeConfig {
 
 interface MobileCollapsibleCardProps {
   title: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 
   // Visual
   icon?: React.ReactNode;
@@ -52,29 +52,37 @@ const MobileCollapsibleCard: React.FC<MobileCollapsibleCardProps> = ({
   children,
 }) => {
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
-  const [expanded, setExpanded] = useState(() => {
-    if (localStorageKey) {
-      const saved = localStorage.getItem(localStorageKey);
-      if (saved !== null) return saved === 'true';
-    }
-    return isMobile ? defaultExpandedMobile : defaultExpanded;
-  });
-  const [isMobileView, setIsMobileView] = useState(isMobile);
+   const [expanded, setExpanded] = useState(() => {
+     if (localStorageKey) {
+       const saved = localStorage.getItem(localStorageKey);
+       if (saved !== null) {
+         // If saved state is valid, use it
+         const parsed = saved === 'true';
+         // Check if saved state is reasonable for current viewport
+         const mobile = window.innerWidth < 640;
+         if (mobile && parsed === defaultExpandedMobile) return defaultExpandedMobile;
+         if (!mobile && parsed === defaultExpanded) return defaultExpanded;
+         // Saved state conflicts with defaults — use defaults
+         return mobile ? defaultExpandedMobile : defaultExpanded;
+       }
+     }
+     return isMobile ? defaultExpandedMobile : defaultExpanded;
+   });
+   const prevMobileRef = useRef(isMobile);
 
   useEffect(() => {
-    const handleResize = () => setIsMobileView(window.innerWidth < 640);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // Sync expanded on resize to reset behavior
-  useEffect(() => {
-    if (!isMobileView) {
-      setExpanded(defaultExpanded);
-    } else {
-      setExpanded(defaultExpandedMobile);
-    }
-  }, [isMobileView, defaultExpanded, defaultExpandedMobile]);
+     const handleResize = () => {
+       const mobile = window.innerWidth < 640;
+ 
+       // Only reset expanded state when viewport type changes (mobile <-> desktop)
+       if (prevMobileRef.current !== mobile) {
+         prevMobileRef.current = mobile;
+         setExpanded(mobile ? defaultExpandedMobile : defaultExpanded);
+       }
+     };
+     window.addEventListener('resize', handleResize);
+     return () => window.removeEventListener('resize', handleResize);
+   }, [defaultExpanded, defaultExpandedMobile]);
 
   // Persist to localStorage
   useEffect(() => {
@@ -83,18 +91,17 @@ const MobileCollapsibleCard: React.FC<MobileCollapsibleCardProps> = ({
     }
   }, [expanded, localStorageKey]);
 
-  const shouldCollapsible = isMobileView;
+  const toggleExpanded = () => setExpanded(prev => !prev);
 
   return (
     <div className={`bg-bg-card rounded-xl border border-border-primary shadow-card overflow-hidden ${className}`}>
+      {/* Collapsible header — always clickable */}
       <button
-        onClick={() => shouldCollapsible && setExpanded(!expanded)}
-        className={`w-full flex items-start gap-3 p-4 sm:p-5 text-left transition-colors hover:bg-bg-secondary/30 ${
-          !shouldCollapsible ? 'cursor-default' : 'cursor-pointer'
-        }`}
-        aria-expanded={shouldCollapsible ? expanded : undefined}
-        tabIndex={shouldCollapsible ? 0 : -1}
-        role={shouldCollapsible ? 'button' : undefined}
+        onClick={toggleExpanded}
+        className="w-full flex items-start gap-3 p-4 sm:p-5 text-left transition-colors hover:bg-bg-secondary/30 cursor-pointer"
+        aria-expanded={expanded}
+        tabIndex={0}
+        role="button"
       >
         {/* Icon */}
         {icon && (
@@ -103,7 +110,7 @@ const MobileCollapsibleCard: React.FC<MobileCollapsibleCardProps> = ({
           </div>
         )}
 
-        {/* Title + Summary */}
+        {/* Title + Summary + Metrics */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-base sm:text-lg font-semibold text-text-primary">{title}</span>
@@ -145,23 +152,18 @@ const MobileCollapsibleCard: React.FC<MobileCollapsibleCardProps> = ({
           )}
         </div>
 
-        {/* Chevron Indicator (mobile only) */}
-        {shouldCollapsible && (
-          <ChevronDown
-            className={`w-5 h-5 text-text-tertiary flex-shrink-0 mt-1 transition-transform duration-200 ${
-              expanded ? 'rotate-180' : ''
-            }`}
-          />
-        )}
+        {/* Chevron Indicator — always visible */}
+        <div className="flex-shrink-0 mt-1">
+          {expanded ? (
+            <ChevronUp className="w-5 h-5 text-text-tertiary transition-transform duration-200" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-text-tertiary transition-transform duration-200" />
+          )}
+        </div>
       </button>
 
-      {/* Expanded Content */}
-      {(shouldCollapsible && expanded) && (
-        <div className="px-4 sm:px-5 pb-4 sm:pb-5 border-t border-border-subtle">
-          {children}
-        </div>
-      )}
-      {!shouldCollapsible && (
+      {/* Expanded Content — only render when expanded */}
+      {expanded && children && (
         <div className="px-4 sm:px-5 pb-4 sm:pb-5 border-t border-border-subtle">
           {children}
         </div>

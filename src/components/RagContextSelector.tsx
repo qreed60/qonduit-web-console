@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   getRagProjects,
   getRagCollections,
@@ -39,6 +39,8 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
   const [collectionsError, setCollectionsError] = useState<RagEndpointError | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
+  const popupRef = useRef<HTMLDivElement>(null);
+
   // Load persisted selection
   useEffect(() => {
     try {
@@ -60,7 +62,6 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
     try {
       const result = await getRagProjects();
       setProjects(result.projects);
-      // Auto-select first existing project
       if (!selectedProjectId && result.projects.length > 0) {
         const firstExisting = result.projects.find(p => p.exists);
         const firstProject = result.projects[0];
@@ -86,7 +87,6 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
     try {
       const result = await getRagCollections(projectId);
       setCollections(result.collections);
-      // Auto-select first collection if none selected
       if (!selectedCollection && result.collections.length > 0) {
         setSelectedCollection(result.collections[0].name);
       }
@@ -131,41 +131,41 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
     onSelectionChange({ projectId: selectedProjectId, collection: selectedCollection, enabled });
   }, [selectedProjectId, selectedCollection, enabled, onSelectionChange]);
 
-  // Persist selection changes (deduped to avoid unnecessary writes)
-   useEffect(() => {
-     if (selectedProjectId) {
-       try {
-         const toSave = JSON.stringify({
-           projectId: selectedProjectId,
-           collection: selectedCollection,
-           enabled,
-         });
-         const prev = localStorage.getItem(RAG_SELECTION_KEY);
-         if (prev !== toSave) {
-           localStorage.setItem(RAG_SELECTION_KEY, toSave);
-         }
-       } catch { /* ignore */ }
-     }
-   }, [selectedProjectId, selectedCollection, enabled]);
+  // Persist selection changes
+  useEffect(() => {
+    if (selectedProjectId) {
+      try {
+        const toSave = JSON.stringify({
+          projectId: selectedProjectId,
+          collection: selectedCollection,
+          enabled,
+        });
+        const prev = localStorage.getItem(RAG_SELECTION_KEY);
+        if (prev !== toSave) {
+          localStorage.setItem(RAG_SELECTION_KEY, toSave);
+        }
+      } catch { /* ignore */ }
+    }
+  }, [selectedProjectId, selectedCollection, enabled]);
 
-  // Build merged collection options from both sources (memoized to avoid re-creating on every render)
-   const collectionOptions = useMemo(
-     () => buildRagCollectionOptions(projectDetail, {
-       collections,
-       project_id: selectedProjectId,
-     }),
-     [projectDetail, collections, selectedProjectId]
-   );
+  // Build merged collection options from both sources (memoized)
+  const collectionOptions = useMemo(
+    () => buildRagCollectionOptions(projectDetail, {
+      collections,
+      project_id: selectedProjectId,
+    }),
+    [projectDetail, collections, selectedProjectId]
+  );
 
   // Validate persisted selection against merged options
-   useEffect(() => {
-     if (selectedCollection && collectionOptions.length > 0) {
-       const exists = collectionOptions.some(opt => opt.name === selectedCollection);
-       if (!exists) {
-         setSelectedCollection(null);
-       }
-     }
-   }, [collectionOptions, selectedCollection]);
+  useEffect(() => {
+    if (selectedCollection && collectionOptions.length > 0) {
+      const exists = collectionOptions.some(opt => opt.name === selectedCollection);
+      if (!exists) {
+        setSelectedCollection(null);
+      }
+    }
+  }, [collectionOptions, selectedCollection]);
 
   const handleProjectChange = (projectId: string) => {
     setSelectedProjectId(projectId);
@@ -179,7 +179,7 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
   const formatNumber = (n: number): string => n.toLocaleString();
 
   const selectedProject = projects.find(p => p.project_id === selectedProjectId);
-   const selectedCollectionInfo = collectionOptions.find(c => c.name === selectedCollection);
+  const selectedCollectionInfo = collectionOptions.find(c => c.name === selectedCollection);
 
   const ragIndicator = enabled && selectedProject
     ? `RAG: ${selectedProject.project_id}${selectedCollectionInfo ? ` / ${selectedCollectionInfo.name}` : ''}`
@@ -195,184 +195,237 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
     setIsOpen(prev => !prev);
   }, []);
 
+  // Close on backdrop click
+  const handleBackdropClick = useCallback((e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      handleClose();
+    }
+  }, [handleClose]);
+
+  // Close on Esc key
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isOpen, handleClose]);
+
+  // Close when clicking outside (popup ref)
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (popupRef.current && !popupRef.current.contains(e.target as Node)) {
+        handleClose();
+      }
+    };
+    // Delay to avoid immediate re-close
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClick);
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('mousedown', handleClick);
+    };
+  }, [isOpen, handleClose]);
+
   return (
     <>
-      {/* Trigger Button */}
-      <div className="flex items-center gap-2 w-full sm:w-auto">
-        {/* RAG indicator badge */}
+      {/* Compact Trigger Badge — always inline, never expands layout */}
+      <div className="flex items-center gap-1.5 w-auto flex-shrink-0">
+        {/* RAG indicator badge (only when enabled and project selected) */}
         {ragIndicator && (
-          <span className="px-3 py-2 rounded-md text-xs font-medium bg-accent-primary/10 text-accent-primary border border-accent-primary/20 flex items-center gap-1.5 flex-shrink-0">
-            <Sparkles className="w-4 h-4" />
-            {ragIndicator}
-          </span>
+          <button
+            onClick={handleToggle}
+            className="px-2.5 py-1.5 rounded-md text-xs font-medium bg-accent-primary/10 text-accent-primary border border-accent-primary/20 flex items-center gap-1.5 hover:bg-accent-primary/20 transition-colors min-h-[32px]"
+            title="RAG Context Settings"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span className="truncate max-w-[120px] sm:max-w-none">{ragIndicator}</span>
+          </button>
         )}
 
-        {/* RAG expand button */}
+        {/* RAG toggle button — always visible */}
         <button
           onClick={handleToggle}
-          className="p-3 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 min-h-[48px] min-w-[48px] flex items-center justify-center"
-          title={isOpen ? 'Hide RAG selector' : 'Show RAG selector'}
+          className={`p-2 rounded-lg transition-all duration-200 min-h-[32px] min-w-[32px] flex items-center justify-center flex-shrink-0 ${
+            enabled ? 'text-accent-primary bg-accent-primary/10' : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'
+          }`}
+          title={isOpen ? 'Close RAG selector' : 'RAG Context Settings'}
         >
-          <Database className="w-5 h-5 transition-transform duration-200" />
+          <Database className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} />
         </button>
       </div>
 
-      {/* Backdrop (mobile only) */}
+      {/* Backdrop (mobile + desktop when open) */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={handleClose}
+          className="fixed inset-0 bg-black/30 z-[60] lg:hidden"
+          onClick={handleBackdropClick}
           aria-hidden="true"
         />
       )}
 
-      {/* Bottom Sheet / Popover Panel */}
+      {/* Fixed-position Popup / Bottom Sheet */}
       <div
-        className={`fixed bottom-0 left-0 right-0 max-h-[75vh] overflow-y-auto rounded-t-2xl bg-bg-card border border-border-primary shadow-2xl z-50 p-4 sm:p-5 space-y-4 transition-transform duration-300 lg:relative lg:max-h-none lg:overflow-visible lg:rounded-xl lg:right-auto lg:top-full lg:mt-2 lg:w-80 lg:shadow-card lg:z-0 lg:border lg:rounded-xl lg:translate-y-0 ${
-          isOpen ? 'translate-y-0' : 'translate-y-full lg:translate-y-0'
+        ref={popupRef}
+        className={`fixed z-[70] transition-all duration-200 ${
+          // Mobile: bottom sheet
+          'bottom-0 left-0 right-0 max-h-[80vh] overflow-y-auto rounded-t-2xl bg-bg-card border border-border-primary shadow-2xl'
+        } ${
+          // Desktop: fixed popover below toolbar
+          'hidden lg:block lg:fixed lg:top-16 lg:right-4 lg:max-h-[60vh] lg:w-80 lg:rounded-xl lg:shadow-card'
+        } ${
+          isOpen
+            ? 'translate-y-0 opacity-100'
+            : 'translate-y-full opacity-0 lg:hidden'
         }`}
         role="dialog"
         aria-modal="true"
         aria-label="RAG Context Settings"
       >
         {/* Header */}
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between p-4 pb-3 border-b border-border-subtle">
           <h4 className="text-sm font-semibold text-text-primary flex items-center gap-2">
             <Database className="w-4 h-4 text-accent-primary" />
             RAG Context
           </h4>
           <button
             onClick={handleClose}
-            className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 min-h-[40px] min-w-[40px] flex items-center justify-center"
+            className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 min-h-[36px] min-w-[36px] flex items-center justify-center"
             title="Close"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Enable/disable toggle */}
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-text-secondary">Enable RAG context</span>
-          <button
-            onClick={() => setEnabled(!enabled)}
-            className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
-              enabled ? 'bg-accent-primary' : 'bg-text-tertiary/30'
-            }`}
-            role="switch"
-            aria-checked={enabled}
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                enabled ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
-          </button>
-        </div>
-
-        {/* Projects dropdown */}
-        <div>
-          <label className="block text-[10px] text-text-tertiary uppercase tracking-wider mb-1.5">
-            Project
-          </label>
-          {projectsLoading ? (
-            <div className="flex items-center gap-2 px-3 py-2.5 bg-bg-secondary rounded-lg border border-border-primary min-h-[44px]">
-              <Loader2 className="w-4 h-4 animate-spin text-text-tertiary flex-shrink-0" />
-              <span className="text-sm text-text-tertiary">Loading projects...</span>
-            </div>
-          ) : projectsError ? (
-            <div className="px-3 py-2.5 bg-status-error/5 border border-status-error/20 rounded-lg">
-              <span className="text-sm text-status-error">{projectsError.message}</span>
-            </div>
-          ) : projects.length === 0 ? (
-            <div className="px-3 py-2.5 bg-bg-secondary rounded-lg border border-border-primary min-h-[44px]">
-              <span className="text-sm text-text-tertiary">No RAG projects available</span>
-            </div>
-          ) : (
-            <select
-              value={selectedProjectId}
-              onChange={(e) => handleProjectChange(e.target.value)}
-              className="w-full px-3 py-2.5 bg-bg-secondary border border-border-primary rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent-primary/50 min-h-[44px]"
-            >
-              {projects.map(project => (
-                <option key={project.project_id} value={project.project_id}>
-                  {project.project_id} ({formatNumber(project.points_count)} pts{project.exists ? '' : ' · not found'})
-                </option>
-              ))}
-            </select>
-          )}
-          {projects.length > 0 && (
+        {/* Scrollable Content */}
+        <div className="p-4 space-y-4 overflow-y-auto">
+          {/* Enable/disable toggle */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-text-secondary">Enable RAG context</span>
             <button
-              onClick={fetchProjects}
-              disabled={projectsLoading}
-              className="mt-1.5 p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-h-[40px] min-w-[40px] flex items-center justify-center"
-              title="Refresh projects"
+              onClick={() => setEnabled(!enabled)}
+              className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
+                enabled ? 'bg-accent-primary' : 'bg-text-tertiary/30'
+              }`}
+              role="switch"
+              aria-checked={enabled}
             >
-              <RefreshCw className={`w-4 h-4 ${projectsLoading ? 'animate-spin' : ''}`} />
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                  enabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
             </button>
-          )}
-        </div>
+          </div>
 
-        {/* Collections dropdown */}
-        {selectedProjectId && (
+          {/* Projects dropdown */}
           <div>
             <label className="block text-[10px] text-text-tertiary uppercase tracking-wider mb-1.5">
-              Collection
+              Project
             </label>
-            {collectionsLoading || projectDetailLoading ? (
+            {projectsLoading ? (
               <div className="flex items-center gap-2 px-3 py-2.5 bg-bg-secondary rounded-lg border border-border-primary min-h-[44px]">
                 <Loader2 className="w-4 h-4 animate-spin text-text-tertiary flex-shrink-0" />
-                <span className="text-sm text-text-tertiary">Loading collections...</span>
+                <span className="text-sm text-text-tertiary">Loading projects...</span>
               </div>
-            ) : collectionsError ? (
+            ) : projectsError ? (
               <div className="px-3 py-2.5 bg-status-error/5 border border-status-error/20 rounded-lg">
-                <span className="text-sm text-status-error">{collectionsError.message}</span>
+                <span className="text-sm text-status-error">{projectsError.message}</span>
               </div>
-            ) : collectionOptions.length === 0 ? (
+            ) : projects.length === 0 ? (
               <div className="px-3 py-2.5 bg-bg-secondary rounded-lg border border-border-primary min-h-[44px]">
-                <span className="text-sm text-text-tertiary">No collections</span>
+                <span className="text-sm text-text-tertiary">No RAG projects available</span>
               </div>
             ) : (
               <select
-                value={selectedCollection || ''}
-                onChange={(e) => handleCollectionChange(e.target.value)}
+                value={selectedProjectId}
+                onChange={(e) => handleProjectChange(e.target.value)}
                 className="w-full px-3 py-2.5 bg-bg-secondary border border-border-primary rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent-primary/50 min-h-[44px]"
               >
-                <option value="">— Select collection —</option>
-                {collectionOptions.map((col) => (
-                  <option key={col.name} value={col.name}>
-                    {col.name}
-                    {col.point_count !== undefined ? ` (${formatNumber(col.point_count)} pts)` : ''}
-                    {col.source === 'logical' ? ' (logical)' : ''}
+                {projects.map(project => (
+                  <option key={project.project_id} value={project.project_id}>
+                    {project.project_id} ({formatNumber(project.points_count)} pts{project.exists ? '' : ' · not found'})
                   </option>
                 ))}
               </select>
             )}
-            {collectionOptions.length > 0 && (
-               <button
-                 onClick={() => fetchCollections(selectedProjectId)}
-                 disabled={collectionsLoading}
-                 className="mt-1.5 p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-h-[40px] min-w-[40px] flex items-center justify-center"
-                 title="Refresh collections"
-               >
-                 <RefreshCw className={`w-4 h-4 ${collectionsLoading ? 'animate-spin' : ''}`} />
-               </button>
-             )}
-           </div>
-         )}
-
-        {/* Selected RAG info */}
-        {selectedProject && (
-          <div className="pt-3 border-t border-border-subtle">
-            <p className="text-xs text-text-tertiary">
-              Collection: <span className="font-mono text-text-secondary">{selectedProject.qdrant_collection}</span>
-            </p>
-            <p className="text-xs text-text-tertiary mt-1">
-              Status: <span className={selectedProject.exists ? 'text-status-success' : 'text-status-warning'}>
-                {selectedProject.exists ? 'Exists' : 'Not Found'}
-              </span>
-            </p>
+            {projects.length > 0 && (
+              <button
+                onClick={fetchProjects}
+                disabled={projectsLoading}
+                className="mt-1.5 p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-h-[36px] min-w-[36px] flex items-center justify-center"
+                title="Refresh projects"
+              >
+                <RefreshCw className={`w-4 h-4 ${projectsLoading ? 'animate-spin' : ''}`} />
+              </button>
+            )}
           </div>
-        )}
+
+          {/* Collections dropdown */}
+          {selectedProjectId && (
+            <div>
+              <label className="block text-[10px] text-text-tertiary uppercase tracking-wider mb-1.5">
+                Collection
+              </label>
+              {collectionsLoading || projectDetailLoading ? (
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-bg-secondary rounded-lg border border-border-primary min-h-[44px]">
+                  <Loader2 className="w-4 h-4 animate-spin text-text-tertiary flex-shrink-0" />
+                  <span className="text-sm text-text-tertiary">Loading collections...</span>
+                </div>
+              ) : collectionsError ? (
+                <div className="px-3 py-2.5 bg-status-error/5 border border-status-error/20 rounded-lg">
+                  <span className="text-sm text-status-error">{collectionsError.message}</span>
+                </div>
+              ) : collectionOptions.length === 0 ? (
+                <div className="px-3 py-2.5 bg-bg-secondary rounded-lg border border-border-primary min-h-[44px]">
+                  <span className="text-sm text-text-tertiary">No collections</span>
+                </div>
+              ) : (
+                <select
+                  value={selectedCollection || ''}
+                  onChange={(e) => handleCollectionChange(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-bg-secondary border border-border-primary rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent-primary/50 min-h-[44px]"
+                >
+                  <option value="">— Select collection —</option>
+                  {collectionOptions.map((col) => (
+                    <option key={col.name} value={col.name}>
+                      {col.name}
+                      {col.point_count !== undefined ? ` (${formatNumber(col.point_count)} pts)` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {collectionOptions.length > 0 && (
+                <button
+                  onClick={() => fetchCollections(selectedProjectId)}
+                  disabled={collectionsLoading}
+                  className="mt-1.5 p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-h-[36px] min-w-[36px] flex items-center justify-center"
+                  title="Refresh collections"
+                >
+                  <RefreshCw className={`w-4 h-4 ${collectionsLoading ? 'animate-spin' : ''}`} />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Selected RAG info (compact status) */}
+          {selectedProject && (
+            <div className="pt-3 border-t border-border-subtle">
+              <p className="text-xs text-text-tertiary">
+                Collection: <span className="font-mono text-text-secondary">{selectedProject.qdrant_collection}</span>
+              </p>
+              <p className="text-xs text-text-tertiary mt-1">
+                Status: <span className={selectedProject.exists ? 'text-status-success' : 'text-status-warning'}>
+                  {selectedProject.exists ? 'Exists' : 'Not Found'}
+                </span>
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </>
   );
