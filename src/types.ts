@@ -58,7 +58,7 @@ export interface ApiError {
   code?: number;
 }
 
-export type Page = 'dashboard' | 'chat' | 'models' | 'router' | 'diagnostics' | 'rag' | 'settings';
+export type Page = 'dashboard' | 'chat' | 'models' | 'router' | 'diagnostics' | 'rag' | 'gateway-settings' | 'settings';
 
 /**
  * Chat message used for the /v1/chat/completions API.
@@ -647,4 +647,54 @@ export interface RagPageState {
   // Refresh
   refreshing: boolean;
   lastUpdated: number | null;
-}
+ }
+ 
+ // ── Gateway Settings Types ──────────────────────────────────────────────
+ 
+ export interface PromptTemplate {
+   id: string;
+   name: string;
+   description?: string;
+   system_prompt: string;
+   instruction_prompt: string;
+   is_builtin: boolean;
+   is_active: boolean;
+   created_at?: string;
+   updated_at?: string;
+   recommended_settings?: Record<string, unknown>;
+ }
+ 
+ export interface GatewaySettings {
+   active_prompt_template?: string;
+   default_model?: string;
+   max_tokens?: number;
+   temperature?: number;
+   stream_default?: boolean;
+   rag_enabled_default?: boolean;
+   default_rag_project?: string;
+   default_rag_collection?: string;
+   rag_search_limit?: number;
+ }
+ 
+ export interface GatewaySettingsUpdate {
+   active_prompt_template?: string;
+   default_model?: string;
+   max_tokens?: number;
+   temperature?: number;
+   stream_default?: boolean;
+   rag_enabled_default?: boolean;
+   default_rag_project?: string;
+   default_rag_collection?: string;
+   rag_search_limit?: number;
+ }
+ 
+ export interface PromptTemplateCreateRequest {
+   name: string;
+   description?: string;
+   system_prompt: string;
+   instruction_prompt: string;
+ }
+ 
+ export interface PromptTemplateListResponse {
+   templates: PromptTemplate[];
+ }

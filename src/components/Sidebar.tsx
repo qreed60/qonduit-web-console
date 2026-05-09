@@ -9,6 +9,7 @@ import {
   Activity,
   Database,
   Settings,
+  Settings2,
   X,
   Menu,
 } from 'lucide-react';
@@ -25,6 +26,7 @@ const NAV_ITEMS: { id: Page; label: string; icon: React.ReactNode }[] = [
   { id: 'router', label: 'Router', icon: <Router className="w-5 h-5" /> },
   { id: 'diagnostics', label: 'Diagnostics', icon: <Activity className="w-5 h-5" /> },
   { id: 'rag', label: 'RAG', icon: <Database className="w-5 h-5" /> },
+  { id: 'gateway-settings', label: 'Gateway Settings', icon: <Settings2 className="w-5 h-5" /> },
   { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> },
 ];
 
