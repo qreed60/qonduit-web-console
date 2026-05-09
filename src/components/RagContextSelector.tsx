@@ -232,6 +232,152 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
     };
   }, [isOpen, handleClose]);
 
+  // Shared panel content (rendered once)
+  const renderPanelContent = () => (
+    <>
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 pb-3 border-b border-border-subtle">
+        <h4 className="text-sm font-semibold text-text-primary flex items-center gap-2">
+          <Database className="w-4 h-4 text-accent-primary" />
+          RAG Context
+        </h4>
+        <button
+          onClick={handleClose}
+          className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 min-h-[36px] min-w-[36px] flex items-center justify-center"
+          title="Close"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Scrollable Content */}
+      <div className="p-4 space-y-4">
+        {/* Enable/disable toggle */}
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-text-secondary">Enable RAG context</span>
+          <button
+            onClick={() => setEnabled(!enabled)}
+            className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
+              enabled ? 'bg-accent-primary' : 'bg-text-tertiary/30'
+            }`}
+            role="switch"
+            aria-checked={enabled}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                enabled ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* Projects dropdown */}
+        <div>
+          <label className="block text-[10px] text-text-tertiary uppercase tracking-wider mb-1.5">
+            Project
+          </label>
+          {projectsLoading ? (
+            <div className="flex items-center gap-2 px-3 py-2.5 bg-bg-secondary rounded-lg border border-border-primary min-h-[44px]">
+              <Loader2 className="w-4 h-4 animate-spin text-text-tertiary flex-shrink-0" />
+              <span className="text-sm text-text-tertiary">Loading projects...</span>
+            </div>
+          ) : projectsError ? (
+            <div className="px-3 py-2.5 bg-status-error/5 border border-status-error/20 rounded-lg">
+              <span className="text-sm text-status-error">{projectsError.message}</span>
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="px-3 py-2.5 bg-bg-secondary rounded-lg border border-border-primary min-h-[44px]">
+              <span className="text-sm text-text-tertiary">No RAG projects available</span>
+            </div>
+          ) : (
+            <select
+              value={selectedProjectId}
+              onChange={(e) => handleProjectChange(e.target.value)}
+              className="w-full px-3 py-2.5 bg-bg-secondary border border-border-primary rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent-primary/50 min-h-[44px]"
+            >
+              {projects.map(project => (
+                <option key={project.project_id} value={project.project_id}>
+                  {project.project_id} ({formatNumber(project.points_count)} pts{project.exists ? '' : ' · not found'})
+                </option>
+              ))}
+            </select>
+          )}
+          {projects.length > 0 && (
+            <button
+              onClick={fetchProjects}
+              disabled={projectsLoading}
+              className="mt-1.5 p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-h-[36px] min-w-[36px] flex items-center justify-center"
+              title="Refresh projects"
+            >
+              <RefreshCw className={`w-4 h-4 ${projectsLoading ? 'animate-spin' : ''}`} />
+            </button>
+          )}
+        </div>
+
+        {/* Collections dropdown */}
+        {selectedProjectId && (
+          <div>
+            <label className="block text-[10px] text-text-tertiary uppercase tracking-wider mb-1.5">
+              Collection
+            </label>
+            {collectionsLoading || projectDetailLoading ? (
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-bg-secondary rounded-lg border border-border-primary min-h-[44px]">
+                <Loader2 className="w-4 h-4 animate-spin text-text-tertiary flex-shrink-0" />
+                <span className="text-sm text-text-tertiary">Loading collections...</span>
+              </div>
+            ) : collectionsError ? (
+              <div className="px-3 py-2.5 bg-status-error/5 border border-status-error/20 rounded-lg">
+                <span className="text-sm text-status-error">{collectionsError.message}</span>
+              </div>
+            ) : collectionOptions.length === 0 ? (
+              <div className="px-3 py-2.5 bg-bg-secondary rounded-lg border border-border-primary min-h-[44px]">
+                <span className="text-sm text-text-tertiary">No collections</span>
+              </div>
+            ) : (
+              <select
+                value={selectedCollection || ''}
+                onChange={(e) => handleCollectionChange(e.target.value)}
+                className="w-full px-3 py-2.5 bg-bg-secondary border border-border-primary rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent-primary/50 min-h-[44px]"
+              >
+                <option value="">— Select collection —</option>
+                {collectionOptions.map((col) => (
+                  <option key={col.name} value={col.name}>
+                    {col.name}
+                    {col.point_count !== undefined ? ` (${formatNumber(col.point_count)} pts)` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+            {collectionOptions.length > 0 && (
+              <button
+                onClick={() => fetchCollections(selectedProjectId)}
+                disabled={collectionsLoading}
+                className="mt-1.5 p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-h-[36px] min-w-[36px] flex items-center justify-center"
+                title="Refresh collections"
+              >
+                <RefreshCw className={`w-4 h-4 ${collectionsLoading ? 'animate-spin' : ''}`} />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Selected RAG info (compact status) */}
+        {selectedProject && (
+          <div className="pt-3 border-t border-border-subtle">
+            <p className="text-xs text-text-tertiary">
+              Collection: <span className="font-mono text-text-secondary">{selectedProject.qdrant_collection}</span>
+            </p>
+            <p className="text-xs text-text-tertiary mt-1">
+              Status: <span className={selectedProject.exists ? 'text-status-success' : 'text-status-warning'}>
+                {selectedProject.exists ? 'Exists' : 'Not Found'}
+              </span>
+            </p>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
   return (
     <>
       {/* Compact Trigger Badge — always inline, never expands layout */}
@@ -260,171 +406,28 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
         </button>
       </div>
 
-      {/* Portal-mounted Backdrop */}
+      {/* Single portal containing backdrop + panel as siblings — fixes z-index stacking */}
       {isOpen && createPortal(
-        <div
-          className="fixed inset-0 bg-black/30 z-[90] transition-opacity duration-200"
-          onClick={handleBackdropClick}
-          aria-hidden="true"
-        />,
-        document.body
-      )}
+        <div className="fixed inset-0 z-[9999] pointer-events-none" aria-modal="true" aria-label="RAG Context Settings">
+          {/* Backdrop — pointer-events-auto so clicks close the modal */}
+          <div
+            className="absolute inset-0 bg-black/50 pointer-events-auto transition-opacity duration-200"
+            onClick={handleBackdropClick}
+            aria-hidden="true"
+          />
 
-      {/* Portal-mounted Popup / Modal / Bottom Sheet */}
-      {isOpen && createPortal(
-        <div
-          ref={popupRef}
-          className={`fixed transition-all duration-200
-            hidden lg:flex lg:items-center lg:justify-center lg:inset-0 lg:z-[100]
-            lg:hidden bottom-0 left-0 right-0 z-[100]
-            w-[420px] max-w-[90vw] lg:max-h-[80vh] max-h-[85vh]
-            overflow-y-auto rounded-2xl bg-bg-card border border-border-primary shadow-2xl
-            ${isOpen ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-full opacity-0 scale-95'}
-            pb-[env(safe-area-inset-bottom)]
-          `}
-          role="dialog"
-          aria-modal="true"
-          aria-label="RAG Context Settings"
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 pb-3 border-b border-border-subtle">
-            <h4 className="text-sm font-semibold text-text-primary flex items-center gap-2">
-              <Database className="w-4 h-4 text-accent-primary" />
-              RAG Context
-            </h4>
-            <button
-              onClick={handleClose}
-              className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 min-h-[36px] min-w-[36px] flex items-center justify-center"
-              title="Close"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Scrollable Content */}
-          <div className="p-4 space-y-4 overflow-y-auto">
-            {/* Enable/disable toggle */}
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-text-secondary">Enable RAG context</span>
-              <button
-                onClick={() => setEnabled(!enabled)}
-                className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
-                  enabled ? 'bg-accent-primary' : 'bg-text-tertiary/30'
-                }`}
-                role="switch"
-                aria-checked={enabled}
-              >
-                <span
-                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                    enabled ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
-
-            {/* Projects dropdown */}
-            <div>
-              <label className="block text-[10px] text-text-tertiary uppercase tracking-wider mb-1.5">
-                Project
-              </label>
-              {projectsLoading ? (
-                <div className="flex items-center gap-2 px-3 py-2.5 bg-bg-secondary rounded-lg border border-border-primary min-h-[44px]">
-                  <Loader2 className="w-4 h-4 animate-spin text-text-tertiary flex-shrink-0" />
-                  <span className="text-sm text-text-tertiary">Loading projects...</span>
-                </div>
-              ) : projectsError ? (
-                <div className="px-3 py-2.5 bg-status-error/5 border border-status-error/20 rounded-lg">
-                  <span className="text-sm text-status-error">{projectsError.message}</span>
-                </div>
-              ) : projects.length === 0 ? (
-                <div className="px-3 py-2.5 bg-bg-secondary rounded-lg border border-border-primary min-h-[44px]">
-                  <span className="text-sm text-text-tertiary">No RAG projects available</span>
-                </div>
-              ) : (
-                <select
-                  value={selectedProjectId}
-                  onChange={(e) => handleProjectChange(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-bg-secondary border border-border-primary rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent-primary/50 min-h-[44px]"
-                >
-                  {projects.map(project => (
-                    <option key={project.project_id} value={project.project_id}>
-                      {project.project_id} ({formatNumber(project.points_count)} pts{project.exists ? '' : ' · not found'})
-                    </option>
-                  ))}
-                </select>
-              )}
-              {projects.length > 0 && (
-                <button
-                  onClick={fetchProjects}
-                  disabled={projectsLoading}
-                  className="mt-1.5 p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-h-[36px] min-w-[36px] flex items-center justify-center"
-                  title="Refresh projects"
-                >
-                  <RefreshCw className={`w-4 h-4 ${projectsLoading ? 'animate-spin' : ''}`} />
-                </button>
-              )}
-            </div>
-
-            {/* Collections dropdown */}
-            {selectedProjectId && (
-              <div>
-                <label className="block text-[10px] text-text-tertiary uppercase tracking-wider mb-1.5">
-                  Collection
-                </label>
-                {collectionsLoading || projectDetailLoading ? (
-                  <div className="flex items-center gap-2 px-3 py-2.5 bg-bg-secondary rounded-lg border border-border-primary min-h-[44px]">
-                    <Loader2 className="w-4 h-4 animate-spin text-text-tertiary flex-shrink-0" />
-                    <span className="text-sm text-text-tertiary">Loading collections...</span>
-                  </div>
-                ) : collectionsError ? (
-                  <div className="px-3 py-2.5 bg-status-error/5 border border-status-error/20 rounded-lg">
-                    <span className="text-sm text-status-error">{collectionsError.message}</span>
-                  </div>
-                ) : collectionOptions.length === 0 ? (
-                  <div className="px-3 py-2.5 bg-bg-secondary rounded-lg border border-border-primary min-h-[44px]">
-                    <span className="text-sm text-text-tertiary">No collections</span>
-                  </div>
-                ) : (
-                  <select
-                    value={selectedCollection || ''}
-                    onChange={(e) => handleCollectionChange(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-bg-secondary border border-border-primary rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent-primary/50 min-h-[44px]"
-                  >
-                    <option value="">— Select collection —</option>
-                    {collectionOptions.map((col) => (
-                      <option key={col.name} value={col.name}>
-                        {col.name}
-                        {col.point_count !== undefined ? ` (${formatNumber(col.point_count)} pts)` : ''}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {collectionOptions.length > 0 && (
-                  <button
-                    onClick={() => fetchCollections(selectedProjectId)}
-                    disabled={collectionsLoading}
-                    className="mt-1.5 p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-h-[36px] min-w-[36px] flex items-center justify-center"
-                    title="Refresh collections"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${collectionsLoading ? 'animate-spin' : ''}`} />
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Selected RAG info (compact status) */}
-            {selectedProject && (
-              <div className="pt-3 border-t border-border-subtle">
-                <p className="text-xs text-text-tertiary">
-                  Collection: <span className="font-mono text-text-secondary">{selectedProject.qdrant_collection}</span>
-                </p>
-                <p className="text-xs text-text-tertiary mt-1">
-                  Status: <span className={selectedProject.exists ? 'text-status-success' : 'text-status-warning'}>
-                    {selectedProject.exists ? 'Exists' : 'Not Found'}
-                  </span>
-                </p>
-              </div>
-            )}
+          {/* Mobile bottom sheet + Desktop centered modal — single panel element */}
+           <div
+             ref={popupRef}
+             className="absolute z-[10000] pointer-events-auto bg-bg-card border border-border-primary shadow-2xl overflow-y-auto
+               inset-x-0 bottom-0 rounded-t-2xl max-h-[85vh] pb-[env(safe-area-inset-bottom)]
+               lg:rounded-2xl lg:max-w-[520px] lg:w-[480px] lg:max-h-[80vh]
+               lg:top-1/2 lg:left-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2
+               transition-transform transition-opacity duration-200
+               translate-y-0 opacity-100
+             "
+           >
+            {renderPanelContent()}
           </div>
         </div>,
         document.body
