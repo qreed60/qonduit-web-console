@@ -13,9 +13,10 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import HfSearchPanel from '../components/HfSearchPanel';
 import DownloadJobsPanel from '../components/DownloadJobsPanel';
 import TrashPanel from '../components/TrashPanel';
+import MobileCollapsibleCard, { CardAction } from '../components/MobileCollapsibleCard';
 import {
   RefreshCw, Copy, CheckCircle2, Globe, Zap, Server, Router,
-  Cpu, HardDrive, MemoryStick, Loader2, Trash2,
+  Cpu, HardDrive, MemoryStick, Loader2, Trash2, FileDown,
 } from 'lucide-react';
 
 // ── Local types ───────────────────────────────────────────────────────
@@ -32,17 +33,112 @@ interface ModelCardData {
   fileSize?: string;
 }
 
-interface ProviderError {
-  provider: string;
-  url: string;
-  error: string;
-}
-
 interface VramData {
   total: string;
   used: string;
   free: string;
 }
+
+// ── Model Card (extracted for reuse inside collapsible cards) ──────────
+
+interface ModelCardProps {
+  model: ModelCardData;
+  onCopyId: (id: string) => void;
+  onMoveToTrash?: (model: ModelCardData) => void;
+  copiedId: string | null;
+  getProviderColor: (provider: string) => string;
+  getProviderIcon: (provider: string) => React.ReactNode;
+}
+
+const ModelCard: React.FC<ModelCardProps> = ({
+  model, onCopyId, onMoveToTrash, copiedId, getProviderColor, getProviderIcon,
+}) => {
+  const cleanId = model.id.replace(/^gateway:|^direct:|^router:/, '');
+  const isRouter = model.provider === 'Router';
+
+  return (
+    <div
+      className="bg-bg-secondary/30 border border-border-subtle rounded-xl p-4 hover:border-accent-primary/30 transition-all duration-200 group relative"
+    >
+      {/* Move to Trash button (Router models only) */}
+      {isRouter && onMoveToTrash && (
+        <button
+          onClick={() => onMoveToTrash(model)}
+          className="absolute top-3 right-3 p-2 rounded-lg hover:bg-status-error/10 text-text-tertiary hover:text-status-error transition-all duration-200 min-h-[36px] min-w-[36px] flex items-center justify-center"
+          title="Move to Trash"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      )}
+
+      <div className="flex items-start justify-between mb-3 pr-8">
+        <div className="flex items-center gap-2">
+          <div className={`px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1 ${getProviderColor(model.provider)}`}>
+            {getProviderIcon(model.provider)}
+            {model.provider}
+          </div>
+          {model.created && (
+            <span className="text-[10px] sm:text-xs text-text-tertiary">
+              {new Date(model.created * 1000).toLocaleDateString()}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-bg-secondary/50 rounded-lg p-2.5 border border-border-subtle mb-3">
+        <p className="text-xs font-mono text-text-primary truncate" title={cleanId}>
+          {cleanId}
+        </p>
+        {model.path && (
+          <p className="text-[10px] sm:text-xs font-mono text-text-tertiary truncate mt-1" title={model.path}>
+            {model.path}
+          </p>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 mb-3 text-[10px] sm:text-xs text-text-tertiary flex-wrap">
+        {model.parameterSize && model.parameterSize !== 'unknown' ? (
+          <span className="flex items-center gap-1">
+            <Cpu className="w-3 h-3" />
+            {model.parameterSize}
+          </span>
+        ) : (
+          <span className="text-text-tertiary/50">Param: unknown</span>
+        )}
+        {model.fileSize && model.fileSize !== 'unknown' ? (
+          <span className="flex items-center gap-1">
+            <HardDrive className="w-3 h-3" />
+            {model.fileSize}
+          </span>
+        ) : (
+          <span className="text-text-tertiary/50">
+            <HardDrive className="w-3 h-3 inline" />
+            Size: unknown
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3 text-xs text-text-tertiary">
+          <span className="truncate">{model.provider === 'Router' ? 'GGUF' : model.ownedBy || model.id}</span>
+          <span className="hidden sm:inline">·</span>
+          <span>{model.provider === 'Router' ? 'Launchable' : model.provider}</span>
+        </div>
+        <button
+          onClick={() => onCopyId(model.id)}
+          className="p-2 rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-all duration-200 opacity-0 group-hover:opacity-100 sm:opacity-100 min-h-[36px] min-w-[36px] flex items-center justify-center"
+          title="Copy ID"
+        >
+          {copiedId === model.id ? (
+            <CheckCircle2 className="w-4 h-4 text-status-success" />
+          ) : (
+            <Copy className="w-4 h-4" />
+          )}
+        </button>
+      </div>
+    </div>
+  );
+};
 
 // ── Component ─────────────────────────────────────────────────────────
 
@@ -55,10 +151,8 @@ const ModelsPage: React.FC = () => {
   // ── State: content data ──
   const [models, setModels] = useState<ModelCardData[]>([]);
 
-  // ── State: errors & timestamps ──
-    const [error, setError] = useState<string | null>(null);
-    const [providerErrors, setProviderErrors] = useState<ProviderError[]>([]);
-    const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  // ── State: timestamps ──
+     const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
   // ── State: VRAM ──
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -148,8 +242,6 @@ const ModelsPage: React.FC = () => {
       setRefreshing(true);
     }
 
-    setProviderErrors([]);
-
     const timeout = 10000;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -162,43 +254,28 @@ const ModelsPage: React.FC = () => {
       ]);
 
       const allModels: ModelCardData[] = [];
-      const errors: ProviderError[] = [];
-
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          const data = result.value;
-          data.models.forEach((m) => {
-            allModels.push({
-              id: `${data.provider}:${m.id}`,
-              name: m.name,
-              provider: data.provider,
-              created: m.created,
-              ownedBy: m.ownedBy,
-              path: m.path,
-              sourceUrl: m.sourceUrl,
-              parameterSize: m.parameterSize,
-              fileSize: m.fileSize,
-            });
-          });
-        } else {
-          const rejection = result as PromiseRejectedResult;
-          const msg = rejection.reason instanceof Error ? rejection.reason.message : 'Unknown error';
-          errors.push({ provider: 'Unknown', url: 'unknown', error: msg });
-        }
-      }
-
-      setModels(allModels);
-       setProviderErrors(errors);
  
-       if (allModels.length === 0) {
-         if (errors.length > 0) {
-           setError(`No models found. Provider errors:\n${errors.map(e => `${e.provider}: ${e.error}`).join('\n')}`);
-         } else {
-           setError('No models found from any endpoint (Gateway, Direct, or Router)');
+       for (const result of results) {
+         if (result.status === 'fulfilled') {
+           const data = result.value;
+           data.models.forEach((m) => {
+             allModels.push({
+               id: `${data.provider}:${m.id}`,
+               name: m.name,
+               provider: data.provider,
+               created: m.created,
+               ownedBy: m.ownedBy,
+               path: m.path,
+               sourceUrl: m.sourceUrl,
+               parameterSize: m.parameterSize,
+               fileSize: m.fileSize,
+             });
+           });
          }
        }
- 
-       setLastUpdated(Date.now());
+
+      setModels(allModels);
+         setLastUpdated(Date.now());
     } finally {
       clearTimeout(timeoutId);
       setInitialLoading(false);
@@ -267,12 +344,19 @@ const ModelsPage: React.FC = () => {
         // Preserve last known jobs on error — do not clear downloadJobs
       } finally {
         setJobsLoading(false);
-        jobsInFlightRef.current = false;
-      }
-    };
-
-  // ── Initial load ──
-   useEffect(() => {
+         jobsInFlightRef.current = false;
+       }
+     };
+   
+     // ── Clear completed jobs ──
+     const handleClearCompleted = () => {
+       setDownloadJobs(prev => prev.filter(j => j.status === 'queued' || j.status === 'downloading'));
+       setToastMessage('Completed jobs cleared');
+       setToastType('info');
+     };
+   
+     // ── Initial load ──
+     useEffect(() => {
      loadModels();
      loadVram();
      loadTrash();
@@ -496,15 +580,52 @@ const ModelsPage: React.FC = () => {
   };
 
   const getProviderIcon = (provider: string) => {
-    switch (provider) {
-      case 'Gateway': return <Globe className="w-3.5 h-3.5" />;
-      case 'Direct': return <Zap className="w-3.5 h-3.5" />;
-      case 'Router': return <Router className="w-3.5 h-3.5" />;
-      default: return <Server className="w-3.5 h-3.5" />;
-    }
-  };
-
-  return (
+     switch (provider) {
+       case 'Gateway': return <Globe className="w-3.5 h-3.5" />;
+       case 'Direct': return <Zap className="w-3.5 h-3.5" />;
+       case 'Router': return <Router className="w-3.5 h-3.5" />;
+       default: return <Server className="w-3.5 h-3.5" />;
+     }
+   };
+ 
+   // ── Derived model arrays ──
+   const gatewayModels = models.filter(m => m.provider === 'Gateway');
+   const directModels = models.filter(m => m.provider === 'Direct');
+   const routerModels = models.filter(m => m.provider === 'Router');
+ 
+   // ── Download job counts ──
+   const activeJobs = downloadJobs.filter(j => j.status === 'queued' || j.status === 'downloading').length;
+   const completedJobs = downloadJobs.filter(
+     j => j.status === 'complete' || j.status === 'failed' || j.status === 'cancelled' || j.status === 'interrupted'
+   ).length;
+ 
+   // ── Render model grid helper ──
+   const renderModelGrid = (filteredModels: ModelCardData[]) => (
+     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+       {filteredModels.map((model) => (
+         <ModelCard
+           key={model.id}
+           model={model}
+           onCopyId={handleCopyId}
+           onMoveToTrash={model.provider === 'Router' ? handleMoveToTrash : undefined}
+           copiedId={copiedId}
+           getProviderColor={getProviderColor}
+           getProviderIcon={getProviderIcon}
+         />
+       ))}
+     </div>
+   );
+ 
+   // ── Download Jobs Clear Action ──
+   const clearCompletedAction: CardAction | undefined = completedJobs > 0
+     ? {
+         label: `Clear Completed (${completedJobs})`,
+         onClick: handleClearCompleted,
+         variant: 'secondary',
+       }
+     : undefined;
+ 
+   return (
       <div className="px-4 py-4 sm:px-6 sm:py-6 h-full flex flex-col">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 sm:mb-6">
@@ -552,137 +673,89 @@ const ModelsPage: React.FC = () => {
          </div>
   
         {/* Main Content */}
-        <div className="flex-1 overflow-y-auto space-y-4">
-          {/* ── Local Models ── */}
-          <div className="bg-bg-card rounded-xl border border-border-primary p-4 sm:p-5">
-            <h3 className="text-sm font-semibold text-text-primary mb-3">Local Models</h3>
-            {initialLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 text-text-tertiary animate-spin" />
-              </div>
-            ) : models.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="w-14 h-14 bg-bg-tertiary rounded-full flex items-center justify-center mb-4 mx-auto">
-                  <Server className="w-7 h-7 text-text-tertiary" />
-                </div>
-                <p className="text-text-secondary">No models available</p>
-                <button
-                  onClick={loadModels}
-                  className="mt-2 text-accent-primary hover:text-accent-primary-hover font-medium text-sm"
-                >
-                  Try refreshing
-                </button>
-              </div>
-            ) : (
-              <>
-                {error && (
-                   <div className="mb-3 p-2 bg-status-error/5 border border-status-error/20 rounded-lg">
-                     <p className="text-[10px] sm:text-xs text-status-error font-medium mb-1">Error</p>
-                     <p className="text-xs text-text-secondary whitespace-pre-wrap">{error}</p>
-                   </div>
-                 )}
-                 {providerErrors.length > 0 && (
-                   <div className="mb-3 p-2 bg-status-error/5 border border-status-error/20 rounded-lg">
-                     <p className="text-[10px] sm:text-xs text-status-error font-medium mb-1">Provider Errors</p>
-                     {providerErrors.map((e, i) => (
-                       <p key={i} className="text-[10px] sm:text-xs text-text-secondary font-mono">{e.provider}: {e.error}</p>
-                     ))}
-                   </div>
-                 )}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {models.map((model) => {
-                    const cleanId = model.id.replace(/^gateway:|^direct:|^router:/, '');
-                    const isRouter = model.provider === 'Router';
-                    return (
-                      <div
-                        key={model.id}
-                        className="bg-bg-secondary/30 border border-border-subtle rounded-xl p-4 hover:border-accent-primary/30 transition-all duration-200 group relative"
-                      >
-                        {/* Move to Trash button (Router models only) — always visible on mobile */}
-                        {isRouter && (
-                          <button
-                            onClick={() => handleMoveToTrash(model)}
-                            className="absolute top-3 right-3 p-2 rounded-lg hover:bg-status-error/10 text-text-tertiary hover:text-status-error transition-all duration-200 min-h-[36px] min-w-[36px] flex items-center justify-center"
-                            title="Move to Trash"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-  
-                        <div className="flex items-start justify-between mb-3 pr-8">
-                          <div className="flex items-center gap-2">
-                            <div className={`px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1 ${getProviderColor(model.provider)}`}>
-                              {getProviderIcon(model.provider)}
-                              {model.provider}
-                            </div>
-                            {model.created && (
-                              <span className="text-[10px] sm:text-xs text-text-tertiary">
-                                {new Date(model.created * 1000).toLocaleDateString()}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-  
-                        <div className="bg-bg-secondary/50 rounded-lg p-2.5 border border-border-subtle mb-3">
-                          <p className="text-xs font-mono text-text-primary truncate" title={cleanId}>
-                            {cleanId}
-                          </p>
-                          {model.path && (
-                            <p className="text-[10px] sm:text-xs font-mono text-text-tertiary truncate mt-1" title={model.path}>
-                              {model.path}
-                            </p>
-                          )}
-                        </div>
-  
-                        <div className="flex items-center gap-2 mb-3 text-[10px] sm:text-xs text-text-tertiary flex-wrap">
-                          {model.parameterSize && model.parameterSize !== 'unknown' ? (
-                            <span className="flex items-center gap-1">
-                              <Cpu className="w-3 h-3" />
-                              {model.parameterSize}
-                            </span>
-                          ) : (
-                            <span className="text-text-tertiary/50">Param: unknown</span>
-                          )}
-                          {model.fileSize && model.fileSize !== 'unknown' ? (
-                            <span className="flex items-center gap-1">
-                              <HardDrive className="w-3 h-3" />
-                              {model.fileSize}
-                            </span>
-                          ) : (
-                            <span className="text-text-tertiary/50">
-                              <HardDrive className="w-3 h-3 inline" />
-                              Size: unknown
-                            </span>
-                          )}
-                        </div>
-  
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3 text-xs text-text-tertiary">
-                            <span className="truncate">{model.provider === 'Router' ? 'GGUF' : model.ownedBy || model.id}</span>
-                            <span className="hidden sm:inline">·</span>
-                            <span>{model.provider === 'Router' ? 'Launchable' : model.provider}</span>
-                          </div>
-                          <button
-                            onClick={() => handleCopyId(model.id)}
-                            className="p-2 rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-all duration-200 opacity-0 group-hover:opacity-100 sm:opacity-100 min-h-[36px] min-w-[36px] flex items-center justify-center"
-                            title="Copy ID"
-                          >
-                            {copiedId === model.id ? (
-                              <CheckCircle2 className="w-4 h-4 text-status-success" />
-                            ) : (
-                              <Copy className="w-4 h-4" />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </div>
-
-        {/* ── Hugging Face Search Panel ── */}
+         <div className="flex-1 overflow-y-auto space-y-4">
+           {/* ── Gateway Models Card ── */}
+           <MobileCollapsibleCard
+             title="Gateway Models"
+             icon={<Globe className="w-5 h-5 text-accent-primary" />}
+             statusBadge={gatewayModels.length > 0 ? { status: 'online', label: `${gatewayModels.length} model${gatewayModels.length > 1 ? 's' : ''}` } : { status: 'unknown', label: 'None' }}
+             summaryText={gatewayModels.length > 0 ? 'Active gateway model' : 'No gateway models'}
+             defaultExpanded={true}
+             defaultExpandedMobile={false}
+             localStorageKey="qonduit-gateway-models"
+           >
+             {initialLoading ? (
+               <div className="flex items-center justify-center py-8">
+                 <Loader2 className="w-6 h-6 text-text-tertiary animate-spin" />
+               </div>
+             ) : gatewayModels.length === 0 ? (
+               <div className="text-center py-8">
+                 <div className="w-14 h-14 bg-bg-tertiary rounded-full flex items-center justify-center mb-4 mx-auto">
+                   <Globe className="w-7 h-7 text-text-tertiary" />
+                 </div>
+                 <p className="text-text-secondary">No gateway models</p>
+                 <p className="text-xs text-text-tertiary mt-1">Check your gateway endpoint configuration</p>
+               </div>
+             ) : (
+               renderModelGrid(gatewayModels)
+             )}
+           </MobileCollapsibleCard>
+ 
+           {/* ── Direct Models Card ── */}
+           <MobileCollapsibleCard
+             title="Direct Models"
+             icon={<Zap className="w-5 h-5 text-accent-secondary" />}
+             statusBadge={directModels.length > 0 ? { status: 'online', label: `${directModels.length} model${directModels.length > 1 ? 's' : ''}` } : { status: 'unknown', label: 'None' }}
+             summaryText={directModels.length > 0 ? 'Active direct model' : 'No direct models'}
+             defaultExpanded={true}
+             defaultExpandedMobile={false}
+             localStorageKey="qonduit-direct-models"
+           >
+             {initialLoading ? (
+               <div className="flex items-center justify-center py-8">
+                 <Loader2 className="w-6 h-6 text-text-tertiary animate-spin" />
+               </div>
+             ) : directModels.length === 0 ? (
+               <div className="text-center py-8">
+                 <div className="w-14 h-14 bg-bg-tertiary rounded-full flex items-center justify-center mb-4 mx-auto">
+                   <Zap className="w-7 h-7 text-text-tertiary" />
+                 </div>
+                 <p className="text-text-secondary">No direct models</p>
+                 <p className="text-xs text-text-tertiary mt-1">Check your llama endpoint configuration</p>
+               </div>
+             ) : (
+               renderModelGrid(directModels)
+             )}
+           </MobileCollapsibleCard>
+ 
+           {/* ── Router Models Card ── */}
+           <MobileCollapsibleCard
+             title="Router Models"
+             icon={<Router className="w-5 h-5 text-accent-tertiary" />}
+             statusBadge={routerModels.length > 0 ? { status: 'online', label: `${routerModels.length} model${routerModels.length > 1 ? 's' : ''}` } : { status: 'unknown', label: 'None' }}
+             summaryText={routerModels.length > 0 ? 'Launchable via router' : 'No router models'}
+             defaultExpanded={true}
+             defaultExpandedMobile={false}
+             localStorageKey="qonduit-router-models"
+           >
+             {initialLoading ? (
+               <div className="flex items-center justify-center py-8">
+                 <Loader2 className="w-6 h-6 text-text-tertiary animate-spin" />
+               </div>
+             ) : routerModels.length === 0 ? (
+               <div className="text-center py-8">
+                 <div className="w-14 h-14 bg-bg-tertiary rounded-full flex items-center justify-center mb-4 mx-auto">
+                   <Router className="w-7 h-7 text-text-tertiary" />
+                 </div>
+                 <p className="text-text-secondary">No router models</p>
+                 <p className="text-xs text-text-tertiary mt-1">Add GGUF files to the Router&apos;s model directory</p>
+               </div>
+             ) : (
+               renderModelGrid(routerModels)
+             )}
+           </MobileCollapsibleCard>
+ 
+         {/* ── Hugging Face Search Panel ── */}
         <HfSearchPanel
           hfQuery={hfQuery}
           setHfQuery={setHfQuery}
@@ -708,32 +781,64 @@ const ModelsPage: React.FC = () => {
           onCancelDownload={() => { setDownloadConfirmOpen(false); setDownloadConfirmData(null); }}
         />
 
-        {/* ── Download Jobs Panel ── */}
-        <DownloadJobsPanel
-          downloadJobs={downloadJobs}
-          jobsLoading={jobsLoading}
-          jobsError={jobsError}
-          jobsLastUpdated={jobsLastUpdated}
-          onRefresh={loadDownloadJobs}
-          onCancel={handleCancelDownload}
-        />
-
-        {/* ── Trash Panel ── */}
-          <TrashPanel
-            trashFiles={trashFiles}
-            trashLoading={trashLoading}
-            trashError={trashError}
-            onRetry={loadTrash}
-            restoreLoading={restoreLoading}
-            onRestore={handleRestore}
-            onDeletePermanent={handlePermanentDelete}
-            permanentDeleteLoading={permanentDeleteLoading}
-            onPermanentDeleteConfirm={confirmPermanentDelete}
-            onPermanentDeleteCancel={() => { setPermanentDeleteConfirmOpen(false); setPermanentDeleteEntry(null); }}
-            permanentDeleteConfirmOpen={permanentDeleteConfirmOpen}
-            permanentDeleteEntry={permanentDeleteEntry}
-          />
-      </div>
+        {/* ── Download Jobs Card ── */}
+           <MobileCollapsibleCard
+             title="Download Jobs"
+             icon={<FileDown className="w-5 h-5 text-accent-secondary" />}
+             statusBadge={
+               activeJobs > 0 ? { status: 'loading', label: `${activeJobs} active` } :
+               completedJobs > 0 ? { status: 'online', label: `${completedJobs} complete` } :
+               { status: 'unknown' as const, label: 'None' }
+             }
+             summaryText={
+               activeJobs > 0 ? `${activeJobs} downloading` :
+               completedJobs > 0 ? 'All jobs finished' :
+               'No active downloads'
+             }
+             action={clearCompletedAction}
+             defaultExpanded={true}
+             defaultExpandedMobile={false}
+             localStorageKey="qonduit-download-jobs"
+           >
+             <DownloadJobsPanel
+               downloadJobs={downloadJobs}
+               jobsLoading={jobsLoading}
+               jobsError={jobsError}
+               jobsLastUpdated={jobsLastUpdated}
+               onRefresh={loadDownloadJobs}
+               onCancel={handleCancelDownload}
+             />
+           </MobileCollapsibleCard>
+ 
+         {/* ── Trash / Restore Card ── */}
+            <MobileCollapsibleCard
+              title="Trash / Restore"
+              icon={<Trash2 className="w-5 h-5 text-text-tertiary" />}
+              statusBadge={
+                trashFiles.length > 0 ? { status: 'online', label: `${trashFiles.length} item${trashFiles.length > 1 ? 's' : ''}` } :
+                { status: 'unknown' as const, label: 'Empty' }
+              }
+              summaryText={trashFiles.length > 0 ? `${trashFiles.length} items in trash` : 'Trash is empty'}
+              defaultExpanded={true}
+              defaultExpandedMobile={false}
+              localStorageKey="qonduit-trash"
+            >
+              <TrashPanel
+                trashFiles={trashFiles}
+                trashLoading={trashLoading}
+                trashError={trashError}
+                onRetry={loadTrash}
+                restoreLoading={restoreLoading}
+                onRestore={handleRestore}
+                onDeletePermanent={handlePermanentDelete}
+                permanentDeleteLoading={permanentDeleteLoading}
+                onPermanentDeleteConfirm={confirmPermanentDelete}
+                onPermanentDeleteCancel={() => { setPermanentDeleteConfirmOpen(false); setPermanentDeleteEntry(null); }}
+                permanentDeleteConfirmOpen={permanentDeleteConfirmOpen}
+                permanentDeleteEntry={permanentDeleteEntry}
+              />
+            </MobileCollapsibleCard>
+        </div>
 
       {/* ── Toast ── */}
       {toastMessage && (

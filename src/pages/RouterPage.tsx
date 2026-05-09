@@ -5,6 +5,7 @@ import { GpuInfo } from '../types';
 import Toast from '../components/Toast';
 import GpuSummary from '../components/GpuSummary';
 import GpuTable from '../components/GpuTable';
+import MobileCollapsibleCard from '../components/MobileCollapsibleCard';
 import MobileAccordionSection from '../components/MobileAccordionSection';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -325,98 +326,240 @@ const RouterPage: React.FC = () => {
             </div>
           </div>
   
-          {/* VRAM Summary */}
-                     <div className="bg-bg-card rounded-xl border border-border-primary p-5">
-                       <h3 className="text-sm font-semibold text-text-primary mb-3">Detected GPU Memory</h3>
-                       {vramData ? (
-                         <div className="space-y-3">
-                           <GpuSummary total={vramData.total} used={vramData.used} free={vramData.free} />
-                           {gpuRows.length > 0 && <GpuTable rows={gpuRows} />}
-                         </div>
-                       ) : (
-                         <div className="bg-bg-secondary/50 rounded-lg p-3 border border-border-subtle">
-                           <p className="text-xs text-text-tertiary">{vramError || 'VRAM data unavailable'}</p>
-                         </div>
-                       )}
-                     </div>
+          {/* GPU Status Card */}
+           <MobileCollapsibleCard
+             title="GPU Status"
+             icon={<Cpu className="w-5 h-5 text-accent-primary" />}
+             statusBadge={vramData ? { status: 'online', label: `${vramData.total} total` } : { status: 'unknown', label: 'Unavailable' }}
+             summaryText={vramData ? `Used: ${vramData.used} / Free: ${vramData.free}` : 'GPU information unavailable'}
+             metrics={vramData ? [
+               { label: 'Total', value: vramData.total },
+               { label: 'Used', value: vramData.used },
+               { label: 'Free', value: vramData.free },
+             ] : undefined}
+             defaultExpanded={true}
+             defaultExpandedMobile={false}
+             localStorageKey="qonduit-router-gpu"
+           >
+             {vramData ? (
+               <div className="space-y-3">
+                 <GpuSummary total={vramData.total} used={vramData.used} free={vramData.free} />
+                 {gpuRows.length > 0 && <GpuTable rows={gpuRows} />}
+               </div>
+             ) : (
+               <div className="bg-bg-secondary/50 rounded-lg p-3 border border-border-subtle">
+                 <p className="text-xs text-text-tertiary">{vramError || 'VRAM data unavailable'}</p>
+               </div>
+             )}
+           </MobileCollapsibleCard>
   
-          {/* Model Cards */}
-          <div className="bg-bg-card rounded-xl border border-border-primary p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-text-primary">Launchable Models</h3>
-              {routerStatus?.running && (
-                <span className="flex items-center gap-1 text-[10px] font-medium text-status-success bg-status-success/10 px-2 py-0.5 rounded-full">
-                  <Cpu className="w-3 h-3" />
-                  Model Active
-                </span>
-              )}
-            </div>
-            {!hasEverLoadedRef.current ? (
+          {/* Launchable Models Card */}
+           <MobileCollapsibleCard
+             title="Launchable Models"
+             icon={<Cpu className="w-5 h-5 text-accent-tertiary" />}
+             statusBadge={
+               routerModels.length > 0 && isRunning ? { status: 'online', label: `Running: ${selectedModel}` } :
+               routerModels.length > 0 ? { status: 'offline', label: `${routerModels.length} available` } :
+               { status: 'unknown', label: 'None' }
+             }
+             summaryText={
+               isRunning ? `Running: ${selectedModel}` :
+               selectedModel ? `Selected: ${selectedModel}` :
+               'No models available'
+             }
+             defaultExpanded={true}
+             defaultExpandedMobile={false}
+             localStorageKey="qonduit-router-launchable"
+           >
+             {!hasEverLoadedRef.current ? (
                <div className="flex items-center justify-center py-8">
                  <Loader2 className="w-6 h-6 text-text-tertiary animate-spin" />
                </div>
              ) : routerModels.length > 0 ? (
-              <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4 ${isStale ? 'opacity-70' : ''}`}>
-                {routerModels.map((model) => {
-                                  const isSelected = model.name === selectedModel;
-                                  const isThisRunning = isRunning && isSelected;
-                                  return (
-                                    <button
-                                      key={model.name}
-                                      onClick={() => setSelectedModel(model.name)}
-                                      className={`text-left p-4 rounded-lg border-2 transition-all duration-200 ${
-                                        isSelected
-                                          ? 'border-accent-primary bg-accent-primary/5'
-                                          : isThisRunning
-                                          ? 'border-status-success bg-status-success/5'
-                                          : 'border-border-subtle bg-bg-secondary/30 hover:border-border-primary'
-                                      }`}
-                                    >
-                                      <div className="flex items-start justify-between mb-2">
-                                        <p className="text-xs font-mono text-text-primary truncate flex-1" title={model.name}>
-                                          {model.name}
-                                        </p>
-                                        {isThisRunning && (
-                                          <CheckCircle2 className="w-3.5 h-3.5 text-status-success flex-shrink-0 ml-2" />
-                                        )}
-                                      </div>
-                                      {model.path && (
-                                        <p className="text-[10px] font-mono text-text-tertiary truncate mb-2" title={model.path}>
-                                          {model.path}
-                                        </p>
-                                      )}
-                                      <div className="flex items-center gap-2 text-[10px] text-text-tertiary flex-wrap">
-                                        {model.parameterSize && model.parameterSize !== 'unknown' ? (
-                                          <span className="flex items-center gap-1">
-                                            <Cpu className="w-3 h-3" />
-                                            {model.parameterSize}
-                                          </span>
-                                        ) : (
-                                          <span className="text-text-tertiary/50">Param: unknown</span>
-                                        )}
-                                        {model.fileSize && model.fileSize !== 'unknown' ? (
-                                          <span className="flex items-center gap-1">
-                                            <HardDrive className="w-3 h-3" />
-                                            {model.fileSize}
-                                          </span>
-                                        ) : (
-                                          <span className="text-text-tertiary/50">
-                                            <HardDrive className="w-3 h-3 inline" />
-                                            Size: unknown
-                                          </span>
-                                        )}
-                                        {suggestedCtx && (
-                                          <span className="text-accent-primary">ctx: {suggestedCtx}</span>
-                                        )}
-                                      </div>
-                                    </button>
-                                  );
-                                })}
-              </div>
-            ) : (
-              <div className="text-center py-8">
+               <div className="space-y-4">
+                 {/* Content Error Warning */}
+                 {contentError && (
+                   <div className="p-2 bg-status-warning/5 border border-status-warning/20 rounded-lg">
+                     <p className="text-[10px] text-status-warning flex items-center gap-1">
+                       <AlertCircle className="w-3 h-3" />
+                       {contentError}
+                     </p>
+                   </div>
+                 )}
+ 
+                 {/* Model selection grid */}
+                 <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 ${isStale ? 'opacity-70' : ''}`}>
+                   {routerModels.map((model) => {
+                     const isSelected = model.name === selectedModel;
+                     const isThisRunning = isRunning && isSelected;
+                     return (
+                       <button
+                         key={model.name}
+                         onClick={() => setSelectedModel(model.name)}
+                         className={`text-left p-4 rounded-lg border-2 transition-all duration-200 ${
+                           isSelected
+                             ? 'border-accent-primary bg-accent-primary/5'
+                             : isThisRunning
+                             ? 'border-status-success bg-status-success/5'
+                             : 'border-border-subtle bg-bg-secondary/30 hover:border-border-primary'
+                         }`}
+                       >
+                         <div className="flex items-start justify-between mb-2">
+                           <p className="text-xs font-mono text-text-primary truncate flex-1" title={model.name}>
+                             {model.name}
+                           </p>
+                           {isThisRunning && (
+                             <CheckCircle2 className="w-3.5 h-3.5 text-status-success flex-shrink-0 ml-2" />
+                           )}
+                         </div>
+                         {model.path && (
+                           <p className="text-[10px] font-mono text-text-tertiary truncate mb-2" title={model.path}>
+                             {model.path}
+                           </p>
+                         )}
+                         <div className="flex items-center gap-2 text-[10px] text-text-tertiary flex-wrap">
+                           {model.parameterSize && model.parameterSize !== 'unknown' ? (
+                             <span className="flex items-center gap-1">
+                               <Cpu className="w-3 h-3" />
+                               {model.parameterSize}
+                             </span>
+                           ) : (
+                             <span className="text-text-tertiary/50">Param: unknown</span>
+                           )}
+                           {model.fileSize && model.fileSize !== 'unknown' ? (
+                             <span className="flex items-center gap-1">
+                               <HardDrive className="w-3 h-3" />
+                               {model.fileSize}
+                             </span>
+                           ) : (
+                             <span className="text-text-tertiary/50">
+                               <HardDrive className="w-3 h-3 inline" />
+                               Size: unknown
+                             </span>
+                           )}
+                           {suggestedCtx && (
+                             <span className="text-accent-primary">ctx: {suggestedCtx}</span>
+                           )}
+                         </div>
+                       </button>
+                     );
+                   })}
+                 </div>
+ 
+                 {/* Context Size Selector */}
+                 <div className="pt-4 border-t border-border-subtle">
+                   <div className="flex items-center justify-between mb-2">
+                     <label className="text-xs font-medium text-text-secondary">Context Size</label>
+                     <span className="text-xs font-mono text-accent-primary font-semibold">{ctxSize.toLocaleString()}</span>
+                   </div>
+                   <div className="flex gap-1.5 mb-2 overflow-x-auto pb-1 -mx-1 px-1 sm:flex-nowrap sm:overflow-visible">
+                     {PRESET_CTX.map((ctx) => (
+                       <button
+                         key={ctx}
+                         onClick={() => handlePresetClick(ctx)}
+                         disabled={actionLoading}
+                         className={`flex-shrink-0 min-w-[60px] sm:flex-1 px-2 py-2 rounded-md text-xs font-medium transition-all duration-200 ${
+                           ctxSize === ctx
+                             ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/30'
+                             : 'bg-bg-secondary border border-border-subtle text-text-tertiary hover:text-text-primary hover:border-border-primary disabled:opacity-50 disabled:cursor-not-allowed'
+                         }`}
+                       >
+                         {ctx >= 1000 ? `${ctx / 1000}k` : ctx}
+                       </button>
+                     ))}
+                   </div>
+                   {suggestedCtx && ctxSize !== suggestedCtx && (
+                     <p className="text-[10px] sm:text-xs text-accent-primary">Suggested: {suggestedCtx}</p>
+                   )}
+                   {ctxChanged && (
+                     <p className="text-[10px] sm:text-xs text-status-warning flex items-center gap-1 mt-1">
+                       <AlertCircle className="w-3 h-3" />
+                       Context changed from {runningCtxSize?.toLocaleString()} — restart to apply
+                     </p>
+                   )}
+                 </div>
+ 
+                 {/* Action Buttons */}
+                 <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                   <button
+                     onClick={handleLaunch}
+                     disabled={!canLaunch}
+                     className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
+                       canLaunch
+                         ? 'bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20'
+                         : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
+                     }`}
+                   >
+                     {actionLoading && actionStatus === 'launching' ? (
+                       <Loader2 className="w-4 h-4 animate-spin" />
+                     ) : (
+                       <Play className="w-4 h-4" />
+                     )}
+                     {actionLoading && actionStatus === 'launching' ? 'Launching...' : 'Start'}
+                   </button>
+                   <button
+                     onClick={handleRestart}
+                     disabled={!canRestart}
+                     className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
+                       canRestart
+                         ? ctxChanged
+                           ? 'bg-status-warning/10 text-status-warning border border-status-warning/30 hover:bg-status-warning/20 animate-pulse'
+                           : 'bg-accent-secondary/10 text-accent-secondary border border-accent-secondary/20 hover:bg-accent-secondary/20'
+                         : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
+                     }`}
+                   >
+                     {actionLoading && actionStatus === 'restarting' ? (
+                       <Loader2 className="w-4 h-4 animate-spin" />
+                     ) : (
+                       <RotateCcw className="w-4 h-4" />
+                     )}
+                     {actionLoading && actionStatus === 'restarting' ? 'Restarting...' : 'Restart'}
+                   </button>
+                   <button
+                     onClick={handleStop}
+                     disabled={!canStop}
+                     className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
+                       canStop
+                         ? 'bg-status-error/10 text-status-error border border-status-error/20 hover:bg-status-error/20'
+                         : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
+                     }`}
+                   >
+                     {actionLoading && actionStatus === 'stopping' ? (
+                       <Loader2 className="w-4 h-4 animate-spin" />
+                     ) : (
+                       <Square className="w-4 h-4" />
+                     )}
+                     {actionLoading && actionStatus === 'stopping' ? 'Stopping...' : 'Stop'}
+                   </button>
+                 </div>
+ 
+                 {/* Action Message */}
+                 {actionMessage && (
+                   <div className={`flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs ${
+                     actionStatus === 'success'
+                       ? 'bg-status-success/10 text-status-success border border-status-success/20'
+                       : actionStatus === 'error'
+                       ? 'bg-status-error/10 text-status-error border border-status-error/20'
+                       : 'bg-bg-secondary/50 text-text-secondary border border-border-subtle'
+                   }`}>
+                     {actionStatus === 'success' ? (
+                       <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                     ) : actionStatus === 'error' ? (
+                       <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                     ) : null}
+                     <span>{actionMessage}</span>
+                   </div>
+                 )}
+ 
+                 {/* Info note */}
+                 <p className="text-[10px] text-text-tertiary mt-3 text-center">
+                   Select a model card above, then use the action buttons. Context changes take effect on launch or restart.
+                 </p>
+               </div>
+             ) : (
+               <div className="text-center py-8">
                  <p className="text-text-tertiary text-sm">No models available</p>
-                 <p className="text-text-tertiary/60 text-xs mt-1">Add GGUF files to the Router's model directory</p>
+                 <p className="text-text-tertiary/60 text-xs mt-1">Add GGUF files to the Router&apos;s model directory</p>
                  <button
                    onClick={() => navigate('/models')}
                    className="mt-3 flex items-center gap-1.5 mx-auto px-3 py-1.5 bg-accent-primary/10 text-accent-primary border border-accent-primary/30 rounded-lg text-xs font-medium hover:bg-accent-primary/20 transition-colors"
@@ -425,141 +568,8 @@ const RouterPage: React.FC = () => {
                    Add model from Hugging Face →
                  </button>
                </div>
-            )}
-  
-            {/* Content Error Warning */}
-            {contentError && (
-              <div className="mt-2 p-2 bg-status-warning/5 border border-status-warning/20 rounded-lg">
-                <p className="text-[10px] text-status-warning flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />
-                  {contentError}
-                </p>
-              </div>
-            )}
-  
-            {/* VRAM Error Warning */}
-            {vramError && !vramData && (
-              <div className="mt-2 p-2 bg-status-warning/5 border border-status-warning/20 rounded-lg">
-                <p className="text-[10px] text-status-warning flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />
-                  {vramError}
-                </p>
-              </div>
-            )}
-  
-            {/* Context Size Selector */}
-             {routerModels.length > 0 && (
-               <div className="mb-4 pt-4 border-t border-border-subtle">
-                 <div className="flex items-center justify-between mb-2">
-                   <label className="text-xs font-medium text-text-secondary">Context Size</label>
-                   <span className="text-xs font-mono text-accent-primary font-semibold">{ctxSize.toLocaleString()}</span>
-                 </div>
-                 {/* Horizontal scroll on mobile */}
-                 <div className="flex gap-1.5 mb-2 overflow-x-auto pb-1 -mx-1 px-1 sm:flex-nowrap sm:overflow-visible">
-                   {PRESET_CTX.map((ctx) => (
-                     <button
-                       key={ctx}
-                       onClick={() => handlePresetClick(ctx)}
-                       disabled={actionLoading}
-                       className={`flex-shrink-0 min-w-[60px] sm:flex-1 px-2 py-2 rounded-md text-xs font-medium transition-all duration-200 ${
-                         ctxSize === ctx
-                           ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/30'
-                           : 'bg-bg-secondary border border-border-subtle text-text-tertiary hover:text-text-primary hover:border-border-primary disabled:opacity-50 disabled:cursor-not-allowed'
-                       }`}
-                     >
-                       {ctx >= 1000 ? `${ctx / 1000}k` : ctx}
-                     </button>
-                   ))}
-                 </div>
-                 {suggestedCtx && ctxSize !== suggestedCtx && (
-                   <p className="text-[10px] sm:text-xs text-accent-primary">Suggested: {suggestedCtx}</p>
-                 )}
-                 {ctxChanged && (
-                   <p className="text-[10px] sm:text-xs text-status-warning flex items-center gap-1 mt-1">
-                     <AlertCircle className="w-3 h-3" />
-                     Context changed from {runningCtxSize?.toLocaleString()} — restart to apply
-                   </p>
-                 )}
-               </div>
              )}
-  
-            {/* Action Buttons — stacked on mobile */}
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-                <button
-                  onClick={handleLaunch}
-                  disabled={!canLaunch}
-                  className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
-                    canLaunch
-                      ? 'bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20'
-                      : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
-                  }`}
-                >
-                  {actionLoading && actionStatus === 'launching' ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Play className="w-4 h-4" />
-                  )}
-                  {actionLoading && actionStatus === 'launching' ? 'Launching...' : 'Start'}
-                </button>
-                <button
-                  onClick={handleRestart}
-                  disabled={!canRestart}
-                  className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
-                    canRestart
-                      ? ctxChanged
-                        ? 'bg-status-warning/10 text-status-warning border border-status-warning/30 hover:bg-status-warning/20 animate-pulse'
-                        : 'bg-accent-secondary/10 text-accent-secondary border border-accent-secondary/20 hover:bg-accent-secondary/20'
-                      : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
-                  }`}
-                >
-                  {actionLoading && actionStatus === 'restarting' ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RotateCcw className="w-4 h-4" />
-                  )}
-                  {actionLoading && actionStatus === 'restarting' ? 'Restarting...' : 'Restart'}
-                </button>
-                <button
-                  onClick={handleStop}
-                  disabled={!canStop}
-                  className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
-                    canStop
-                      ? 'bg-status-error/10 text-status-error border border-status-error/20 hover:bg-status-error/20'
-                      : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
-                  }`}
-                >
-                  {actionLoading && actionStatus === 'stopping' ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Square className="w-4 h-4" />
-                  )}
-                  {actionLoading && actionStatus === 'stopping' ? 'Stopping...' : 'Stop'}
-                </button>
-              </div>
-  
-            {/* Action Message */}
-            {actionMessage && (
-              <div className={`mt-3 flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs ${
-                actionStatus === 'success'
-                  ? 'bg-status-success/10 text-status-success border border-status-success/20'
-                  : actionStatus === 'error'
-                  ? 'bg-status-error/10 text-status-error border border-status-error/20'
-                  : 'bg-bg-secondary/50 text-text-secondary border border-border-subtle'
-              }`}>
-                {actionStatus === 'success' ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                ) : actionStatus === 'error' ? (
-                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                ) : null}
-                <span>{actionMessage}</span>
-              </div>
-            )}
-  
-            {/* Info note */}
-            <p className="text-[10px] text-text-tertiary mt-3 text-center">
-              Select a model card above, then use the action buttons. Context changes take effect on launch or restart.
-            </p>
-          </div>
+           </MobileCollapsibleCard>
   
           {/* About the Router — collapsed by default on mobile */}
             <MobileAccordionSection title="About the Router" defaultOpen={false} localStorageKey="qonduit-router-about">

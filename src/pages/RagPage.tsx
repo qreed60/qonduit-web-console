@@ -21,7 +21,7 @@ import {
   RagSearchResponseNew,
   RagEndpointError,
 } from '../types';
-import { RefreshCw, Loader2, Database } from 'lucide-react';
+import { RefreshCw, Loader2, Database, Layers, FileText } from 'lucide-react';
 import RagHealthCard from '../components/RagHealthCard';
 import RagProjectCard from '../components/RagProjectCard';
 import RagProjectDetailPanel from '../components/RagProjectDetailPanel';
@@ -29,7 +29,7 @@ import RagCollectionsCard from '../components/RagCollectionsCard';
 import RagDocumentsCard from '../components/RagDocumentsCard';
 import RagChunkViewer from '../components/RagChunkViewer';
 import RagDiagnosticSearchCard from '../components/RagDiagnosticSearchCard';
-import MobileAccordionSection from '../components/MobileAccordionSection';
+import MobileCollapsibleCard from '../components/MobileCollapsibleCard';
 
 const RagPage: React.FC = () => {
   // ── State ──────────────────────────────────────────────────────────────────
@@ -317,8 +317,16 @@ const RagPage: React.FC = () => {
   }, [selectedProjectId, gatewayUrl]);
 
   // ── Derived state ──────────────────────────────────────────────────────────
-
-  const availableCollections = collections?.collections.map(c => c.name) || [];
+ 
+   const availableCollections = collections?.collections.map(c => c.name) || [];
+ 
+   // Total points across all projects
+     const totalPoints = projects.reduce((sum, p) => sum + (p.points_count || 0), 0);
+   
+     // Project detail metrics
+     const detailPoints = projectStats?.points_count?.toString() || '0';
+     const detailVectors = projectStats?.vectors_count?.toString() || '0';
+     const detailIndexed = projectStats?.indexed_vectors_count?.toString() || '0';
 
   const selectedDocument = documents.find(d => d.document_id === selectedDocumentId) || null;
 
@@ -383,77 +391,136 @@ const RagPage: React.FC = () => {
             </div>
   
             {/* Projects Overview */}
-            <div>
-              <h2 className="text-sm font-semibold text-text-primary mb-3 flex items-center gap-2">
-                <Database className="w-4 h-4 text-accent-primary" />
-                Projects
-              </h2>
-              {projectsError ? (
-                 <div className="flex items-center gap-2 text-xs text-status-error">
-                   <span>Unable to fetch projects: {projectsError.message}</span>
-                   <span className="text-[10px] font-mono opacity-70">({gatewayUrl}/v1/rag/projects)</span>
-                 </div>
-               ) : projectsFetched && projects.length === 0 ? (
-                 <div className="bg-bg-card rounded-xl border border-border-primary p-6 text-center">
-                   <Database className="w-8 h-8 mx-auto text-text-tertiary/30 mb-2" />
-                   <p className="text-sm text-text-secondary">No projects returned by the backend.</p>
-                   <p className="text-xs text-text-tertiary mt-1">
-                     Expected endpoint: <code className="font-mono">{gatewayUrl}/v1/rag/projects</code>
-                   </p>
-                 </div>
-               ) : (
-                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                   {projects.map(project => (
-                     <RagProjectCard
-                       key={project.project_id}
-                       project={project}
-                       isSelected={selectedProjectId === project.project_id}
-                       onSelect={handleSelectProject}
-                       onRefresh={fetchAllData}
-                       refreshing={refreshing}
-                     />
-                   ))}
-                 </div>
-               )}
-            </div>
+                  <MobileCollapsibleCard
+                    title="Projects"
+                    icon={<Database className="w-5 h-5 text-accent-primary" />}
+                    statusBadge={
+                      projects.length > 0 ? { status: 'online', label: `${projects.length} project${projects.length > 1 ? 's' : ''}` } :
+                      { status: 'unknown', label: 'None' }
+                    }
+                    summaryText={
+                      selectedProjectId ? `Selected: ${selectedProjectId}` :
+                      projects.length > 0 ? 'Tap a project to select' :
+                      'No projects'
+                    }
+                    metrics={projects.length > 0 ? [
+                      { label: 'Total Points', value: totalPoints.toLocaleString() },
+                    ] : undefined}
+                    defaultExpanded={true}
+                    defaultExpandedMobile={false}
+                    localStorageKey="rag-projects"
+                  >
+                    {projectsError ? (
+                      <div className="flex items-center gap-2 text-xs text-status-error">
+                        <span>Unable to fetch projects: {projectsError.message}</span>
+                        <span className="text-[10px] font-mono opacity-70">({gatewayUrl}/v1/rag/projects)</span>
+                      </div>
+                    ) : projectsFetched && projects.length === 0 ? (
+                      <div className="text-center py-6">
+                        <Database className="w-8 h-8 mx-auto text-text-tertiary/30 mb-2" />
+                        <p className="text-sm text-text-secondary">No projects returned by the backend.</p>
+                        <p className="text-xs text-text-tertiary mt-1">
+                          Expected endpoint: <code className="font-mono">{gatewayUrl}/v1/rag/projects</code>
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                        {projects.map(project => (
+                          <RagProjectCard
+                            key={project.project_id}
+                            project={project}
+                            isSelected={selectedProjectId === project.project_id}
+                            onSelect={handleSelectProject}
+                            onRefresh={fetchAllData}
+                            refreshing={refreshing}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </MobileCollapsibleCard>
   
             {/* Detail area: Project detail + Collections + Documents + Search */}
-            {selectedProjectId && (
-                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-                            {/* Left: Project detail + Collections */}
-                            <div className="lg:col-span-1 space-y-4 sm:space-y-6">
-                              <MobileAccordionSection title="Project Detail" defaultOpen={false} localStorageKey="rag-detail">
-                                <RagProjectDetailPanel
-                                  detail={projectDetail}
-                                  stats={projectStats}
-                                  detailError={projectDetailError}
-                                  statsError={projectStatsError}
-                                />
-                              </MobileAccordionSection>
-                              <MobileAccordionSection title="Collections" defaultOpen={false} localStorageKey="rag-collections">
-                                <RagCollectionsCard
-                                   collections={collections}
-                                   collectionsError={collectionsError}
-                                   projectId={selectedProjectId}
-                                   projectDetail={projectDetail}
+             {selectedProjectId && (
+                           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+                             {/* Left: Project detail + Collections */}
+                             <div className="lg:col-span-1 space-y-4 sm:space-y-6">
+                               <MobileCollapsibleCard
+                                 title="Project Detail"
+                                 icon={<Database className="w-5 h-5 text-accent-primary" />}
+                                 statusBadge={projectDetail ? { status: 'online', label: 'Found' } : { status: 'offline', label: 'Not Found' }}
+                                 summaryText={
+                                   projectDetail ? `${projectDetail.project_id} — ${detailPoints} points, ${detailVectors} vectors` :
+                                   'No detail data'
+                                 }
+                                 metrics={projectDetail ? [
+                                   { label: 'Points', value: detailPoints },
+                                   { label: 'Vectors', value: detailVectors },
+                                   { label: 'Indexed', value: detailIndexed },
+                                 ] : undefined}
+                                 defaultExpanded={false}
+                                 defaultExpandedMobile={false}
+                                 localStorageKey="rag-detail"
+                               >
+                                 <RagProjectDetailPanel
+                                   detail={projectDetail}
+                                   stats={projectStats}
+                                   detailError={projectDetailError}
+                                   statsError={projectStatsError}
                                  />
-                              </MobileAccordionSection>
-                            </div>
-  
-                {/* Right: Documents + Search */}
-                                <div className="lg:col-span-2 space-y-4 sm:space-y-6">
-                                  <MobileAccordionSection title="Documents" defaultOpen={false} localStorageKey="rag-documents">
-                                    <RagDocumentsCard
-                                      documents={documents}
-                                      documentsError={documentsError}
-                                      projectId={selectedProjectId}
-                                      selectedDocumentId={selectedDocumentId}
-                                      onSelectDocument={handleSelectDocument}
-                                      loading={false}
-                                      onRefresh={() => fetchDocuments(selectedProjectId)}
-                                      refreshing={refreshing}
-                                    />
-                                  </MobileAccordionSection>
+                               </MobileCollapsibleCard>
+                               <MobileCollapsibleCard
+                                 title="Collections"
+                                 icon={<Layers className="w-5 h-5 text-accent-secondary" />}
+                                 statusBadge={
+                                   collections?.collections && collections.collections.length > 0
+                                     ? { status: 'online', label: `${collections.collections.length} collection${collections.collections.length > 1 ? 's' : ''}` }
+                                     : { status: 'unknown', label: 'None' }
+                                 }
+                                 summaryText={
+                                   collections?.collections && collections.collections.length > 0
+                                     ? `${collections.collections.length} collections`
+                                     : 'No collections'
+                                 }
+                                 defaultExpanded={false}
+                                 defaultExpandedMobile={false}
+                                 localStorageKey="rag-collections"
+                               >
+                                 <RagCollectionsCard
+                                    collections={collections}
+                                    collectionsError={collectionsError}
+                                    projectId={selectedProjectId}
+                                    projectDetail={projectDetail}
+                                  />
+                               </MobileCollapsibleCard>
+                             </div>
+ 
+                 {/* Right: Documents + Search */}
+                                 <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+                                   <MobileCollapsibleCard
+                                     title="Documents"
+                                     icon={<FileText className="w-5 h-5 text-accent-tertiary" />}
+                                     statusBadge={
+                                       documents.length > 0 ? { status: 'online', label: `${documents.length} doc${documents.length > 1 ? 's' : ''}` } :
+                                       { status: 'unknown', label: 'None' }
+                                     }
+                                     summaryText={
+                                       documents.length > 0 ? `${documents.length} documents` : 'No documents'
+                                     }
+                                     defaultExpanded={false}
+                                     defaultExpandedMobile={false}
+                                     localStorageKey="rag-documents"
+                                   >
+                                     <RagDocumentsCard
+                                       documents={documents}
+                                       documentsError={documentsError}
+                                       projectId={selectedProjectId}
+                                       selectedDocumentId={selectedDocumentId}
+                                       onSelectDocument={handleSelectDocument}
+                                       loading={false}
+                                       onRefresh={() => fetchDocuments(selectedProjectId)}
+                                       refreshing={refreshing}
+                                     />
+                                   </MobileCollapsibleCard>
   
                   {/* Chunk Viewer */}
                   {selectedDocumentId && selectedDocument && (
