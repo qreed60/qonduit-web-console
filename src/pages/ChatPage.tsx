@@ -150,82 +150,89 @@ const ChatPage: React.FC = () => {
   };
 
   return (
-        <div className="flex flex-col h-full bg-bg-primary">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 px-4 py-3 sm:px-6 sm:py-3 border-b border-border-primary bg-bg-card">
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <MessageSquare className="w-5 h-5 text-accent-primary flex-shrink-0" />
-              <h2 className="text-base sm:text-lg font-semibold text-text-primary">Chat</h2>
-              {!selectedModel && !modelLoading && (
-                <span className="text-xs text-status-warning flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />
-                  No models
-                </span>
-              )}
-            </div>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
-              {/* Provider Selector */}
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <Globe className="w-3.5 h-3.5 text-text-tertiary flex-shrink-0" />
-                <select
-                  value={currentProvider}
-                  onChange={(e) => setCurrentProvider(e.target.value as ProviderType)}
-                  disabled={modelLoading || loading}
-                  className="flex-1 sm:flex-initial px-3 py-2 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed min-h-[40px]"
-                >
-                  <option value="Direct">Direct</option>
-                  <option value="Gateway">Gateway</option>
-                </select>
-              </div>
-              {/* Model Selector */}
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                {modelLoading ? (
-                  <Loader2 className="w-4 h-4 text-text-tertiary animate-spin flex-shrink-0" />
-                ) : (
-                  <select
-                    value={selectedModel}
-                    onChange={(e) => setSelectedModel(e.target.value)}
-                    disabled={loading}
-                    className="flex-1 sm:flex-initial px-3 py-2 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed truncate min-h-[40px]"
-                  >
-                    {models.length === 0 ? (
-                      <option value="">No models</option>
-                    ) : (
-                      models.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.id}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                )}
-                <button
-                   onClick={() => loadModels(currentProvider)}
-                   disabled={loading}
-                   className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-h-[40px] min-w-[40px] flex items-center justify-center"
-                   title="Refresh models"
-                 >
-                   <RefreshCw className={`w-4 h-4 ${modelLoading ? 'animate-spin' : ''}`} />
-                 </button>
-               </div>
-               {/* RAG Context Selector (only in Gateway mode) */}
-               {currentProvider === 'Gateway' && (
-                 <div className="w-full sm:w-auto">
-                   <RagContextSelector
-                     onSelectionChange={(selection) => setRagSelection(selection)}
-                   />
-                 </div>
+         <div className="flex flex-col h-full bg-bg-primary">
+           {/* Header */}
+           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 px-4 py-4 sm:px-6 sm:py-3 border-b border-border-primary bg-bg-card">
+             <div className="flex items-center gap-2 w-full sm:w-auto">
+               <MessageSquare className="w-5 h-5 text-accent-primary flex-shrink-0" />
+               <h2 className="text-base sm:text-lg font-semibold text-text-primary">Chat</h2>
+               {!selectedModel && !modelLoading && (
+                 <span className="text-xs text-status-warning flex items-center gap-1">
+                   <AlertCircle className="w-3 h-3" />
+                   No models
+                 </span>
                )}
-               {/* Settings Toggle */}
-               <button
-                onClick={() => setShowSettings(!showSettings)}
-                className={`p-2 rounded-lg transition-all duration-200 min-h-[40px] min-w-[40px] flex items-center justify-center ${showSettings ? 'text-accent-primary bg-accent-primary/10' : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'}`}
-                title="Chat settings"
-              >
-                <Settings2 className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
+             </div>
+             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+               {/* Row 1: Provider + Model on mobile, side by side on desktop */}
+               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+                 {/* Provider Selector */}
+                 <div className="flex items-center gap-2 w-full sm:w-auto">
+                   <Globe className="w-4 h-4 text-text-tertiary flex-shrink-0" />
+                   <select
+                     value={currentProvider}
+                     onChange={(e) => setCurrentProvider(e.target.value as ProviderType)}
+                     disabled={modelLoading || loading}
+                     className="flex-1 sm:flex-initial px-4 py-3 bg-bg-secondary border border-border-primary rounded-lg text-sm font-medium text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]"
+                   >
+                     <option value="Direct">Direct</option>
+                     <option value="Gateway">Gateway</option>
+                   </select>
+                 </div>
+                 {/* Model Selector */}
+                 <div className="flex items-center gap-2 w-full sm:w-auto">
+                   {modelLoading ? (
+                     <Loader2 className="w-5 h-5 text-text-tertiary animate-spin flex-shrink-0" />
+                   ) : (
+                     <select
+                       value={selectedModel}
+                       onChange={(e) => setSelectedModel(e.target.value)}
+                       disabled={loading}
+                       className="flex-1 sm:flex-initial px-4 py-3 bg-bg-secondary border border-border-primary rounded-lg text-sm font-medium text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed truncate min-h-[48px]"
+                     >
+                       {models.length === 0 ? (
+                         <option value="">No models</option>
+                       ) : (
+                         models.map((m) => (
+                           <option key={m.id} value={m.id}>
+                             {m.id}
+                           </option>
+                         ))
+                       )}
+                     </select>
+                   )}
+                   <button
+                      onClick={() => loadModels(currentProvider)}
+                      disabled={loading}
+                      className="p-3 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-h-[48px] min-w-[48px] flex items-center justify-center"
+                      title="Refresh models"
+                    >
+                      <RefreshCw className={`w-5 h-5 ${modelLoading ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
+                </div>
+ 
+               {/* Row 2: RAG + Settings on mobile, side by side on desktop */}
+               <div className="flex flex-row items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
+                 {/* RAG Context Selector (only in Gateway mode) */}
+                 {currentProvider === 'Gateway' && (
+                   <div className="flex items-center gap-2 w-full sm:w-auto">
+                     <RagContextSelector
+                       onSelectionChange={(selection) => setRagSelection(selection)}
+                     />
+                   </div>
+                 )}
+                 {/* Settings Toggle */}
+                 <button
+                  onClick={() => setShowSettings(!showSettings)}
+                  className={`p-3 rounded-lg transition-all duration-200 min-h-[48px] min-w-[48px] flex items-center justify-center ${showSettings ? 'text-accent-primary bg-accent-primary/10' : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'}`}
+                  title="Chat settings"
+                >
+                  <Settings2 className="w-5 h-5" />
+                </button>
+               </div>
+             </div>
+           </div>
   
         {/* Settings Panel */}
          {showSettings && (
@@ -347,49 +354,49 @@ const ChatPage: React.FC = () => {
       )}
 
       {/* Input Area */}
-        <div className="px-4 py-3 sm:px-6 sm:py-4 border-t border-border-primary bg-bg-card">
-          <div className="max-w-3xl mx-auto">
-            <div className="flex items-end gap-2 sm:gap-3">
-              <div className="flex-1 relative">
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={handleTextareaInput}
-                  onKeyDown={handleKeyDown}
-                  placeholder={models.length === 0 ? 'No models available — check your Gateway endpoint' : 'Type a message... (Enter to send, Shift+Enter for new line)'}
-                  disabled={loading || models.length === 0}
-                  rows={1}
-                  className="w-full px-4 py-3 bg-bg-secondary border border-border-primary rounded-xl text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                />
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  onClick={handleClearChat}
-                  disabled={loading || messages.length === 0}
-                  className="p-3 rounded-xl text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px] min-w-[48px] flex items-center justify-center"
-                  title="Clear chat"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={handleSend}
-                  disabled={loading || !input.trim() || models.length === 0}
-                  className="p-3 rounded-xl bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 hover:shadow-accent-primary/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none min-h-[48px] min-w-[48px] flex items-center justify-center"
-                  title="Send message"
-                >
-                  {loading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-            <p className="text-[10px] sm:text-xs text-text-tertiary mt-2 text-center">
-              Responses are generated by the selected model via the Memory Gateway
-            </p>
-          </div>
-        </div>
+         <div className="px-4 py-4 sm:px-6 sm:py-5 border-t border-border-primary bg-bg-card">
+           <div className="max-w-3xl mx-auto">
+             <div className="flex items-end gap-3">
+               <div className="flex-1 relative">
+                 <textarea
+                   ref={inputRef}
+                   value={input}
+                   onChange={handleTextareaInput}
+                   onKeyDown={handleKeyDown}
+                   placeholder={models.length === 0 ? 'No models available — check your Gateway endpoint' : 'Type a message... (Enter to send, Shift+Enter for new line)'}
+                   disabled={loading || models.length === 0}
+                   rows={1}
+                   className="w-full px-4 py-4 bg-bg-secondary border border-border-primary rounded-xl text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 min-h-[52px]"
+                 />
+               </div>
+               <div className="flex items-center gap-2 flex-shrink-0">
+                 <button
+                   onClick={handleClearChat}
+                   disabled={loading || messages.length === 0}
+                   className="p-3 rounded-xl text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[52px] min-w-[52px] flex items-center justify-center"
+                   title="Clear chat"
+                 >
+                   <RefreshCw className="w-5 h-5" />
+                 </button>
+                 <button
+                   onClick={handleSend}
+                   disabled={loading || !input.trim() || models.length === 0}
+                   className="p-3 rounded-xl bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 hover:shadow-accent-primary/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none min-h-[52px] min-w-[52px] flex items-center justify-center"
+                   title="Send message"
+                 >
+                   {loading ? (
+                     <Loader2 className="w-5 h-5 animate-spin" />
+                   ) : (
+                     <Send className="w-5 h-5" />
+                   )}
+                 </button>
+               </div>
+             </div>
+             <p className="text-[10px] sm:text-xs text-text-tertiary mt-2 text-center">
+               Responses are generated by the selected model via the Memory Gateway
+             </p>
+           </div>
+         </div>
 
       {/* Toast */}
       {toastMessage && (

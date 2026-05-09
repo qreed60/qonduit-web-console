@@ -12,6 +12,7 @@ import ModelControlCard from '../components/ModelControlCard';
 import LogsPanel from '../components/LogsPanel';
 import SystemOverview from '../components/SystemOverview';
 import ComingSoon from '../components/ComingSoon';
+import MobileCollapsibleCard from '../components/MobileCollapsibleCard';
 import {
   Settings2,
   Wrench,
@@ -20,6 +21,10 @@ import {
   Database,
   Loader2,
   ArrowRight,
+  Server,
+  Globe,
+  Cpu,
+  Terminal,
 } from 'lucide-react';
 
 const DashboardPage: React.FC = () => {
@@ -304,32 +309,64 @@ const DashboardPage: React.FC = () => {
 
   const mode = settings.endpointMode;
 
-  const comingSoonItems = [
-     {
-       icon: <Settings2 className="w-4 h-4" />,
-       title: 'Gateway Settings',
-       description: 'Configure memory gateway parameters and behavior',
-       category: 'infra' as const,
-     },
-     {
-       icon: <Wrench className="w-4 h-4" />,
-       title: 'Tool Toggles',
-       description: 'Enable tools and function calling for models',
-       category: 'tools' as const,
-     },
-     {
-       icon: <BarChart3 className="w-4 h-4" />,
-       title: 'Usage Analytics',
-       description: 'Track model usage, costs, and performance metrics',
-       category: 'tools' as const,
-     },
-     {
-       icon: <Shield className="w-4 h-4" />,
-       title: 'Access Control',
-       description: 'Manage user permissions and API key rotation',
-       category: 'infra' as const,
-     },
-   ];
+  // ── Mobile Collapsible Card Summary Data ──
+ 
+   // System Health summary
+   const healthStatuses = [endpointHealth.gateway, endpointHealth.llama, endpointHealth.router];
+    const healthAllOnline = healthStatuses.every(s => s === true);
+    const healthOverallStatus: 'online' | 'offline' | 'loading' | 'unknown' =
+     healthStatuses.some(s => s === null) ? 'loading' : healthAllOnline ? 'online' : 'offline';
+   const healthSummary = `Gateway · Direct · Router · ${routerStatus?.running_model ? 'Model' : 'Stopped'}`;
+  
+    // Endpoints summary
+   const onlineCount = healthStatuses.filter(s => s === true).length;
+   const totalEndpoints = healthStatuses.length;
+   const endpointStatus: 'online' | 'offline' | 'loading' | 'unknown' =
+     healthStatuses.some(s => s === null) ? 'loading' : onlineCount === totalEndpoints ? 'online' : onlineCount > 0 ? 'offline' : 'unknown';
+   const endpointSummaryText = 'Gateway, Direct, Router';
+   const endpointSummaryLabel = `${onlineCount}/${totalEndpoints} Online`;
+ 
+   // Router Model Control summary
+   const modelControlStatus: 'online' | 'offline' | 'loading' | 'unknown' =
+     routerStatus?.running ? 'online' : routerStatus ? 'offline' : 'unknown';
+   const modelControlSummary = routerStatus?.running_model
+     ? `${routerStatus.running_model} · ctx: ${ctxSize.toLocaleString()}`
+     : 'No model selected';
+ 
+   // Terminal summary
+   const terminalSummary = 'Polling · Click to expand';
+ 
+   // RAG Browser summary
+   const ragQdrantStatus = ragHealth?.qdrant.ok ? 'Connected' : ragHealth?.qdrant.ok === false ? 'Disconnected' : 'Checking';
+   const ragEmbedStatus = ragHealth?.embedding.ok ? 'Available' : ragHealth?.embedding.ok === false ? 'Unavailable' : 'Checking';
+   const ragSummary = `Qdrant: ${ragQdrantStatus} · Embeddings: ${ragEmbedStatus} · ${ragProjects.length} projects`;
+ 
+   const comingSoonItems = [
+      {
+        icon: <Settings2 className="w-4 h-4" />,
+        title: 'Gateway Settings',
+        description: 'Configure memory gateway parameters and behavior',
+        category: 'infra' as const,
+      },
+      {
+        icon: <Wrench className="w-4 h-4" />,
+        title: 'Tool Toggles',
+        description: 'Enable tools and function calling for models',
+        category: 'tools' as const,
+      },
+      {
+        icon: <BarChart3 className="w-4 h-4" />,
+        title: 'Usage Analytics',
+        description: 'Track model usage, costs, and performance metrics',
+        category: 'tools' as const,
+      },
+      {
+        icon: <Shield className="w-4 h-4" />,
+        title: 'Access Control',
+        description: 'Manage user permissions and API key rotation',
+        category: 'infra' as const,
+      },
+    ];
 
   const formatTimeAgo = (ts: number) => {
     const diff = Date.now() - ts;
@@ -371,24 +408,39 @@ const DashboardPage: React.FC = () => {
          </div>
  
          {/* System Overview */}
-                  <div className="mb-4 sm:mb-6">
-                    <SystemOverview
-                      endpointHealth={endpointHealth}
-                      healthLoading={healthLoading}
-                      routerStatus={routerStatus}
-                      chatModel={selectedChatModel}
-                      routerRunningModel={routerStatus?.running_model || undefined}
-                      gpuStatus={gpuStatus}
-                      gpuError={gpuError}
-                      endpointErrors={endpointErrors}
-                      onRefresh={testAllEndpoints}
-                    />
-                  </div>
+                    <MobileCollapsibleCard
+                      title="System Health"
+                      icon={<Server className="w-5 h-5 text-accent-primary" />}
+                      statusBadge={{ status: healthOverallStatus, label: healthOverallStatus === 'online' ? 'Healthy' : healthOverallStatus === 'offline' ? 'Issue' : 'Loading' }}
+                      summaryText={healthSummary}
+                      defaultExpanded={true}
+                      defaultExpandedMobile={false}
+                      localStorageKey="qonduit-dashboard-health-expanded"
+                    >
+                      <SystemOverview
+                        endpointHealth={endpointHealth}
+                        healthLoading={healthLoading}
+                        routerStatus={routerStatus}
+                        chatModel={selectedChatModel}
+                        routerRunningModel={routerStatus?.running_model || undefined}
+                        gpuStatus={gpuStatus}
+                        gpuError={gpuError}
+                        endpointErrors={endpointErrors}
+                        onRefresh={testAllEndpoints}
+                      />
+                    </MobileCollapsibleCard>
  
          {/* Endpoint Cards */}
-         <div className="mb-4 sm:mb-6">
-           <h2 className="text-base sm:text-lg font-semibold text-text-primary mb-3 sm:mb-4">Endpoints</h2>
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+            <MobileCollapsibleCard
+              title="Endpoints"
+              icon={<Globe className="w-5 h-5 text-accent-primary" />}
+              statusBadge={{ status: endpointStatus, label: endpointSummaryLabel }}
+              summaryText={endpointSummaryText}
+              defaultExpanded={true}
+              defaultExpandedMobile={false}
+              localStorageKey="qonduit-dashboard-endpoints-expanded"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
             <EndpointCard
               name="Memory Gateway"
               icon="🌐"
@@ -444,12 +496,20 @@ const DashboardPage: React.FC = () => {
               }}
               testLoading={healthLoading}
             />
-          </div>
-        </div>
-
+           </div>
+          </MobileCollapsibleCard>
+ 
         {/* Router Model Control — always visible, always enabled */}
-                 <div className="mb-6">
-                   <ModelControlCard
+                  <MobileCollapsibleCard
+                    title="Router Model Control"
+                    icon={<Cpu className="w-5 h-5 text-accent-primary" />}
+                    statusBadge={{ status: modelControlStatus, label: routerStatus?.running ? 'Running' : 'Stopped' }}
+                    summaryText={modelControlSummary}
+                    defaultExpanded={true}
+                    defaultExpandedMobile={false}
+                    localStorageKey="qonduit-dashboard-model-control-expanded"
+                  >
+                    <ModelControlCard
                      routerStatus={routerStatus}
                      models={routerModels}
                      selectedModel={selectedRouterModel}
@@ -464,94 +524,104 @@ const DashboardPage: React.FC = () => {
                      actionStatus={actionStatus}
                      actionMessage={actionMessage}
                    />
-                 </div>
-
+                  </MobileCollapsibleCard>
+ 
         {/* Live Logs */}
-         <div className="mb-6">
-           <LogsPanel routerStatus={routerStatus} />
+          <MobileCollapsibleCard
+            title="Terminal"
+            icon={<Terminal className="w-5 h-5 text-accent-primary" />}
+            statusBadge={{ status: 'unknown', label: terminalSummary }}
+            summaryText="Click to expand logs"
+            defaultExpanded={true}
+            defaultExpandedMobile={false}
+            localStorageKey="qonduit-dashboard-terminal-expanded"
+          >
+            <LogsPanel routerStatus={routerStatus} />
+          </MobileCollapsibleCard>
+ 
+        {/* RAG Browser Card */}
+                         <MobileCollapsibleCard
+                           title="RAG Browser"
+                           icon={<Database className="w-5 h-5 text-accent-primary" />}
+                           summaryText={ragSummary}
+                           defaultExpanded={true}
+                           defaultExpandedMobile={false}
+                           localStorageKey="qonduit-dashboard-rag-expanded"
+                         >
+                           <div className="flex items-center justify-between mb-3 sm:mb-4">
+                              <h3 className="text-sm font-semibold text-text-primary">RAG Browser</h3>
+                              <button
+                                onClick={() => navigate('/rag')}
+                                className="px-3 py-2 rounded-lg text-xs font-medium bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 transition-all duration-200 flex items-center gap-1.5 min-h-[44px]"
+                              >
+                                Open RAG Browser
+                                <ArrowRight className="w-3 h-3" />
+                              </button>
+                            </div>
+   
+                            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                              {/* Qdrant status */}
+                              <div>
+                                <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Qdrant</span>
+                                <div className="flex items-center gap-1.5 mt-1">
+                                  {ragHealth?.qdrant.ok ? (
+                                    <>
+                                      <div className="w-2 h-2 rounded-full bg-status-success" />
+                                      <span className="text-xs text-status-success">Connected</span>
+                                    </>
+                                  ) : ragHealth?.qdrant.ok === false ? (
+                                    <>
+                                      <div className="w-2 h-2 rounded-full bg-status-error" />
+                                      <span className="text-xs text-status-error">Disconnected</span>
+                                    </>
+                                  ) : (
+                                    <span className="text-xs text-text-tertiary">Checking...</span>
+                                  )}
+                                </div>
+                              </div>
+   
+                              {/* Embeddings status */}
+                              <div>
+                                <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Embeddings</span>
+                                <div className="flex items-center gap-1.5 mt-1">
+                                  {ragHealth?.embedding.ok ? (
+                                    <>
+                                      <div className="w-2 h-2 rounded-full bg-status-success" />
+                                      <span className="text-xs text-status-success">Available</span>
+                                    </>
+                                  ) : ragHealth?.embedding.ok === false ? (
+                                    <>
+                                      <div className="w-2 h-2 rounded-full bg-status-error" />
+                                      <span className="text-xs text-status-error">Unavailable</span>
+                                    </>
+                                  ) : (
+                                    <span className="text-xs text-text-tertiary">Checking...</span>
+                                  )}
+                                </div>
+                              </div>
+   
+                              {/* Projects count */}
+                              <div>
+                                <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Projects</span>
+                                <p className="text-xs sm:text-sm text-text-secondary mt-1">
+                                  {ragProjects.length} total
+                                </p>
+                              </div>
+   
+                              {/* Total points */}
+                              <div>
+                                <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Total Points</span>
+                                <p className="text-xs sm:text-sm text-text-secondary mt-1">
+                                  {ragTotalPoints.toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                         </MobileCollapsibleCard>
+  
+          {/* Coming Soon */}
+         <div>
+           <ComingSoon items={comingSoonItems} />
          </div>
- 
-         {/* RAG Browser Card */}
-                     <div className="mb-4 sm:mb-6">
-                       <div className="bg-bg-card rounded-xl border border-border-primary p-4 sm:p-5 shadow-card">
-                         <div className="flex items-center justify-between mb-3 sm:mb-4">
-                           <div className="flex items-center gap-2">
-                             <Database className="w-4 h-4 text-accent-primary" />
-                             <h3 className="text-sm font-semibold text-text-primary">RAG Browser</h3>
-                           </div>
-                           <button
-                             onClick={() => navigate('/rag')}
-                             className="px-3 py-2 rounded-lg text-xs font-medium bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 transition-all duration-200 flex items-center gap-1.5 min-h-[44px]"
-                           >
-                             Open RAG Browser
-                             <ArrowRight className="w-3 h-3" />
-                           </button>
-                         </div>
- 
-                         <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                           {/* Qdrant status */}
-                           <div>
-                             <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Qdrant</span>
-                             <div className="flex items-center gap-1.5 mt-1">
-                               {ragHealth?.qdrant.ok ? (
-                                 <>
-                                   <div className="w-2 h-2 rounded-full bg-status-success" />
-                                   <span className="text-xs text-status-success">Connected</span>
-                                 </>
-                               ) : ragHealth?.qdrant.ok === false ? (
-                                 <>
-                                   <div className="w-2 h-2 rounded-full bg-status-error" />
-                                   <span className="text-xs text-status-error">Disconnected</span>
-                                 </>
-                               ) : (
-                                 <span className="text-xs text-text-tertiary">Checking...</span>
-                               )}
-                             </div>
-                           </div>
- 
-                           {/* Embeddings status */}
-                           <div>
-                             <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Embeddings</span>
-                             <div className="flex items-center gap-1.5 mt-1">
-                               {ragHealth?.embedding.ok ? (
-                                 <>
-                                   <div className="w-2 h-2 rounded-full bg-status-success" />
-                                   <span className="text-xs text-status-success">Available</span>
-                                 </>
-                               ) : ragHealth?.embedding.ok === false ? (
-                                 <>
-                                   <div className="w-2 h-2 rounded-full bg-status-error" />
-                                   <span className="text-xs text-status-error">Unavailable</span>
-                                 </>
-                               ) : (
-                                 <span className="text-xs text-text-tertiary">Checking...</span>
-                               )}
-                             </div>
-                           </div>
- 
-                           {/* Projects count */}
-                           <div>
-                             <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Projects</span>
-                             <p className="text-xs sm:text-sm text-text-secondary mt-1">
-                               {ragProjects.length} total
-                             </p>
-                           </div>
- 
-                           {/* Total points */}
-                           <div>
-                             <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Total Points</span>
-                             <p className="text-xs sm:text-sm text-text-secondary mt-1">
-                               {ragTotalPoints.toLocaleString()}
-                             </p>
-                           </div>
-                         </div>
-                       </div>
-                     </div>
- 
-         {/* Coming Soon */}
-        <div>
-          <ComingSoon items={comingSoonItems} />
-        </div>
       </div>
 
       {/* Toast */}
