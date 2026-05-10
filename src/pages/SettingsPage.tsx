@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { EndpointOverrides, ProviderType, Settings as AppSettings } from '../types';
+import { EndpointOverrides, ProviderType, Settings as AppSettings, ToolSettings } from '../types';
 import { getSettings, saveSettings, fetchProviderModels, NormalizedModel } from '../services/api';
 import { ENDPOINTS, getMode, setMode, setEndpointOverride, clearEndpointOverrides, hasEndpointOverride, validateEndpoint } from '../config/endpoints';
-import { Settings, Settings2 } from 'lucide-react';
+import { Settings, Settings2, Wrench } from 'lucide-react';
 import Toast from '../components/Toast';
 import MobileCollapsibleCard from '../components/MobileCollapsibleCard';
 import GatewaySettingsSection from '../components/GatewaySettingsSection';
+import ToolRegistry from '../components/ToolRegistry';
 
 const SettingsPage: React.FC = () => {
   const [formData, setFormData] = useState<AppSettings>(getSettings());
@@ -14,8 +15,9 @@ const SettingsPage: React.FC = () => {
   const [overrides, setOverrides] = useState<EndpointOverrides>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [availableModels, setAvailableModels] = useState<NormalizedModel[]>([]);
-  const [modelsLoading, setModelsLoading] = useState(false);
-  const [gatewaySummary, setGatewaySummary] = useState<string>('');
+   const [modelsLoading, setModelsLoading] = useState(false);
+   const [gatewaySummary, setGatewaySummary] = useState<string>('');
+   const [toolSettings, setToolSettings] = useState<ToolSettings | null>(null);
 
   useEffect(() => {
     setFormData(getSettings());
@@ -55,7 +57,11 @@ const SettingsPage: React.FC = () => {
     setIsDirty(true);
   };
 
-  const handleModeChange = (mode: 'local' | 'public') => {
+  const handleToolSettingsChange = (settings: ToolSettings) => {
+     setToolSettings(settings);
+   };
+ 
+   const handleModeChange = (mode: 'local' | 'public') => {
     setMode(mode);
     setIsDirty(true);
   };
@@ -363,15 +369,27 @@ const SettingsPage: React.FC = () => {
 
           {/* Card 2: Gateway Settings */}
           <MobileCollapsibleCard
-            title="Gateway Settings"
-            icon={<Settings2 className="w-5 h-5 text-accent-primary" />}
-            summaryText={gatewaySummary || 'Loading gateway configuration…'}
-            defaultExpanded={false}
-            defaultExpandedMobile={false}
-            localStorageKey="gateway-settings-card-expanded"
-          >
-            <GatewaySettingsSection onSummaryChange={setGatewaySummary} />
-          </MobileCollapsibleCard>
+             title="Gateway Settings"
+             icon={<Settings2 className="w-5 h-5 text-accent-primary" />}
+             summaryText={gatewaySummary || 'Loading gateway configuration…'}
+             defaultExpanded={false}
+             defaultExpandedMobile={false}
+             localStorageKey="gateway-settings-card-expanded"
+           >
+             <GatewaySettingsSection onSummaryChange={setGatewaySummary} />
+           </MobileCollapsibleCard>
+ 
+           {/* Card 3: Tool Settings */}
+           <MobileCollapsibleCard
+             title="Tool Settings"
+             icon={<Wrench className="w-5 h-5 text-text-tertiary" />}
+             summaryText={toolSettings ? `${Object.values(toolSettings.global).filter(Boolean).length}/${Object.keys(toolSettings.global).length} tools enabled` : 'Loading…'}
+             defaultExpanded={false}
+             defaultExpandedMobile={false}
+             localStorageKey="tool-settings-card-expanded"
+           >
+             <ToolRegistry onSettingsChange={handleToolSettingsChange} />
+           </MobileCollapsibleCard>
         </div>
       </div>
 

@@ -13,10 +13,12 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import HfSearchPanel from '../components/HfSearchPanel';
 import DownloadJobsPanel from '../components/DownloadJobsPanel';
 import TrashPanel from '../components/TrashPanel';
+import ToolRegistry from '../components/ToolRegistry';
 import MobileCollapsibleCard, { CardAction } from '../components/MobileCollapsibleCard';
 import {
   RefreshCw, Copy, CheckCircle2, Globe, Zap, Server, Router,
   Cpu, HardDrive, MemoryStick, Loader2, Trash2, FileDown,
+  Wrench,
 } from 'lucide-react';
 
 // ── Local types ───────────────────────────────────────────────────────
@@ -824,21 +826,34 @@ const ModelsPage: React.FC = () => {
               localStorageKey="qonduit-trash"
             >
               <TrashPanel
-                trashFiles={trashFiles}
-                trashLoading={trashLoading}
-                trashError={trashError}
-                onRetry={loadTrash}
-                restoreLoading={restoreLoading}
-                onRestore={handleRestore}
-                onDeletePermanent={handlePermanentDelete}
-                permanentDeleteLoading={permanentDeleteLoading}
-                onPermanentDeleteConfirm={confirmPermanentDelete}
-                onPermanentDeleteCancel={() => { setPermanentDeleteConfirmOpen(false); setPermanentDeleteEntry(null); }}
-                permanentDeleteConfirmOpen={permanentDeleteConfirmOpen}
-                permanentDeleteEntry={permanentDeleteEntry}
-              />
-            </MobileCollapsibleCard>
-        </div>
+                 trashFiles={trashFiles}
+                 trashLoading={trashLoading}
+                 trashError={trashError}
+                 onRetry={loadTrash}
+                 restoreLoading={restoreLoading}
+                 onRestore={handleRestore}
+                 onDeletePermanent={handlePermanentDelete}
+                 permanentDeleteLoading={permanentDeleteLoading}
+                 onPermanentDeleteConfirm={confirmPermanentDelete}
+                 onPermanentDeleteCancel={() => { setPermanentDeleteConfirmOpen(false); setPermanentDeleteEntry(null); }}
+                 permanentDeleteConfirmOpen={permanentDeleteConfirmOpen}
+                 permanentDeleteEntry={permanentDeleteEntry}
+               />
+             </MobileCollapsibleCard>
+ 
+             {/* ── Model Tools / Capabilities Card ── */}
+             <MobileCollapsibleCard
+               title="Model Tools / Capabilities"
+               icon={<Wrench className="w-5 h-5 text-text-tertiary" />}
+               statusBadge={{ status: 'unknown', label: 'Backend not connected' }}
+               summaryText="Tool support depends on backend capability"
+               defaultExpanded={false}
+               defaultExpandedMobile={false}
+               localStorageKey="qonduit-model-tools"
+             >
+               <ToolRegistry compact />
+             </MobileCollapsibleCard>
+         </div>
 
       {/* ── Toast ── */}
       {toastMessage && (

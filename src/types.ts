@@ -871,8 +871,106 @@ export interface RagPageState {
    }
  
    /** PATCH /v1/rag/projects/{project_id}/collections/{name} request body */
-   export interface RagUpdateCollectionRequest {
-     display_name?: string;
-     description?: string;
-     metadata?: Record<string, unknown>;
-   }
+    export interface RagUpdateCollectionRequest {
+      display_name?: string;
+      description?: string;
+      metadata?: Record<string, unknown>;
+    }
+ 
+    // ── Tool Registry Types ──────────────────────────────────────────────
+ 
+    export type ToolCategory =
+      | 'rag'
+      | 'filesystem'
+      | 'execution'
+      | 'homeassistant'
+      | 'web'
+      | 'system'
+      | 'utility';
+ 
+    export type ToolStatus = 'available' | 'unavailable' | 'error' | 'unknown';
+ 
+    export type ConfirmationMode = 'always' | 'risky-only' | 'never';
+ 
+    export interface ToolEntry {
+      name: string;
+      displayName: string;
+      description: string;
+      enabled: boolean;
+      requiresConfirmation: boolean;
+      category: ToolCategory;
+      backendAvailable: boolean;
+      backendProvider: 'Gateway' | 'Router' | 'External';
+      lastError: string | null;
+    }
+ 
+    export interface ToolSettings {
+      global: Record<string, boolean>;
+      perModel?: Record<string, Record<string, boolean>>;
+      confirmationMode: ConfirmationMode;
+    }
+ 
+    export const TOOL_REGISTRY: Record<string, ToolEntry> = {
+      rag_search: {
+        name: 'rag_search',
+        displayName: 'RAG Knowledge Search',
+        description: 'Search indexed knowledge bases for relevant information',
+        enabled: true,
+        requiresConfirmation: false,
+        category: 'rag',
+        backendAvailable: false,
+        backendProvider: 'Gateway',
+        lastError: null,
+      },
+      file_read: {
+        name: 'file_read',
+        displayName: 'File Read',
+        description: 'Read the contents of a file by path',
+        enabled: true,
+        requiresConfirmation: false,
+        category: 'filesystem',
+        backendAvailable: false,
+        backendProvider: 'Gateway',
+        lastError: null,
+      },
+      shell_exec: {
+        name: 'shell_exec',
+        displayName: 'Shell Command',
+        description: 'Execute a shell command on the server',
+        enabled: false,
+        requiresConfirmation: true,
+        category: 'execution',
+        backendAvailable: false,
+        backendProvider: 'Gateway',
+        lastError: null,
+      },
+      model_info: {
+        name: 'model_info',
+        displayName: 'Model Info',
+        description: 'Query information about available models',
+        enabled: true,
+        requiresConfirmation: false,
+        category: 'system',
+        backendAvailable: false,
+        backendProvider: 'Gateway',
+        lastError: null,
+      },
+      collection_list: {
+        name: 'collection_list',
+        displayName: 'Collection List',
+        description: 'List available RAG collections',
+        enabled: true,
+        requiresConfirmation: false,
+        category: 'rag',
+        backendAvailable: false,
+        backendProvider: 'Gateway',
+        lastError: null,
+      },
+    };
+ 
+    export const DEFAULT_TOOL_SETTINGS: ToolSettings = {
+      global: Object.fromEntries(
+        Object.values(TOOL_REGISTRY).map(t => [t.name, t.enabled])
+      ),
+      confirmationMode: 'risky-only',
+    };

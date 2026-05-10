@@ -12,13 +12,9 @@ import EndpointCard from '../components/EndpointCard';
 import ModelControlCard from '../components/ModelControlCard';
 import LogsPanel from '../components/LogsPanel';
 import SystemOverview from '../components/SystemOverview';
-import ComingSoon from '../components/ComingSoon';
 import MobileCollapsibleCard from '../components/MobileCollapsibleCard';
 import {
   Settings2,
-  Wrench,
-  BarChart3,
-  Shield,
   Database,
   Loader2,
   ArrowRight,
@@ -26,6 +22,9 @@ import {
   Globe,
   Cpu,
   Terminal,
+  MessageSquare,
+  Router,
+  Activity,
 } from 'lucide-react';
 
 const DashboardPage: React.FC = () => {
@@ -343,34 +342,16 @@ const DashboardPage: React.FC = () => {
       const ragEmbedStatus = ragHealth?.embedding.ok ? 'Available' : ragHealth?.embedding.ok === false ? 'Unavailable' : 'Checking';
       const ragSummary = `Qdrant: ${ragQdrantStatus} · Embeddings: ${ragEmbedStatus} · ${registryProjects.length} projects`;
  
-   const comingSoonItems = [
-      {
-        icon: <Settings2 className="w-4 h-4" />,
-        title: 'Gateway Settings',
-        description: 'Configure memory gateway parameters and behavior',
-        category: 'infra' as const,
-      },
-      {
-        icon: <Wrench className="w-4 h-4" />,
-        title: 'Tool Toggles',
-        description: 'Enable tools and function calling for models',
-        category: 'tools' as const,
-      },
-      {
-        icon: <BarChart3 className="w-4 h-4" />,
-        title: 'Usage Analytics',
-        description: 'Track model usage, costs, and performance metrics',
-        category: 'tools' as const,
-      },
-      {
-        icon: <Shield className="w-4 h-4" />,
-        title: 'Access Control',
-        description: 'Manage user permissions and API key rotation',
-        category: 'infra' as const,
-      },
-    ];
-
-  const formatTimeAgo = (ts: number) => {
+   const quickActions = [
+     { id: 'chat', label: 'Chat', description: 'Send messages to your model', icon: MessageSquare, route: '/chat', color: 'text-accent-primary' },
+     { id: 'models', label: 'Models', description: 'Browse and manage models', icon: Cpu, route: '/models', color: 'text-accent-secondary' },
+     { id: 'router', label: 'Router', description: 'Launch and control models', icon: Router, route: '/router', color: 'text-accent-tertiary' },
+     { id: 'rag', label: 'RAG Browser', description: 'Search knowledge bases', icon: Database, route: '/rag', color: 'text-accent-primary' },
+     { id: 'diagnostics', label: 'Diagnostics', description: 'Health and debugging tools', icon: Activity, route: '/diagnostics', color: 'text-status-warning' },
+     { id: 'settings', label: 'Settings', description: 'Configure endpoints & gateway', icon: Settings2, route: '/settings', color: 'text-text-secondary' },
+   ];
+ 
+   const formatTimeAgo = (ts: number) => {
     const diff = Date.now() - ts;
     const secs = Math.floor(diff / 1000);
     if (secs < 10) return 'just now';
@@ -635,12 +616,26 @@ const DashboardPage: React.FC = () => {
                                                           </div>
                                                         </div>
                          </MobileCollapsibleCard>
-  
-          {/* Coming Soon */}
-         <div>
-           <ComingSoon items={comingSoonItems} />
-         </div>
-      </div>
+ 
+           {/* Quick Actions */}
+          <div className="mb-4 sm:mb-6">
+            <h2 className="text-base font-semibold text-text-primary mb-3">Quick Actions</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {quickActions.map(action => (
+                <button
+                  key={action.id}
+                  onClick={() => navigate(action.route)}
+                  className="bg-bg-card rounded-xl border border-border-primary p-4 hover:border-accent-primary/30 hover:bg-accent-primary/5 transition-all duration-200 group text-left relative"
+                >
+                  <action.icon className={`w-5 h-5 ${action.color} mb-2 group-hover:scale-110 transition-transform`} />
+                  <p className="text-sm font-medium text-text-primary">{action.label}</p>
+                  <p className="text-[10px] sm:text-xs text-text-tertiary mt-0.5">{action.description}</p>
+                  <ArrowRight className="w-3 h-3 text-text-tertiary absolute right-3 top-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              ))}
+            </div>
+          </div>
+       </div>
 
       {/* Toast */}
       {toastMessage && (
