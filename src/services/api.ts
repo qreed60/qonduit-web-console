@@ -484,6 +484,107 @@ export async function fetchChatCompletions(
   return response.json();
 }
 
+// ── Streaming chat completions ──────────────────────────────────────────────
+
+/**
+ * Stream chat completions via SSE.
+ * Yields: { type: 'delta', content: string } | { type: 'done' } | { type: 'error', error: string }
+ */
+export async function* streamChatCompletions(
+  model: string,
+  messages: ChatMessage[],
+  ctxSize: number = 8192,
+  ragSelection?: RagChatSelection,
+  attachments?: ChatAttachmentPayload[],
+  signal?: AbortSignal,
+): AsyncGenerator<{ type: 'delta'; content: string } | { type: 'done' } | { type: 'error'; error: string }> {
+  const body: Record<string, unknown> = {
+    model,
+    messages,
+    temperature: 0.7,
+    max_tokens: 4096,
+    stream: true,
+    ...(ctxSize !== 8192 && { context_size: ctxSize }),
+  };
+
+  if (ragSelection) {
+    body.project_id = ragSelection.projectId;
+    if (ragSelection.collection) {
+      body.rag_collection = ragSelection.collection;
+    }
+  }
+
+  if (attachments && attachments.length > 0) {
+    body.attachments = attachments;
+  }
+
+  const response = await fetch(apiPath('gateway', '/v1/chat/completions'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!response.ok) {
+    const bodyText = await response.text().catch(() => '');
+    throw new Error(`HTTP ${response.status}: ${bodyText}`);
+  }
+
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('text/event-stream')) {
+    // Backend doesn't support streaming for this request (e.g., attachments not supported)
+    // Fall through to non-streaming parse — caller will handle the mismatch
+    await response.json();
+    yield { type: 'done' };
+    return;
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error('No response body reader');
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // keep incomplete line in buffer
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed === 'data: [DONE]') continue;
+        if (!trimmed.startsWith('data:')) continue;
+
+        const jsonStr = trimmed.slice(5).trim();
+        if (!jsonStr) continue;
+
+        try {
+          const parsed = JSON.parse(jsonStr);
+          const choice = parsed.choices?.[0];
+          if (!choice) continue;
+
+          // Try delta first (incremental), then message (full)
+          const content = choice.delta?.content || choice.message?.content;
+          if (content) {
+            yield { type: 'delta', content };
+          }
+        } catch {
+          // Skip malformed JSON lines
+          continue;
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 // ── Health check result type ────────────────────────────────────────────────
 
 export interface HealthCheckResult {

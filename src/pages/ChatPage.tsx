@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { fetchProviderModels, fetchChatCompletions, getSettings, NormalizedModel } from '../services/api';
+import { fetchProviderModels, fetchChatCompletions, streamChatCompletions, getSettings, NormalizedModel } from '../services/api';
 import { ChatMessage, ProviderType, ChatAttachment, ChatAttachmentMode, ChatAttachmentPayload } from '../types';
 import Toast from '../components/Toast';
 import RagContextSelector from '../components/RagContextSelector';
@@ -16,6 +16,8 @@ import {
   Globe,
   Paperclip,
 } from 'lucide-react';
+
+const RAG_SELECTION_KEY = 'qonduit-rag-chat-selection';
 
 const ChatPage: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -37,24 +39,27 @@ const ChatPage: React.FC = () => {
     setToastType(type);
   }, []);
 
-  // RAG context selection (only used when Gateway mode is active)
-      const [ragSelection, setRagSelection] = useState<{
-        projectId: string;
-        collection: string | null;
-        enabled: boolean;
-      }>({ projectId: '', collection: null, enabled: true });
-  
-    // Memoized RAG selection handler to prevent render loop in RagContextSelector
-    const handleRagSelectionChange = useCallback(
-      (selection: { projectId: string; collection: string | null; enabled: boolean }) => {
-        setRagSelection(selection);
-      },
-      [] // setRagSelection is a stable useState setter
-    );
-  
-      // Chat attachments
-    const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
-    const fileInputRef = useRef<HTMLInputElement>(null);
+  // ── Applied RAG state (committed, shown in collapsed indicator, persisted) ──
+  const [appliedRag, setAppliedRag] = useState(() => {
+    try {
+      const raw = localStorage.getItem(RAG_SELECTION_KEY);
+      if (raw) {
+        const saved: { projectId: string; collection: string | null; enabled: boolean } = JSON.parse(raw);
+        if (saved?.projectId) {
+          return saved;
+        }
+      }
+    } catch { /* ignore */ }
+    return { projectId: '', collection: null, enabled: true };
+  });
+
+  // ── Streaming state ──
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingContent, setStreamingContent] = useState('');
+
+  // Chat attachments
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load models when provider changes or on mount
   useEffect(() => {
@@ -68,10 +73,10 @@ const ChatPage: React.FC = () => {
     loadModels(currentProvider);
   }, [currentProvider]);
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll to bottom on new messages or streaming content
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, streamingContent]);
 
   // Focus input on mount
   useEffect(() => {
@@ -79,86 +84,118 @@ const ChatPage: React.FC = () => {
   }, []);
 
   const loadModels = async (provider: ProviderType = currentProvider) => {
-      setModelLoading(true);
-      try {
-        const providerModels = await fetchProviderModels(provider);
-        setModels(providerModels);
-        if (providerModels.length > 0) {
-          // Prefer the settings default model, otherwise use first available
-          const settings = getSettings();
-          const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
-          setSelectedModel(defaultModel?.id || providerModels[0].id);
-        }
-      } catch (err) {
-        console.log(`${provider} models unavailable:`, err);
-      } finally {
-        setModelLoading(false);
+    setModelLoading(true);
+    try {
+      const providerModels = await fetchProviderModels(provider);
+      setModels(providerModels);
+      if (providerModels.length > 0) {
+        const settings = getSettings();
+        const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
+        setSelectedModel(defaultModel?.id || providerModels[0].id);
       }
-    };
+    } catch (err) {
+      console.log(`${provider} models unavailable:`, err);
+    } finally {
+      setModelLoading(false);
+    }
+  };
 
   const handleSend = async () => {
-       if (!input.trim() || !selectedModel || loading) return;
-  
-       const userMessage: ChatMessage = { role: 'user', content: input.trim() };
-       const newMessages = [...messages, userMessage];
-       setMessages(newMessages);
-       setInput('');
-       setLoading(true);
-       setError(null);
-  
-       try {
-         // Build RAG selection for Gateway mode
-         const ragPayload = (currentProvider === 'Gateway' && ragSelection.enabled && ragSelection.projectId)
-           ? {
-               projectId: ragSelection.projectId,
-               collection: ragSelection.collection || undefined,
-             }
-           : undefined;
-  
-         // Process attachments
-         let attachmentPayloads: ChatAttachmentPayload[] | undefined = undefined;
-         if (attachments.length > 0) {
-           // Convert files to base64 in parallel
-           const processed = await Promise.all(
-             attachments.map(async (att) => {
-               const contentBase64 = await fileToBase64(att.file);
-               return {
-                 name: att.name,
-                 mime_type: att.type || 'application/octet-stream',
-                 content_base64: contentBase64,
-                 collection: (att.mode === 'save_to_rag' || att.mode === 'save_to_rag_only') ? att.collection : undefined,
-                 mode: att.mode,
-                 project_id: (att.mode === 'save_to_rag' || att.mode === 'save_to_rag_only') ? att.projectId || ragPayload?.projectId : undefined,
-               } as ChatAttachmentPayload;
-             })
-           );
-           attachmentPayloads = processed;
-         }
-  
-         const response = await fetchChatCompletions(
-           selectedModel,
-           newMessages,
-           undefined,
-           ragPayload,
-           attachmentPayloads,
-         );
-         const assistantMessage = response.choices?.[0]?.message;
-         if (assistantMessage) {
-           setMessages([...newMessages, assistantMessage]);
-           // Clear attachments on success
-           setAttachments([]);
-         } else {
-           setError('No response received from model');
-         }
-       } catch (err) {
-         const msg = err instanceof Error ? err.message : 'Failed to get response';
-         setError(msg);
-         showToast(`Chat error: ${msg}`, 'error');
-         // Preserve attachments on failure
-       } finally {
-         setLoading(false);
-       }
-     };
+    if (!input.trim() || !selectedModel || loading || isStreaming) return;
+
+    const userMessage: ChatMessage = { role: 'user', content: input.trim() };
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
+    setInput('');
+    setLoading(true);
+    setError(null);
+    setIsStreaming(true);
+    setStreamingContent('');
+
+    try {
+      // Build RAG selection for Gateway mode
+      const ragPayload = (currentProvider === 'Gateway' && appliedRag.enabled && appliedRag.projectId)
+        ? {
+            projectId: appliedRag.projectId,
+            collection: appliedRag.collection || undefined,
+          }
+        : undefined;
+
+      // Process attachments
+      let attachmentPayloads: ChatAttachmentPayload[] | undefined = undefined;
+      if (attachments.length > 0) {
+        const processed = await Promise.all(
+          attachments.map(async (att) => {
+            const contentBase64 = await fileToBase64(att.file);
+            return {
+              name: att.name,
+              mime_type: att.type || 'application/octet-stream',
+              content_base64: contentBase64,
+              collection: (att.mode === 'save_to_rag' || att.mode === 'save_to_rag_only') ? att.collection : undefined,
+              mode: att.mode,
+              project_id: (att.mode === 'save_to_rag' || att.mode === 'save_to_rag_only') ? att.projectId || ragPayload?.projectId : undefined,
+            } as ChatAttachmentPayload;
+          })
+        );
+        attachmentPayloads = processed;
+      }
+
+      // Try streaming first
+      let assistantContent = '';
+      let streamSupported = false;
+
+      try {
+        for await (const chunk of streamChatCompletions(
+          selectedModel,
+          newMessages,
+          undefined,
+          ragPayload,
+          attachmentPayloads
+        )) {
+          if (chunk.type === 'delta') {
+            assistantContent += chunk.content;
+            setStreamingContent(assistantContent);
+          } else if (chunk.type === 'error') {
+            throw new Error(chunk.error);
+          }
+        }
+        streamSupported = true;
+      } catch (streamErr) {
+        if (!streamSupported) {
+          // Fall back to non-streaming
+          const response = await fetchChatCompletions(
+            selectedModel,
+            newMessages,
+            undefined,
+            ragPayload,
+            attachmentPayloads,
+          );
+          const assistantMessage = response.choices?.[0]?.message;
+          assistantContent = assistantMessage?.content || '';
+        } else {
+          throw streamErr;
+        }
+      }
+
+      if (assistantContent) {
+        const assistantMessage: ChatMessage = { role: 'assistant', content: assistantContent };
+        setMessages([...newMessages, assistantMessage]);
+      } else {
+        setError('No response received from model');
+      }
+
+      setAttachments([]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to get response';
+      setError(msg);
+      showToast(`Chat error: ${msg}`, 'error');
+      // Preserve attachments on failure
+    } finally {
+      setLoading(false);
+      setIsStreaming(false);
+      setStreamingContent('');
+    }
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -188,244 +225,261 @@ const ChatPage: React.FC = () => {
   };
 
   const handleRetry = () => {
-      if (messages.length > 0) {
-        // Retry the last user message
-        const lastUserMsgIndex = [...messages].reverse().findIndex(m => m.role === 'user');
-        if (lastUserMsgIndex >= 0) {
-          const retryMessages = messages.slice(0, messages.length - lastUserMsgIndex);
-          setMessages(retryMessages);
-          handleSend();
-        }
+    if (messages.length > 0) {
+      const lastUserMsgIndex = [...messages].reverse().findIndex(m => m.role === 'user');
+      if (lastUserMsgIndex >= 0) {
+        const retryMessages = messages.slice(0, messages.length - lastUserMsgIndex);
+        setMessages(retryMessages);
+        handleSend();
       }
-    };
-  
-    // ── Attachment helpers ──────────────────────────────────────────────────────
-  
-    const generateId = () => `att_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-  
-    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (!files || files.length === 0) return;
-  
-      const newAttachments: ChatAttachment[] = [];
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (file.size > MAX_ATTACHMENT_SIZE) {
-          showToast(`File too large: ${formatFileSize(file.size)} (max ${formatFileSize(MAX_ATTACHMENT_SIZE)})`, 'error');
-          continue;
-        }
-        newAttachments.push({
-          id: generateId(),
-          file,
-          name: file.name,
-          size: file.size,
-          type: file.type || 'application/octet-stream',
-          mode: 'chat_context_only',
-          projectId: ragSelection.projectId || undefined,
-          collection: ragSelection.collection || undefined,
-        });
+    }
+  };
+
+  // ── Attachment helpers ──
+
+  const generateId = () => `att_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const newAttachments: ChatAttachment[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.size > MAX_ATTACHMENT_SIZE) {
+        showToast(`File too large: ${formatFileSize(file.size)} (max ${formatFileSize(MAX_ATTACHMENT_SIZE)})`, 'error');
+        continue;
       }
-  
-      if (newAttachments.length > 0) {
-        setAttachments(prev => [...prev, ...newAttachments]);
-      }
-      // Reset file input
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    };
-  
-    const handleRemoveAttachment = useCallback((id: string) => {
-      setAttachments(prev => prev.filter(a => a.id !== id));
-    }, []);
-  
-    const handleModeChange = useCallback((id: string, mode: ChatAttachmentMode) => {
-      setAttachments(prev => prev.map(a => a.id === id ? { ...a, mode } : a));
-    }, []);
-  
-    const handleCollectionChange = useCallback((id: string, collection: string) => {
-      setAttachments(prev => prev.map(a => a.id === id ? { ...a, collection: collection || undefined } : a));
-    }, []);
-  
-    const handleOpenFilePicker = () => {
-      fileInputRef.current?.click();
-    };
+      newAttachments.push({
+        id: generateId(),
+        file,
+        name: file.name,
+        size: file.size,
+        type: file.type || 'application/octet-stream',
+        mode: 'chat_context_only',
+        projectId: appliedRag.projectId || undefined,
+        collection: appliedRag.collection || undefined,
+      });
+    }
+
+    if (newAttachments.length > 0) {
+      setAttachments(prev => [...prev, ...newAttachments]);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleRemoveAttachment = useCallback((id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+  }, []);
+
+  const handleModeChange = useCallback((id: string, mode: ChatAttachmentMode) => {
+    setAttachments(prev => prev.map(a => a.id === id ? { ...a, mode } : a));
+  }, []);
+
+  const handleCollectionChange = useCallback((id: string, collection: string) => {
+    setAttachments(prev => prev.map(a => a.id === id ? { ...a, collection: collection || undefined } : a));
+  }, []);
+
+  const handleOpenFilePicker = () => {
+    fileInputRef.current?.click();
+  };
 
   return (
-         <div className="flex flex-col h-full bg-bg-primary">
-           {/* Header */}
-           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 px-4 py-4 sm:px-6 sm:py-3 border-b border-border-primary bg-bg-card">
-             <div className="flex items-center gap-2 w-full sm:w-auto">
-               <MessageSquare className="w-5 h-5 text-accent-primary flex-shrink-0" />
-               <h2 className="text-base sm:text-lg font-semibold text-text-primary">Chat</h2>
-               {!selectedModel && !modelLoading && (
-                 <span className="text-xs text-status-warning flex items-center gap-1">
-                   <AlertCircle className="w-3 h-3" />
-                   No models
-                 </span>
-               )}
-             </div>
-             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
-               {/* Row 1: Provider + Model on mobile, side by side on desktop */}
-               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
-                 {/* Provider Selector */}
-                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                   <Globe className="w-4 h-4 text-text-tertiary flex-shrink-0" />
-                   <select
-                     value={currentProvider}
-                     onChange={(e) => setCurrentProvider(e.target.value as ProviderType)}
-                     disabled={modelLoading || loading}
-                     className="flex-1 sm:flex-initial px-4 py-3 bg-bg-secondary border border-border-primary rounded-lg text-sm font-medium text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]"
-                   >
-                     <option value="Direct">Direct</option>
-                     <option value="Gateway">Gateway</option>
-                   </select>
-                 </div>
-                 {/* Model Selector */}
-                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                   {modelLoading ? (
-                     <Loader2 className="w-5 h-5 text-text-tertiary animate-spin flex-shrink-0" />
-                   ) : (
-                     <select
-                       value={selectedModel}
-                       onChange={(e) => setSelectedModel(e.target.value)}
-                       disabled={loading}
-                       className="flex-1 sm:flex-initial px-4 py-3 bg-bg-secondary border border-border-primary rounded-lg text-sm font-medium text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed truncate min-h-[48px]"
-                     >
-                       {models.length === 0 ? (
-                         <option value="">No models</option>
-                       ) : (
-                         models.map((m) => (
-                           <option key={m.id} value={m.id}>
-                             {m.id}
-                           </option>
-                         ))
-                       )}
-                     </select>
-                   )}
-                   <button
-                      onClick={() => loadModels(currentProvider)}
-                      disabled={loading}
-                      className="p-3 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-h-[48px] min-w-[48px] flex items-center justify-center"
-                      title="Refresh models"
-                    >
-                      <RefreshCw className={`w-5 h-5 ${modelLoading ? 'animate-spin' : ''}`} />
-                    </button>
-                  </div>
-                </div>
- 
-               {/* Row 2: RAG + Settings on mobile, side by side on desktop */}
-               <div className="flex flex-row items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
-                 {/* RAG Context Selector (only in Gateway mode) */}
-                 {currentProvider === 'Gateway' && (
-                                   <div className="flex items-center gap-2 w-full sm:w-auto">
-                                     <RagContextSelector
-                                       onSelectionChange={handleRagSelectionChange}
-                                     />
-                                   </div>
-                                 )}
-                 {/* Settings Toggle */}
-                 <button
-                  onClick={() => setShowSettings(!showSettings)}
-                  className={`p-3 rounded-lg transition-all duration-200 min-h-[48px] min-w-[48px] flex items-center justify-center ${showSettings ? 'text-accent-primary bg-accent-primary/10' : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'}`}
-                  title="Chat settings"
+    <div className="flex flex-col h-full bg-bg-primary">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 px-4 py-4 sm:px-6 sm:py-3 border-b border-border-primary bg-bg-card">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <MessageSquare className="w-5 h-5 text-accent-primary flex-shrink-0" />
+          <h2 className="text-base sm:text-lg font-semibold text-text-primary">Chat</h2>
+          {!selectedModel && !modelLoading && (
+            <span className="text-xs text-status-warning flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />
+              No models
+            </span>
+          )}
+        </div>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+          {/* Row 1: Provider + Model on mobile, side by side on desktop */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+            {/* Provider Selector */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Globe className="w-4 h-4 text-text-tertiary flex-shrink-0" />
+              <select
+                value={currentProvider}
+                onChange={(e) => setCurrentProvider(e.target.value as ProviderType)}
+                disabled={modelLoading || loading}
+                className="flex-1 sm:flex-initial px-4 py-3 bg-bg-secondary border border-border-primary rounded-lg text-sm font-medium text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]"
+              >
+                <option value="Direct">Direct</option>
+                <option value="Gateway">Gateway</option>
+              </select>
+            </div>
+            {/* Model Selector */}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              {modelLoading ? (
+                <Loader2 className="w-5 h-5 text-text-tertiary animate-spin flex-shrink-0" />
+              ) : (
+                <select
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  disabled={loading}
+                  className="flex-1 sm:flex-initial px-4 py-3 bg-bg-secondary border border-border-primary rounded-lg text-sm font-medium text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed truncate min-h-[48px]"
                 >
-                  <Settings2 className="w-5 h-5" />
-                </button>
-               </div>
-             </div>
-           </div>
-  
-        {/* Settings Panel */}
-         {showSettings && (
-           <div className="px-6 py-3 border-b border-border-primary bg-bg-secondary/50">
-             {(() => {
-               const settings = getSettings();
-               return (
-                 <div className="flex flex-wrap items-center gap-4 text-xs text-text-secondary">
-                   <span>Mode: <span className="font-medium text-text-primary">{settings.endpointMode}</span></span>
-                   <span>·</span>
-                   <span>Provider: <span className="font-medium text-text-primary">{currentProvider}</span></span>
-                   <span>·</span>
-                   <span>Models loaded: <span className="font-medium text-text-primary">{models.length}</span></span>
-                   {currentProvider === 'Gateway' && (
-                     <>
-                       <span>·</span>
-                       <span>RAG: <span className={`font-medium ${ragSelection.enabled && ragSelection.projectId ? 'text-accent-primary' : 'text-text-tertiary'}`}>
-                         {ragSelection.enabled && ragSelection.projectId
-                           ? `${ragSelection.projectId}${ragSelection.collection ? ` / ${ragSelection.collection}` : ''}`
-                           : 'Not configured'}
-                       </span></span>
-                     </>
-                   )}
-                 </div>
-               );
-             })()}
-           </div>
-         )}
+                  {models.length === 0 ? (
+                    <option value="">No models</option>
+                  ) : (
+                    models.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.id}
+                      </option>
+                    ))
+                  )}
+                </select>
+              )}
+              <button
+                onClick={() => loadModels(currentProvider)}
+                disabled={loading}
+                className="p-3 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-h-[48px] min-w-[48px] flex items-center justify-center"
+                title="Refresh models"
+              >
+                <RefreshCw className={`w-5 h-5 ${modelLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Row 2: RAG + Settings on mobile, side by side on desktop */}
+          <div className="flex flex-row items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
+            {/* RAG Context Selector (only in Gateway mode) */}
+            {currentProvider === 'Gateway' && (
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <RagContextSelector
+                  appliedRag={appliedRag}
+                  onApply={(newRag) => {
+                    setAppliedRag(newRag);
+                  }}
+                />
+              </div>
+            )}
+            {/* Settings Toggle */}
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className={`p-3 rounded-lg transition-all duration-200 min-h-[48px] min-w-[48px] flex items-center justify-center ${showSettings ? 'text-accent-primary bg-accent-primary/10' : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'}`}
+              title="Chat settings"
+            >
+              <Settings2 className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Settings Panel */}
+      {showSettings && (
+        <div className="px-6 py-3 border-b border-border-primary bg-bg-secondary/50">
+          {(() => {
+            const settings = getSettings();
+            return (
+              <div className="flex flex-wrap items-center gap-4 text-xs text-text-secondary">
+                <span>Mode: <span className="font-medium text-text-primary">{settings.endpointMode}</span></span>
+                <span>·</span>
+                <span>Provider: <span className="font-medium text-text-primary">{currentProvider}</span></span>
+                <span>·</span>
+                <span>Models loaded: <span className="font-medium text-text-primary">{models.length}</span></span>
+                {currentProvider === 'Gateway' && (
+                  <>
+                    <span>·</span>
+                    <span>RAG: <span className={`font-medium ${appliedRag.enabled && appliedRag.projectId ? 'text-accent-primary' : 'text-text-tertiary'}`}>
+                      {appliedRag.enabled && appliedRag.projectId
+                        ? `${appliedRag.projectId}${appliedRag.collection ? ` / ${appliedRag.collection}` : ' / all collections'}`
+                        : 'Not configured'}
+                    </span></span>
+                  </>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       {/* Messages Area */}
-       <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-4">
-         {messages.length === 0 ? (
-           <div className="flex flex-col items-center justify-center h-full text-center">
-             <div className="w-16 h-16 bg-accent-primary/10 rounded-2xl flex items-center justify-center mb-4 border border-accent-primary/20">
-               <MessageSquare className="w-8 h-8 text-accent-primary" />
-             </div>
-             <h3 className="text-lg font-semibold text-text-primary mb-2">Start a Conversation</h3>
-             <p className="text-sm text-text-secondary max-w-md">
-               Send a message to chat with your AI model through the Memory Gateway.
-               {models.length === 0 && ' No models are currently available — check your Gateway endpoint.'}
-             </p>
-           </div>
-         ) : (
-           <div className="space-y-4 max-w-3xl mx-auto">
-             {messages.map((msg, idx) => (
-               <div
-                 key={idx}
-                 className={`flex group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-               >
-                 <div
-                   className={`max-w-[90%] sm:max-w-[80%] rounded-xl px-4 py-3 ${
-                     msg.role === 'user'
-                       ? 'bg-accent-primary/10 border border-accent-primary/20 text-text-primary'
-                       : 'bg-bg-card border border-border-primary text-text-primary'
-                   }`}
-                 >
-                   <div className="flex items-start justify-between gap-2">
-                     <p className="text-sm whitespace-pre-wrap break-words flex-1">{msg.content}</p>
-                     {msg.role === 'assistant' && (
-                       <button
-                         onClick={() => handleCopyMessage(msg.content)}
-                         className="p-1.5 rounded hover:bg-white/10 text-text-tertiary hover:text-text-primary transition-all duration-200 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                         title="Copy message"
-                       >
-                         <Copy className="w-4 h-4" />
-                       </button>
-                     )}
-                   </div>
-                   <p className={`text-[10px] sm:text-xs mt-1.5 ${
-                     msg.role === 'user' ? 'text-accent-primary/60' : 'text-text-tertiary'
-                   }`}>
-                     {msg.role === 'user' ? 'You' : selectedModel || 'Model'}
-                   </p>
-                 </div>
-               </div>
-             ))}
- 
-             {/* Loading Indicator */}
-             {loading && (
-               <div className="flex justify-start">
-                 <div className="bg-bg-card border border-border-primary rounded-xl px-4 py-3">
-                   <div className="flex items-center gap-2">
-                     <Loader2 className="w-4 h-4 text-accent-primary animate-spin" />
-                     <span className="text-xs text-text-secondary">Thinking...</span>
-                   </div>
-                 </div>
-               </div>
-             )}
- 
-             <div ref={messagesEndRef} />
-           </div>
-         )}
-       </div>
+      <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-4">
+        {messages.length === 0 && !isStreaming ? (
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="w-16 h-16 bg-accent-primary/10 rounded-2xl flex items-center justify-center mb-4 border border-accent-primary/20">
+              <MessageSquare className="w-8 h-8 text-accent-primary" />
+            </div>
+            <h3 className="text-lg font-semibold text-text-primary mb-2">Start a Conversation</h3>
+            <p className="text-sm text-text-secondary max-w-md">
+              Send a message to chat with your AI model through the Memory Gateway.
+              {models.length === 0 && ' No models are currently available — check your Gateway endpoint.'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4 max-w-3xl mx-auto">
+            {messages.map((msg, idx) => (
+              <div
+                key={idx}
+                className={`flex group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-[90%] sm:max-w-[80%] rounded-xl px-4 py-3 ${
+                    msg.role === 'user'
+                      ? 'bg-accent-primary/10 border border-accent-primary/20 text-text-primary'
+                      : 'bg-bg-card border border-border-primary text-text-primary'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm whitespace-pre-wrap break-words flex-1">{msg.content}</p>
+                    {msg.role === 'assistant' && (
+                      <button
+                        onClick={() => handleCopyMessage(msg.content)}
+                        className="p-1.5 rounded hover:bg-white/10 text-text-tertiary hover:text-text-primary transition-all duration-200 flex-shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                        title="Copy message"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  <p className={`text-[10px] sm:text-xs mt-1.5 ${
+                    msg.role === 'user' ? 'text-accent-primary/60' : 'text-text-tertiary'
+                  }`}>
+                    {msg.role === 'user' ? 'You' : selectedModel || 'Model'}
+                  </p>
+                </div>
+              </div>
+            ))}
+
+            {/* Streaming message display */}
+            {isStreaming && (
+              <div className="flex justify-start">
+                <div className="max-w-[90%] sm:max-w-[80%] rounded-xl px-4 py-3 bg-bg-card border border-border-primary">
+                  <p className="text-sm whitespace-pre-wrap break-words flex-1">
+                    {streamingContent || (
+                      <span className="flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 inline animate-spin" />Streaming…
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-[10px] sm:text-xs mt-1.5 text-text-tertiary">{selectedModel || 'Model'}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Loading Indicator (only when not streaming) */}
+            {!isStreaming && loading && (
+              <div className="flex justify-start">
+                <div className="bg-bg-card border border-border-primary rounded-xl px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 text-accent-primary animate-spin" />
+                    <span className="text-xs text-text-secondary">Thinking...</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+        )}
+      </div>
 
       {/* Error Banner */}
       {error && (
@@ -454,79 +508,79 @@ const ChatPage: React.FC = () => {
       )}
 
       {/* Input Area */}
-          <div className="px-4 py-4 sm:px-6 sm:py-5 border-t border-border-primary bg-bg-card">
-            <div className="max-w-3xl mx-auto">
-              {/* Hidden file input */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                onChange={handleFileSelect}
-                className="hidden"
-                multiple
-                accept=".pdf,.docx,.doc,.txt,.md,.json,.csv,.xml,.html,.vhdl,.v,.sv,.py,.js,.ts,.tsx,.jsx,.dart,.kt,.java,.c,.h,.cpp,.cc,.cs,.go,.rs,.swift,.sh,.bash,.sql,.yaml,.yml,.toml,.ini,.conf,.dockerfile,.makefile,.tcl,.xdc,.sdc,.qsf,.log"
+      <div className="px-4 py-4 sm:px-6 sm:py-5 border-t border-border-primary bg-bg-card">
+        <div className="max-w-3xl mx-auto">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            onChange={handleFileSelect}
+            className="hidden"
+            multiple
+            accept=".pdf,.docx,.doc,.txt,.md,.json,.csv,.xml,.html,.vhdl,.v,.sv,.py,.js,.ts,.tsx,.jsx,.dart,.kt,.java,.c,.h,.cpp,.cc,.cs,.go,.rs,.swift,.sh,.bash,.sql,.yaml,.yml,.toml,.ini,.conf,.dockerfile,.makefile,.tcl,.xdc,.sdc,.qsf,.log"
+          />
+
+          {/* Attachment chips */}
+          <ChatAttachmentChips
+            attachments={attachments}
+            onRemove={handleRemoveAttachment}
+            onModeChange={handleModeChange}
+            onCollectionChange={handleCollectionChange}
+            defaultProjectId={appliedRag.projectId || undefined}
+          />
+
+          <div className="flex items-end gap-3">
+            <div className="flex-1 relative">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={handleTextareaInput}
+                onKeyDown={handleKeyDown}
+                placeholder={models.length === 0 ? 'No models available — check your Gateway endpoint' : 'Type a message... (Enter to send, Shift+Enter for new line)'}
+                disabled={loading || isStreaming || models.length === 0}
+                rows={1}
+                className="w-full px-4 py-4 pr-12 bg-bg-secondary border border-border-primary rounded-xl text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 min-h-[52px]"
               />
- 
-              {/* Attachment chips */}
-              <ChatAttachmentChips
-                 attachments={attachments}
-                 onRemove={handleRemoveAttachment}
-                 onModeChange={handleModeChange}
-                 onCollectionChange={handleCollectionChange}
-                 defaultProjectId={ragSelection.projectId || undefined}
-               />
- 
-              <div className="flex items-end gap-3">
-                <div className="flex-1 relative">
-                  <textarea
-                    ref={inputRef}
-                    value={input}
-                    onChange={handleTextareaInput}
-                    onKeyDown={handleKeyDown}
-                    placeholder={models.length === 0 ? 'No models available — check your Gateway endpoint' : 'Type a message... (Enter to send, Shift+Enter for new line)'}
-                    disabled={loading || models.length === 0}
-                    rows={1}
-                    className="w-full px-4 py-4 pr-12 bg-bg-secondary border border-border-primary rounded-xl text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 min-h-[52px]"
-                  />
-                  {/* Paperclip button */}
-                  {models.length > 0 && (
-                    <button
-                      onClick={handleOpenFilePicker}
-                      disabled={loading}
-                      className="absolute left-3 bottom-3 p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-w-[36px] min-h-[36px] flex items-center justify-center"
-                      title="Attach file"
-                    >
-                      <Paperclip className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <button
-                    onClick={handleClearChat}
-                    disabled={loading || messages.length === 0}
-                    className="p-3 rounded-xl text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[52px] min-w-[52px] flex items-center justify-center"
-                    title="Clear chat"
-                  >
-                    <RefreshCw className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={handleSend}
-                    disabled={loading || !input.trim() || models.length === 0}
-                    className="p-3 rounded-xl bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 hover:shadow-accent-primary/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none min-h-[52px] min-w-[52px] flex items-center justify-center"
-                    title="Send message"
-                  >
-                    {loading ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Send className="w-5 h-5" />
-                    )}
-                  </button>
-                </div>
-              </div>
-              <p className="text-[10px] sm:text-xs text-text-tertiary mt-2 text-center">
-                Responses are generated by the selected model via the Memory Gateway
-              </p>
+              {/* Paperclip button */}
+              {models.length > 0 && (
+                <button
+                  onClick={handleOpenFilePicker}
+                  disabled={loading || isStreaming}
+                  className="absolute left-3 bottom-3 p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-w-[36px] min-h-[36px] flex items-center justify-center"
+                  title="Attach file"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={handleClearChat}
+                disabled={loading || isStreaming || messages.length === 0}
+                className="p-3 rounded-xl text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[52px] min-w-[52px] flex items-center justify-center"
+                title="Clear chat"
+              >
+                <RefreshCw className="w-5 h-5" />
+              </button>
+              <button
+                onClick={handleSend}
+                disabled={loading || isStreaming || !input.trim() || models.length === 0}
+                className="p-3 rounded-xl bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 hover:shadow-accent-primary/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none min-h-[52px] min-w-[52px] flex items-center justify-center"
+                title="Send message"
+              >
+                {loading || isStreaming ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Send className="w-5 h-5" />
+                )}
+              </button>
             </div>
           </div>
+          <p className="text-[10px] sm:text-xs text-text-tertiary mt-2 text-center">
+            Responses are generated by the selected model via the Memory Gateway
+          </p>
+        </div>
+      </div>
 
       {/* Toast */}
       {toastMessage && (
