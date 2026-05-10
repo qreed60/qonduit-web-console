@@ -12,9 +12,8 @@ import {
   RagChatTestResponse,
   KnownRagProject,
   RagIngestionJob,
-  RagIngestionState,
-  RagEndpointError,
-  RagHealthResponse,
+   RagIngestionState,
+   RagHealthResponse,
   RagProjectSummary,
   RagProjectsListResponse,
   RagProjectDetail,
@@ -34,7 +33,7 @@ import {
   RagDocumentReingestResponse,
   RagDocumentSourceResponse,
 } from '../types';
-import { safeFetchJsonWithPreview, makeRagEndpointError, isRagEndpointError } from './fetchHelpers';
+import { safeFetchJsonWithPreview } from './fetchHelpers';
 
 // ── Known RAG projects ──────────────────────────────────────────────────────
 

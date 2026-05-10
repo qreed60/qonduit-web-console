@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layers, Edit2, Database } from 'lucide-react';
+import { Layers, Edit2 } from 'lucide-react';
 import { RagLogicalCollection } from '../types';
 import RawJsonPanel from './RawJsonPanel';
 
@@ -12,24 +12,6 @@ interface CollectionDetailPanelProps {
 const formatNumber = (n: number | null | undefined): string => {
   if (n === null || n === undefined) return '—';
   return n.toLocaleString();
-};
-
-const formatTimeAgo = (ts: string | null | undefined): string => {
-  if (!ts) return '';
-  try {
-    const date = new Date(ts);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return 'just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays}d ago`;
-  } catch {
-    return '';
-  }
 };
 
 const CollectionDetailPanel: React.FC<CollectionDetailPanelProps> = ({
@@ -148,7 +130,7 @@ const CollectionDetailPanel: React.FC<CollectionDetailPanelProps> = ({
       {Object.keys(collection.metadata).length > 0 && (
         <div className="mb-4">
           <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Metadata</span>
-          <RawJsonPanel data={collection.metadata} label="Collection Metadata" collapsible />
+          <RawJsonPanel data={collection.metadata} label="Collection Metadata" />
         </div>
       )}
     </div>
