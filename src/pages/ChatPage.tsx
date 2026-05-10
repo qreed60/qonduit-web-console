@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { fetchProviderModels, fetchChatCompletions, getSettings, NormalizedModel } from '../services/api';
-import { ChatMessage, ProviderType } from '../types';
+import { ChatMessage, ProviderType, ChatAttachment, ChatAttachmentMode, ChatAttachmentPayload } from '../types';
 import Toast from '../components/Toast';
 import RagContextSelector from '../components/RagContextSelector';
+import ChatAttachmentChips from '../components/ChatAttachmentChips';
+import { fileToBase64, formatFileSize, MAX_ATTACHMENT_SIZE } from '../utils/fileUtils';
 import {
   Send,
   Loader2,
@@ -12,6 +14,7 @@ import {
   Copy,
   RefreshCw,
   Globe,
+  Paperclip,
 } from 'lucide-react';
 
 const ChatPage: React.FC = () => {
@@ -20,6 +23,7 @@ const ChatPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
   const [models, setModels] = useState<NormalizedModel[]>([]);
   const [modelLoading, setModelLoading] = useState(true);
   const [selectedModel, setSelectedModel] = useState('');
@@ -28,12 +32,21 @@ const ChatPage: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  const showToast = useCallback((msg: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToastMessage(msg);
+    setToastType(type);
+  }, []);
+
   // RAG context selection (only used when Gateway mode is active)
-  const [ragSelection, setRagSelection] = useState<{
-    projectId: string;
-    collection: string | null;
-    enabled: boolean;
-  }>({ projectId: '', collection: null, enabled: true });
+    const [ragSelection, setRagSelection] = useState<{
+      projectId: string;
+      collection: string | null;
+      enabled: boolean;
+    }>({ projectId: '', collection: null, enabled: true });
+  
+    // Chat attachments
+    const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load models when provider changes or on mount
   useEffect(() => {
@@ -76,39 +89,68 @@ const ChatPage: React.FC = () => {
     };
 
   const handleSend = async () => {
-     if (!input.trim() || !selectedModel || loading) return;
- 
-     const userMessage: ChatMessage = { role: 'user', content: input.trim() };
-     const newMessages = [...messages, userMessage];
-     setMessages(newMessages);
-     setInput('');
-     setLoading(true);
-     setError(null);
- 
-     try {
-       // Build RAG selection for Gateway mode
-       const ragPayload = (currentProvider === 'Gateway' && ragSelection.enabled && ragSelection.projectId)
-         ? {
-             projectId: ragSelection.projectId,
-             collection: ragSelection.collection || undefined,
-           }
-         : undefined;
- 
-       const response = await fetchChatCompletions(selectedModel, newMessages, undefined, ragPayload);
-       const assistantMessage = response.choices?.[0]?.message;
-       if (assistantMessage) {
-         setMessages([...newMessages, assistantMessage]);
-       } else {
-         setError('No response received from model');
+       if (!input.trim() || !selectedModel || loading) return;
+  
+       const userMessage: ChatMessage = { role: 'user', content: input.trim() };
+       const newMessages = [...messages, userMessage];
+       setMessages(newMessages);
+       setInput('');
+       setLoading(true);
+       setError(null);
+  
+       try {
+         // Build RAG selection for Gateway mode
+         const ragPayload = (currentProvider === 'Gateway' && ragSelection.enabled && ragSelection.projectId)
+           ? {
+               projectId: ragSelection.projectId,
+               collection: ragSelection.collection || undefined,
+             }
+           : undefined;
+  
+         // Process attachments
+         let attachmentPayloads: ChatAttachmentPayload[] | undefined = undefined;
+         if (attachments.length > 0) {
+           // Convert files to base64 in parallel
+           const processed = await Promise.all(
+             attachments.map(async (att) => {
+               const contentBase64 = await fileToBase64(att.file);
+               return {
+                 name: att.name,
+                 mime_type: att.type || 'application/octet-stream',
+                 content_base64: contentBase64,
+                 collection: (att.mode === 'save_to_rag' || att.mode === 'save_to_rag_only') ? att.collection : undefined,
+                 mode: att.mode,
+                 project_id: (att.mode === 'save_to_rag' || att.mode === 'save_to_rag_only') ? att.projectId || ragPayload?.projectId : undefined,
+               } as ChatAttachmentPayload;
+             })
+           );
+           attachmentPayloads = processed;
+         }
+  
+         const response = await fetchChatCompletions(
+           selectedModel,
+           newMessages,
+           undefined,
+           ragPayload,
+           attachmentPayloads,
+         );
+         const assistantMessage = response.choices?.[0]?.message;
+         if (assistantMessage) {
+           setMessages([...newMessages, assistantMessage]);
+           // Clear attachments on success
+           setAttachments([]);
+         } else {
+           setError('No response received from model');
+         }
+       } catch (err) {
+         const msg = err instanceof Error ? err.message : 'Failed to get response';
+         setError(msg);
+         showToast(`Chat error: ${msg}`, 'error');
+         // Preserve attachments on failure
+       } finally {
+         setLoading(false);
        }
-     } catch (err) {
-       const msg = err instanceof Error ? err.message : 'Failed to get response';
-       setError(msg);
-       setToastMessage(`Chat error: ${msg}`);
-     } finally {
-       setLoading(false);
-     }
-   };
+     };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -128,7 +170,7 @@ const ChatPage: React.FC = () => {
   const handleCopyMessage = async (content: string) => {
     try {
       await navigator.clipboard.writeText(content);
-      setToastMessage('Message copied to clipboard');
+      showToast('Message copied to clipboard', 'info');
     } catch { /* ignore */ }
   };
 
@@ -138,16 +180,66 @@ const ChatPage: React.FC = () => {
   };
 
   const handleRetry = () => {
-    if (messages.length > 0) {
-      // Retry the last user message
-      const lastUserMsgIndex = [...messages].reverse().findIndex(m => m.role === 'user');
-      if (lastUserMsgIndex >= 0) {
-        const retryMessages = messages.slice(0, messages.length - lastUserMsgIndex);
-        setMessages(retryMessages);
-        handleSend();
+      if (messages.length > 0) {
+        // Retry the last user message
+        const lastUserMsgIndex = [...messages].reverse().findIndex(m => m.role === 'user');
+        if (lastUserMsgIndex >= 0) {
+          const retryMessages = messages.slice(0, messages.length - lastUserMsgIndex);
+          setMessages(retryMessages);
+          handleSend();
+        }
       }
-    }
-  };
+    };
+  
+    // ── Attachment helpers ──────────────────────────────────────────────────────
+  
+    const generateId = () => `att_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+  
+      const newAttachments: ChatAttachment[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.size > MAX_ATTACHMENT_SIZE) {
+          showToast(`File too large: ${formatFileSize(file.size)} (max ${formatFileSize(MAX_ATTACHMENT_SIZE)})`, 'error');
+          continue;
+        }
+        newAttachments.push({
+          id: generateId(),
+          file,
+          name: file.name,
+          size: file.size,
+          type: file.type || 'application/octet-stream',
+          mode: 'chat_context_only',
+          projectId: ragSelection.projectId || undefined,
+          collection: ragSelection.collection || undefined,
+        });
+      }
+  
+      if (newAttachments.length > 0) {
+        setAttachments(prev => [...prev, ...newAttachments]);
+      }
+      // Reset file input
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+  
+    const handleRemoveAttachment = useCallback((id: string) => {
+      setAttachments(prev => prev.filter(a => a.id !== id));
+    }, []);
+  
+    const handleModeChange = useCallback((id: string, mode: ChatAttachmentMode) => {
+      setAttachments(prev => prev.map(a => a.id === id ? { ...a, mode } : a));
+    }, []);
+  
+    const handleCollectionChange = useCallback((id: string, collection: string) => {
+      setAttachments(prev => prev.map(a => a.id === id ? { ...a, collection: collection || undefined } : a));
+    }, []);
+  
+    const handleOpenFilePicker = () => {
+      fileInputRef.current?.click();
+    };
 
   return (
          <div className="flex flex-col h-full bg-bg-primary">
@@ -354,53 +446,83 @@ const ChatPage: React.FC = () => {
       )}
 
       {/* Input Area */}
-         <div className="px-4 py-4 sm:px-6 sm:py-5 border-t border-border-primary bg-bg-card">
-           <div className="max-w-3xl mx-auto">
-             <div className="flex items-end gap-3">
-               <div className="flex-1 relative">
-                 <textarea
-                   ref={inputRef}
-                   value={input}
-                   onChange={handleTextareaInput}
-                   onKeyDown={handleKeyDown}
-                   placeholder={models.length === 0 ? 'No models available — check your Gateway endpoint' : 'Type a message... (Enter to send, Shift+Enter for new line)'}
-                   disabled={loading || models.length === 0}
-                   rows={1}
-                   className="w-full px-4 py-4 bg-bg-secondary border border-border-primary rounded-xl text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 min-h-[52px]"
-                 />
-               </div>
-               <div className="flex items-center gap-2 flex-shrink-0">
-                 <button
-                   onClick={handleClearChat}
-                   disabled={loading || messages.length === 0}
-                   className="p-3 rounded-xl text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[52px] min-w-[52px] flex items-center justify-center"
-                   title="Clear chat"
-                 >
-                   <RefreshCw className="w-5 h-5" />
-                 </button>
-                 <button
-                   onClick={handleSend}
-                   disabled={loading || !input.trim() || models.length === 0}
-                   className="p-3 rounded-xl bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 hover:shadow-accent-primary/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none min-h-[52px] min-w-[52px] flex items-center justify-center"
-                   title="Send message"
-                 >
-                   {loading ? (
-                     <Loader2 className="w-5 h-5 animate-spin" />
-                   ) : (
-                     <Send className="w-5 h-5" />
-                   )}
-                 </button>
-               </div>
-             </div>
-             <p className="text-[10px] sm:text-xs text-text-tertiary mt-2 text-center">
-               Responses are generated by the selected model via the Memory Gateway
-             </p>
-           </div>
-         </div>
+          <div className="px-4 py-4 sm:px-6 sm:py-5 border-t border-border-primary bg-bg-card">
+            <div className="max-w-3xl mx-auto">
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleFileSelect}
+                className="hidden"
+                multiple
+                accept=".pdf,.docx,.doc,.txt,.md,.json,.csv,.xml,.html,.vhdl,.v,.sv,.py,.js,.ts,.tsx,.jsx,.dart,.kt,.java,.c,.h,.cpp,.cc,.cs,.go,.rs,.swift,.sh,.bash,.sql,.yaml,.yml,.toml,.ini,.conf,.dockerfile,.makefile,.tcl,.xdc,.sdc,.qsf,.log"
+              />
+ 
+              {/* Attachment chips */}
+              <ChatAttachmentChips
+                 attachments={attachments}
+                 onRemove={handleRemoveAttachment}
+                 onModeChange={handleModeChange}
+                 onCollectionChange={handleCollectionChange}
+                 defaultProjectId={ragSelection.projectId || undefined}
+               />
+ 
+              <div className="flex items-end gap-3">
+                <div className="flex-1 relative">
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={handleTextareaInput}
+                    onKeyDown={handleKeyDown}
+                    placeholder={models.length === 0 ? 'No models available — check your Gateway endpoint' : 'Type a message... (Enter to send, Shift+Enter for new line)'}
+                    disabled={loading || models.length === 0}
+                    rows={1}
+                    className="w-full px-4 py-4 pr-12 bg-bg-secondary border border-border-primary rounded-xl text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 min-h-[52px]"
+                  />
+                  {/* Paperclip button */}
+                  {models.length > 0 && (
+                    <button
+                      onClick={handleOpenFilePicker}
+                      disabled={loading}
+                      className="absolute left-3 bottom-3 p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-w-[36px] min-h-[36px] flex items-center justify-center"
+                      title="Attach file"
+                    >
+                      <Paperclip className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={handleClearChat}
+                    disabled={loading || messages.length === 0}
+                    className="p-3 rounded-xl text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed min-h-[52px] min-w-[52px] flex items-center justify-center"
+                    title="Clear chat"
+                  >
+                    <RefreshCw className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={handleSend}
+                    disabled={loading || !input.trim() || models.length === 0}
+                    className="p-3 rounded-xl bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 hover:shadow-accent-primary/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none min-h-[52px] min-w-[52px] flex items-center justify-center"
+                    title="Send message"
+                  >
+                    {loading ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Send className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+              <p className="text-[10px] sm:text-xs text-text-tertiary mt-2 text-center">
+                Responses are generated by the selected model via the Memory Gateway
+              </p>
+            </div>
+          </div>
 
       {/* Toast */}
       {toastMessage && (
-        <Toast message={toastMessage} type="info" onClose={() => setToastMessage(null)} />
+        <Toast message={toastMessage!} type={toastType} onClose={() => setToastMessage(null)} />
       )}
     </div>
   );

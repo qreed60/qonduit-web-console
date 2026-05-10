@@ -8,6 +8,8 @@ import {
   getRagDocuments,
   getRagDocumentChunks,
   searchRagProject,
+  deleteRagDocument,
+  reingestRagDocument,
 } from '../services/ragApi';
 import { ENDPOINTS, getMode } from '../config/endpoints';
 import {
@@ -29,7 +31,11 @@ import RagCollectionsCard from '../components/RagCollectionsCard';
 import RagDocumentsCard from '../components/RagDocumentsCard';
 import RagChunkViewer from '../components/RagChunkViewer';
 import RagDiagnosticSearchCard from '../components/RagDiagnosticSearchCard';
+import RagUploadDocumentCard from '../components/RagUploadDocumentCard';
+import RagTextNoteCard from '../components/RagTextNoteCard';
+import RagDocumentSourceViewer from '../components/RagDocumentSourceViewer';
 import MobileCollapsibleCard from '../components/MobileCollapsibleCard';
+import Toast from '../components/Toast';
 
 const RagPage: React.FC = () => {
   // ── State ──────────────────────────────────────────────────────────────────
@@ -69,12 +75,20 @@ const RagPage: React.FC = () => {
   const [searchLoading, setSearchLoading] = useState(false);
 
   // Selection
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
-
-  // Refresh
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
+ 
+   // Source viewer
+   const [sourceViewerOpen, setSourceViewerOpen] = useState(false);
+   const [sourceViewerDocument, setSourceViewerDocument] = useState<RagDocumentSummary | null>(null);
+ 
+   // Toast
+   const [toastMessage, setToastMessage] = useState<string | null>(null);
+   const [toastType, setToastType] = useState<'success' | 'error'>('success');
+ 
+   // Refresh
+   const [refreshing, setRefreshing] = useState(false);
+   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
   // Refs
   const inFlightRef = useRef(false);
@@ -277,9 +291,59 @@ const RagPage: React.FC = () => {
     };
   }, []);
 
-  // ── Event handlers ─────────────────────────────────────────────────────────
-
-  const handleSelectProject = useCallback((projectId: string) => {
+  // ── Toast helper ────────────────────────────────────────────────────────────
+ 
+   const showToast = useCallback((msg: string, type: 'success' | 'error') => {
+     setToastMessage(msg);
+     setToastType(type);
+   }, []);
+ 
+   // ── Document action handlers ────────────────────────────────────────────────
+ 
+   const handleViewSource = useCallback((doc: RagDocumentSummary) => {
+        setSourceViewerDocument(doc);
+        setSourceViewerOpen(true);
+      }, []);
+   
+      const handleReingest = useCallback(async (documentId: string) => {
+      if (!selectedProjectId) return;
+      try {
+        await reingestRagDocument(selectedProjectId, documentId);
+        showToast('Document reingested successfully', 'success');
+        await fetchAllData();
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : 'Reingest failed', 'error');
+      }
+    }, [selectedProjectId, fetchAllData, showToast]);
+ 
+   const handleDelete = useCallback(async (documentId: string) => {
+       if (!selectedProjectId) return;
+       try {
+         await deleteRagDocument(selectedProjectId, documentId);
+         showToast('Document deleted', 'success');
+         if (selectedDocumentId === documentId) {
+           setSelectedDocumentId(null);
+           setChunks([]);
+         }
+         await fetchAllData();
+       } catch (err) {
+         showToast(err instanceof Error ? err.message : 'Delete failed', 'error');
+       }
+     }, [selectedProjectId, selectedDocumentId, fetchAllData, showToast]);
+ 
+   // ── Upload handlers ─────────────────────────────────────────────────────────
+ 
+   const handleUploadComplete = useCallback(() => {
+     fetchAllData();
+   }, [fetchAllData]);
+ 
+   const handleTextNoteSaved = useCallback(() => {
+     fetchAllData();
+   }, [fetchAllData]);
+ 
+   // ── Event handlers ─────────────────────────────────────────────────────────
+ 
+   const handleSelectProject = useCallback((projectId: string) => {
     setSelectedProjectId(prev => prev === projectId ? null : projectId);
     // Reset detail state when switching
     setProjectDetail(null);
@@ -292,13 +356,19 @@ const RagPage: React.FC = () => {
   }, []);
 
   const handleSelectDocument = useCallback((documentId: string) => {
-    setSelectedDocumentId(prev => prev === documentId ? null : documentId);
-    if (selectedProjectId && documentId) {
-      fetchChunks(selectedProjectId, documentId);
-    }
-  }, [selectedProjectId, fetchChunks]);
-
-  const handleSearch = useCallback(async (query: string, limit: number, collection?: string | null) => {
+      setSelectedDocumentId(prev => prev === documentId ? null : documentId);
+      if (selectedProjectId && documentId) {
+        fetchChunks(selectedProjectId, documentId);
+      }
+    }, [selectedProjectId, fetchChunks]);
+  
+    const handleChunksView = useCallback((documentId: string) => {
+      if (selectedProjectId) {
+        handleSelectDocument(documentId);
+      }
+    }, [selectedProjectId, handleSelectDocument]);
+  
+    const handleSearch = useCallback(async (query: string, limit: number, collection?: string | null) => {
     if (!selectedProjectId) return;
     setSearchLoading(true);
     setSearchError(null);
@@ -494,33 +564,56 @@ const RagPage: React.FC = () => {
                                </MobileCollapsibleCard>
                              </div>
  
-                 {/* Right: Documents + Search */}
-                                 <div className="lg:col-span-2 space-y-4 sm:space-y-6">
-                                   <MobileCollapsibleCard
-                                     title="Documents"
-                                     icon={<FileText className="w-5 h-5 text-accent-tertiary" />}
-                                     statusBadge={
-                                       documents.length > 0 ? { status: 'online', label: `${documents.length} doc${documents.length > 1 ? 's' : ''}` } :
-                                       { status: 'unknown', label: 'None' }
-                                     }
-                                     summaryText={
-                                       documents.length > 0 ? `${documents.length} documents` : 'No documents'
-                                     }
-                                     defaultExpanded={false}
-                                     defaultExpandedMobile={false}
-                                     localStorageKey="rag-documents"
-                                   >
-                                     <RagDocumentsCard
-                                       documents={documents}
-                                       documentsError={documentsError}
+                 {/* Right: Upload + Documents + Search */}
+                                   <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+                                     {/* Upload Document Card */}
+                                     <RagUploadDocumentCard
                                        projectId={selectedProjectId}
-                                       selectedDocumentId={selectedDocumentId}
-                                       onSelectDocument={handleSelectDocument}
-                                       loading={false}
-                                       onRefresh={() => fetchDocuments(selectedProjectId)}
-                                       refreshing={refreshing}
+                                       availableCollections={availableCollections}
+                                       defaultCollection={availableCollections[0]}
+                                       onUploadComplete={handleUploadComplete}
+                                       toastMessage={showToast}
+                                      />
+   
+                                      {/* Add Text Note Card */}
+                                      <RagTextNoteCard
+                                        projectId={selectedProjectId}
+                                        availableCollections={availableCollections}
+                                        defaultCollection={availableCollections[0]}
+                                        onSaveComplete={handleTextNoteSaved}
+                                        toastMessage={showToast}
                                      />
-                                   </MobileCollapsibleCard>
+  
+                                     {/* Documents Card */}
+                                     <MobileCollapsibleCard
+                                       title="Documents"
+                                       icon={<FileText className="w-5 h-5 text-accent-tertiary" />}
+                                       statusBadge={
+                                         documents.length > 0 ? { status: 'online', label: `${documents.length} doc${documents.length > 1 ? 's' : ''}` } :
+                                         { status: 'unknown', label: 'None' }
+                                       }
+                                       summaryText={
+                                         documents.length > 0 ? `${documents.length} documents` : 'No documents'
+                                       }
+                                       defaultExpanded={false}
+                                       defaultExpandedMobile={false}
+                                       localStorageKey="rag-documents"
+                                     >
+                                       <RagDocumentsCard
+                                         documents={documents}
+                                         documentsError={documentsError}
+                                         projectId={selectedProjectId}
+                                         selectedDocumentId={selectedDocumentId}
+                                         onSelectDocument={handleSelectDocument}
+                                         loading={false}
+                                         onRefresh={() => fetchDocuments(selectedProjectId)}
+                                         refreshing={refreshing}
+                                         onSourceView={handleViewSource}
+                                         onChunksView={handleChunksView}
+                                         onReingest={handleReingest}
+                                         onDelete={handleDelete}
+                                       />
+                                     </MobileCollapsibleCard>
   
                   {/* Chunk Viewer */}
                   {selectedDocumentId && selectedDocument && (
@@ -545,18 +638,34 @@ const RagPage: React.FC = () => {
             )}
   
             {/* No project selected message */}
-            {!selectedProjectId && (
-              <div className="bg-bg-card rounded-xl border border-border-primary p-6 sm:p-8 text-center">
-                <Database className="w-10 h-10 mx-auto text-text-tertiary/30 mb-3" />
-                <p className="text-sm text-text-secondary">
-                  Select a project above to view details, documents, chunks, and search.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
+             {!selectedProjectId && (
+               <div className="bg-bg-card rounded-xl border border-border-primary p-6 sm:p-8 text-center">
+                 <Database className="w-10 h-10 mx-auto text-text-tertiary/30 mb-3" />
+                 <p className="text-sm text-text-secondary">
+                   Select a project above to view details, documents, chunks, and search.
+                 </p>
+               </div>
+             )}
+           </div>
+         </div>
+ 
+         {/* Source Viewer Modal */}
+         {sourceViewerDocument && (
+           <RagDocumentSourceViewer
+             open={sourceViewerOpen}
+             onClose={() => setSourceViewerOpen(false)}
+             projectId={selectedProjectId!}
+             document={sourceViewerDocument}
+              toastMessage={showToast}
+           />
+         )}
+ 
+         {/* Toast */}
+         {toastMessage && (
+           <Toast message={toastMessage} type={toastType} onClose={() => setToastMessage(null)} />
+         )}
+       </div>
+     );
 };
 
 export default RagPage;

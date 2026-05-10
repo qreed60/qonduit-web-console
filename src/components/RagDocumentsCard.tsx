@@ -2,6 +2,7 @@ import React from 'react';
 import { FileText, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 import { RagDocumentSummary, RagEndpointError } from '../types';
 import EndpointErrorInline from './EndpointErrorInline';
+import RagDocumentActions from './RagDocumentActions';
 
 interface RagDocumentsCardProps {
   documents: RagDocumentSummary[];
@@ -12,6 +13,10 @@ interface RagDocumentsCardProps {
   loading: boolean;
   onRefresh: () => void;
   refreshing: boolean;
+  onSourceView?: (doc: RagDocumentSummary) => void;
+  onChunksView?: (documentId: string) => void;
+  onReingest?: (documentId: string) => Promise<void>;
+  onDelete?: (documentId: string) => Promise<void>;
 }
 
 const RagDocumentsCard: React.FC<RagDocumentsCardProps> = ({
@@ -23,6 +28,10 @@ const RagDocumentsCard: React.FC<RagDocumentsCardProps> = ({
   loading,
   onRefresh,
   refreshing,
+  onSourceView,
+  onChunksView,
+  onReingest,
+  onDelete,
 }) => {
   const formatNumber = (n: number): string => n.toLocaleString();
 
@@ -109,16 +118,27 @@ const RagDocumentsCard: React.FC<RagDocumentsCardProps> = ({
                     </span>
                   )}
                   {(doc.metadata?.conversation_title as string | undefined) && (
-                                    <span
-                                      className="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] bg-accent-primary/10 text-accent-primary font-mono truncate max-w-[120px] flex-shrink-0"
-                                      title={String(doc.metadata?.conversation_title)}
-                                    >
-                                      {String(doc.metadata?.conversation_title)}
-                                    </span>
-                                  )}
-                </div>
-              </div>
-            ))}
+                                     <span
+                                       className="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] bg-accent-primary/10 text-accent-primary font-mono truncate max-w-[120px] flex-shrink-0"
+                                       title={String(doc.metadata?.conversation_title)}
+                                     >
+                                       {String(doc.metadata?.conversation_title)}
+                                     </span>
+                                   )}
+                 </div>
+ 
+                 {/* Action buttons (if callbacks provided) */}
+                 {onSourceView && onChunksView && onReingest && onDelete && (
+                    <RagDocumentActions
+                      document={doc}
+                      onSourceView={onSourceView}
+                      onChunksView={onChunksView}
+                      onReingest={onReingest}
+                      onDelete={onDelete}
+                    />
+                  )}
+               </div>
+             ))}
           </div>
         )}
   

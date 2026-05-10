@@ -689,12 +689,108 @@ export interface RagPageState {
  }
  
  export interface PromptTemplateCreateRequest {
-   name: string;
-   description?: string;
-   system_prompt: string;
-   instruction_prompt: string;
- }
- 
- export interface PromptTemplateListResponse {
-   templates: PromptTemplate[];
- }
+    name: string;
+    description?: string;
+    system_prompt: string;
+    instruction_prompt: string;
+  }
+  
+  export interface PromptTemplateListResponse {
+    templates: PromptTemplate[];
+  }
+  
+  // ── RAG Document Upload Types ────────────────────────────────────────────────
+  
+  export interface RagDocumentUploadResponse {
+    ok: boolean;
+    document_id: string;
+    document_name: string;
+    file_type?: string;
+    chunks_created?: number;
+    message?: string;
+    error?: string | null;
+  }
+  
+  export interface RagTextDocumentCreateRequest {
+    document_name: string;
+    content: string;
+    collection?: string;
+    metadata?: Record<string, unknown>;
+  }
+  
+  export interface RagTextDocumentCreateResponse {
+    ok: boolean;
+    document_id: string;
+    document_name: string;
+    chunks_created?: number;
+    message?: string;
+    error?: string | null;
+  }
+  
+  export interface RagDocumentDeleteResponse {
+    ok: boolean;
+    document_id: string;
+    message?: string;
+    error?: string | null;
+  }
+  
+  export interface RagDocumentReingestResponse {
+    ok: boolean;
+    document_id: string;
+    message?: string;
+    chunks_created?: number;
+    error?: string | null;
+  }
+  
+  export interface RagDocumentSourceMetadata {
+    [key: string]: unknown;
+  }
+  
+  export interface RagDocumentSourceResponse {
+    ok: boolean;
+    document_id: string;
+    document_name: string;
+    source?: string;
+    source_type?: string;
+    file_type?: string;
+    parser?: string;
+    collection?: string;
+    warnings?: string[];
+    metadata?: RagDocumentSourceMetadata;
+    text_preview?: string;
+    text_full?: string;
+    error?: string | null;
+  }
+  
+  // ── Chat Attachment Types ────────────────────────────────────────────────────
+  
+  export type ChatAttachmentMode = 'chat_context_only' | 'save_to_rag' | 'save_to_rag_only';
+  
+  export interface ChatAttachment {
+    id: string;
+    file: File;
+    name: string;
+    size: number;
+    type: string;
+    mode: ChatAttachmentMode;
+    projectId?: string;
+    collection?: string;
+    contentBase64?: string;
+  }
+  
+  export interface ChatAttachmentPayload {
+    name: string;
+    mime_type: string;
+    content_base64: string;
+    collection?: string;
+    mode: ChatAttachmentMode;
+    project_id?: string;
+    metadata?: Record<string, unknown>;
+  }
+  
+  export interface ChatAttachmentDiagnostics {
+    processed?: boolean;
+    tokens_approximate?: number;
+    error?: string | null;
+    [key: string]: unknown;
+  }

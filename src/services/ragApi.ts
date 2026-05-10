@@ -27,6 +27,12 @@ import {
   RagChunksResponse,
   RagSearchResultNew,
   RagSearchResponseNew,
+  RagDocumentUploadResponse,
+  RagTextDocumentCreateRequest,
+  RagTextDocumentCreateResponse,
+  RagDocumentDeleteResponse,
+  RagDocumentReingestResponse,
+  RagDocumentSourceResponse,
 } from '../types';
 
 // ── RagEndpointError helpers ────────────────────────────────────────────────
@@ -793,9 +799,118 @@ function normalizeRagSearch(raw: unknown, projectId: string): RagSearchResponseN
   }
 
   return {
-    results,
-    project_id: projectId,
-    query: typeof obj.query === 'string' ? obj.query : '',
-    limit: typeof obj.limit === 'number' ? obj.limit : 0,
-  };
-}
+     results,
+     project_id: projectId,
+     query: typeof obj.query === 'string' ? obj.query : '',
+     limit: typeof obj.limit === 'number' ? obj.limit : 0,
+   };
+ }
+ 
+ // ── RAG Document Upload ─────────────────────────────────────────────────────
+ 
+ /** POST /v1/rag/projects/{project_id}/documents/upload */
+ export async function uploadRagDocument(
+   projectId: string,
+   file: File,
+   collection?: string,
+   metadata?: Record<string, unknown>
+ ): Promise<RagDocumentUploadResponse> {
+   const url = apiPath('gateway', `/v1/rag/projects/${encodeURIComponent(projectId)}/documents/upload`);
+   const formData = new FormData();
+   formData.append('file', file);
+   if (collection) formData.append('collection', collection);
+   if (metadata) formData.append('metadata', JSON.stringify(metadata));
+ 
+   const response = await fetch(url, {
+     method: 'POST',
+     body: formData,
+   });
+ 
+   if (!response.ok) {
+     const body = await response.text().catch(() => '');
+     throw new Error(`Document upload failed (HTTP ${response.status}): ${body}`);
+   }
+ 
+   return response.json() as Promise<RagDocumentUploadResponse>;
+ }
+ 
+ // ── RAG Text Document Create ────────────────────────────────────────────────
+ 
+ /** POST /v1/rag/projects/{project_id}/documents/text */
+ export async function createRagTextDocument(
+   projectId: string,
+   body: RagTextDocumentCreateRequest
+ ): Promise<RagTextDocumentCreateResponse> {
+   const url = apiPath('gateway', `/v1/rag/projects/${encodeURIComponent(projectId)}/documents/text`);
+   const response = await fetch(url, {
+     method: 'POST',
+     headers: { 'Content-Type': 'application/json' },
+     body: JSON.stringify(body),
+   });
+ 
+   if (!response.ok) {
+     const body = await response.text().catch(() => '');
+     throw new Error(`Text document create failed (HTTP ${response.status}): ${body}`);
+   }
+ 
+   return response.json() as Promise<RagTextDocumentCreateResponse>;
+ }
+ 
+ // ── RAG Document Delete ─────────────────────────────────────────────────────
+ 
+ /** DELETE /v1/rag/projects/{project_id}/documents/{document_id} */
+ export async function deleteRagDocument(
+   projectId: string,
+   documentId: string
+ ): Promise<RagDocumentDeleteResponse> {
+   const url = apiPath('gateway', `/v1/rag/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(documentId)}`);
+   const response = await fetch(url, { method: 'DELETE' });
+ 
+   if (!response.ok) {
+     const body = await response.text().catch(() => '');
+     throw new Error(`Document delete failed (HTTP ${response.status}): ${body}`);
+   }
+ 
+   return response.json() as Promise<RagDocumentDeleteResponse>;
+ }
+ 
+ // ── RAG Document Reingest ───────────────────────────────────────────────────
+ 
+ /** POST /v1/rag/projects/{project_id}/documents/{document_id}/reingest */
+ export async function reingestRagDocument(
+   projectId: string,
+   documentId: string
+ ): Promise<RagDocumentReingestResponse> {
+   const url = apiPath('gateway', `/v1/rag/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(documentId)}/reingest`);
+   const response = await fetch(url, { method: 'POST' });
+ 
+   if (!response.ok) {
+     const body = await response.text().catch(() => '');
+     throw new Error(`Document reingest failed (HTTP ${response.status}): ${body}`);
+   }
+ 
+   return response.json() as Promise<RagDocumentReingestResponse>;
+ }
+ 
+ // ── RAG Document Source ─────────────────────────────────────────────────────
+ 
+ /** GET /v1/rag/projects/{project_id}/documents/{document_id}/source */
+ export async function getRagDocumentSource(
+   projectId: string,
+   documentId: string,
+   includeText: boolean = true,
+   maxChars?: number
+ ): Promise<RagDocumentSourceResponse> {
+   const url = apiPath('gateway', `/v1/rag/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(documentId)}/source`);
+   const params = new URLSearchParams({ include_text: String(includeText) });
+   if (maxChars) params.append('max_chars', String(maxChars));
+ 
+   const response = await fetch(`${url}?${params.toString()}`);
+ 
+   if (!response.ok) {
+     const body = await response.text().catch(() => '');
+     throw new Error(`Document source failed (HTTP ${response.status}): ${body}`);
+   }
+ 
+   return response.json() as Promise<RagDocumentSourceResponse>;
+ }

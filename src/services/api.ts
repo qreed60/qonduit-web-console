@@ -1,4 +1,4 @@
-import { Settings, ProviderType, ChatMessage, NormalizedModel, GpuStatus, RouterStatus, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse } from '../types';
+import { Settings, ProviderType, ChatMessage, NormalizedModel, GpuStatus, RouterStatus, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse, ChatAttachmentPayload } from '../types';
 import { getMode, apiPath } from '../config/endpoints';
 
 // Re-export NormalizedModel for convenience
@@ -430,16 +430,18 @@ export interface RagChatSelection {
 /**
  * Send a chat request to the Gateway's /v1/chat/completions endpoint.
  *
- * @param model   — Model ID to use for completion
- * @param messages — Array of chat messages
- * @param ctxSize — Context size (optional, defaults to 8192)
+ * @param model      — Model ID to use for completion
+ * @param messages   — Array of chat messages
+ * @param ctxSize    — Context size (optional, defaults to 8192)
  * @param ragSelection — RAG project/collection selection (optional, Gateway mode only)
+ * @param attachments — Chat attachments to include (optional)
  */
 export async function fetchChatCompletions(
   model: string,
   messages: ChatMessage[],
   ctxSize: number = 8192,
   ragSelection?: RagChatSelection,
+  attachments?: ChatAttachmentPayload[],
 ): Promise<{ choices: Array<{ message: ChatMessage; finish_reason: string | null }> }> {
   const body: Record<string, unknown> = {
     model,
@@ -464,7 +466,12 @@ export async function fetchChatCompletions(
         );
       }
     }
-  
+
+  // Attach files if provided
+  if (attachments && attachments.length > 0) {
+    body.attachments = attachments;
+  }
+
     const response = await fetch(apiPath('gateway', '/v1/chat/completions'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
