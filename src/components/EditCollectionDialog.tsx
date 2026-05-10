@@ -49,27 +49,30 @@ const EditCollectionDialog: React.FC<EditCollectionDialogProps> = ({ open, proje
       if (metadataJson.trim()) {
         try {
           metadata = JSON.parse(metadataJson);
-        } catch {
-          setToastMessage('Invalid JSON for metadata', 'error');
-          return;
-        }
+                  } catch {
+                    setToastMessage('Invalid JSON for metadata');
+                    setToastType('error');
+                    return;
+                  }
       }
 
       const req: RagUpdateCollectionRequest = {
-        display_name: displayName.trim(),
-        ...(description.trim() ? { description: description.trim() } : {}),
-        ...(metadata && { metadata }),
-      };
-
-      const result = await updateLogicalCollection(projectId, collection.name, req);
-      setToastMessage(`Collection "${result.display_name || result.name}" updated successfully`, 'success');
-      setTimeout(() => setToastMessage(null), 3000);
-      onSuccess(result);
-      onClose();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to update collection';
-      setToastMessage(msg, 'error');
-    } finally {
+              display_name: displayName.trim(),
+              ...(description.trim() ? { description: description.trim() } : {}),
+              ...(metadata && { metadata }),
+            };
+      
+            const result = await updateLogicalCollection(projectId, collection.name, req);
+            setToastMessage(`Collection "${result.display_name || result.name}" updated successfully`);
+            setToastType('success');
+            setTimeout(() => setToastMessage(null), 3000);
+            onSuccess(result);
+            onClose();
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Failed to update collection';
+            setToastMessage(msg);
+            setToastType('error');
+          } finally {
       setSaving(false);
     }
   };
@@ -79,10 +82,8 @@ const EditCollectionDialog: React.FC<EditCollectionDialogProps> = ({ open, proje
   };
 
   if (!open || !collection) return null;
-
-  const isDefault = collection.name === 'default';
-
-  return (
+  
+    return (
     <>
       <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center" role="dialog" aria-modal="true">
         {/* Backdrop */}

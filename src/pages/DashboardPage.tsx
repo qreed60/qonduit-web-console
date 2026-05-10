@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getSettings, fetchRouterModels, fetchProviderModels, fetchRouterGpu, launchModel as apiLaunchModel, stopModel as apiStopModel, restartRouterModel as apiRestartRouterModel, testEndpointWithError, testRouterHealthWithError, getRouterStatus, NormalizedModel, GpuStatus, RouterStatus } from '../services/api';
-import { getRagHealth, getRagProjects } from '../services/ragApi';
-import { RagHealthResponse, RagProjectSummary } from '../types';
+import { getRagHealth } from '../services/ragApi';
+import { fetchRegistryProjects } from '../services/ragProjectsApi';
+import { RagHealthResponse, RagRegistryProject } from '../types';
 import { Settings } from '../types';
 import { ENDPOINTS } from '../config/endpoints';
 import StatusBar from '../components/StatusBar';
@@ -61,11 +62,12 @@ const DashboardPage: React.FC = () => {
    const [selectedChatModel, setSelectedChatModel] = useState('');
  
    // ── State: RAG data ──
-   const [ragHealth, setRagHealth] = useState<RagHealthResponse | null>(null);
-   const [ragProjects, setRagProjects] = useState<RagProjectSummary[]>([]);
-   const ragTotalPoints = ragProjects
-     .filter(p => p.exists)
-     .reduce((sum, p) => sum + p.points_count, 0);
+      const [ragHealth, setRagHealth] = useState<RagHealthResponse | null>(null);
+   
+      // ── State: RAG registry data ──
+      const [registryProjects, setRegistryProjects] = useState<RagRegistryProject[]>([]);
+      const registryQdrantBacked = registryProjects.filter(p => p.exists_in_qdrant).length;
+      const registryDiscovered = registryProjects.filter(p => p.discovered).length;
 
   // ── State: action feedback ──
   const [actionLoading, setActionLoading] = useState(false);
@@ -134,13 +136,13 @@ const DashboardPage: React.FC = () => {
          // Keep old RAG health data
        }
  
-       // ── RAG: fetch projects — preserve old data on failure ──
-       try {
-         const ragProjectsData = await getRagProjects();
-         setRagProjects(ragProjectsData.projects);
-       } catch {
-         // Keep old RAG projects data
-       }
+       // ── RAG: fetch registry projects — preserve old data on failure ──
+              try {
+                const regProjectsData = await fetchRegistryProjects();
+                setRegistryProjects(regProjectsData);
+              } catch {
+                // Keep old registry projects data
+              }
  
        // ── Health: test endpoint health ──
        await testAllEndpoints();
@@ -337,9 +339,9 @@ const DashboardPage: React.FC = () => {
    const terminalSummary = 'Polling · Click to expand';
  
    // RAG Browser summary
-   const ragQdrantStatus = ragHealth?.qdrant.ok ? 'Connected' : ragHealth?.qdrant.ok === false ? 'Disconnected' : 'Checking';
-   const ragEmbedStatus = ragHealth?.embedding.ok ? 'Available' : ragHealth?.embedding.ok === false ? 'Unavailable' : 'Checking';
-   const ragSummary = `Qdrant: ${ragQdrantStatus} · Embeddings: ${ragEmbedStatus} · ${ragProjects.length} projects`;
+      const ragQdrantStatus = ragHealth?.qdrant.ok ? 'Connected' : ragHealth?.qdrant.ok === false ? 'Disconnected' : 'Checking';
+      const ragEmbedStatus = ragHealth?.embedding.ok ? 'Available' : ragHealth?.embedding.ok === false ? 'Unavailable' : 'Checking';
+      const ragSummary = `Qdrant: ${ragQdrantStatus} · Embeddings: ${ragEmbedStatus} · ${registryProjects.length} projects`;
  
    const comingSoonItems = [
       {
@@ -560,62 +562,78 @@ const DashboardPage: React.FC = () => {
                             </div>
    
                             <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                              {/* Qdrant status */}
-                              <div>
-                                <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Qdrant</span>
-                                <div className="flex items-center gap-1.5 mt-1">
-                                  {ragHealth?.qdrant.ok ? (
-                                    <>
-                                      <div className="w-2 h-2 rounded-full bg-status-success" />
-                                      <span className="text-xs text-status-success">Connected</span>
-                                    </>
-                                  ) : ragHealth?.qdrant.ok === false ? (
-                                    <>
-                                      <div className="w-2 h-2 rounded-full bg-status-error" />
-                                      <span className="text-xs text-status-error">Disconnected</span>
-                                    </>
-                                  ) : (
-                                    <span className="text-xs text-text-tertiary">Checking...</span>
-                                  )}
-                                </div>
-                              </div>
-   
-                              {/* Embeddings status */}
-                              <div>
-                                <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Embeddings</span>
-                                <div className="flex items-center gap-1.5 mt-1">
-                                  {ragHealth?.embedding.ok ? (
-                                    <>
-                                      <div className="w-2 h-2 rounded-full bg-status-success" />
-                                      <span className="text-xs text-status-success">Available</span>
-                                    </>
-                                  ) : ragHealth?.embedding.ok === false ? (
-                                    <>
-                                      <div className="w-2 h-2 rounded-full bg-status-error" />
-                                      <span className="text-xs text-status-error">Unavailable</span>
-                                    </>
-                                  ) : (
-                                    <span className="text-xs text-text-tertiary">Checking...</span>
-                                  )}
-                                </div>
-                              </div>
-   
-                              {/* Projects count */}
-                              <div>
-                                <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Projects</span>
-                                <p className="text-xs sm:text-sm text-text-secondary mt-1">
-                                  {ragProjects.length} total
-                                </p>
-                              </div>
-   
-                              {/* Total points */}
-                              <div>
-                                <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Total Points</span>
-                                <p className="text-xs sm:text-sm text-text-secondary mt-1">
-                                  {ragTotalPoints.toLocaleString()}
-                                </p>
-                              </div>
-                            </div>
+                                                          {/* Qdrant status */}
+                                                          <div>
+                                                            <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Qdrant</span>
+                                                            <div className="flex items-center gap-1.5 mt-1">
+                                                              {ragHealth?.qdrant.ok ? (
+                                                                <>
+                                                                  <div className="w-2 h-2 rounded-full bg-status-success" />
+                                                                  <span className="text-xs text-status-success">Connected</span>
+                                                                </>
+                                                              ) : ragHealth?.qdrant.ok === false ? (
+                                                                <>
+                                                                  <div className="w-2 h-2 rounded-full bg-status-error" />
+                                                                  <span className="text-xs text-status-error">Disconnected</span>
+                                                                </>
+                                                              ) : (
+                                                                <span className="text-xs text-text-tertiary">Checking...</span>
+                                                              )}
+                                                            </div>
+                                                          </div>
+                            
+                                                          {/* Embeddings status */}
+                                                          <div>
+                                                            <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Embeddings</span>
+                                                            <div className="flex items-center gap-1.5 mt-1">
+                                                              {ragHealth?.embedding.ok ? (
+                                                                <>
+                                                                  <div className="w-2 h-2 rounded-full bg-status-success" />
+                                                                  <span className="text-xs text-status-success">Available</span>
+                                                                </>
+                                                              ) : ragHealth?.embedding.ok === false ? (
+                                                                <>
+                                                                  <div className="w-2 h-2 rounded-full bg-status-error" />
+                                                                  <span className="text-xs text-status-error">Unavailable</span>
+                                                                </>
+                                                              ) : (
+                                                                <span className="text-xs text-text-tertiary">Checking...</span>
+                                                              )}
+                                                            </div>
+                                                          </div>
+                            
+                                                          {/* Registry projects count */}
+                                                          <div>
+                                                            <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Projects</span>
+                                                            <p className="text-xs sm:text-sm text-text-secondary mt-1">
+                                                              {registryProjects.length} total
+                                                            </p>
+                                                          </div>
+                            
+                                                          {/* Qdrant-backed count */}
+                                                          <div>
+                                                            <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Qdrant-Backed</span>
+                                                            <p className="text-xs sm:text-sm text-text-secondary mt-1">
+                                                              {registryQdrantBacked} of {registryProjects.length}
+                                                            </p>
+                                                          </div>
+                            
+                                                          {/* Discovered/unregistered count */}
+                                                          <div>
+                                                            <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Discovered</span>
+                                                            <p className="text-xs sm:text-sm text-status-warning mt-1">
+                                                              {registryDiscovered} unregistered
+                                                            </p>
+                                                          </div>
+                            
+                                                          {/* Total points */}
+                                                          <div>
+                                                            <span className="text-[10px] sm:text-xs text-text-tertiary uppercase tracking-wider">Total Points</span>
+                                                            <p className="text-xs sm:text-sm text-text-secondary mt-1">
+                                                              {registryProjects.reduce((sum, p) => sum + p.points_count, 0).toLocaleString()}
+                                                            </p>
+                                                          </div>
+                                                        </div>
                          </MobileCollapsibleCard>
   
           {/* Coming Soon */}

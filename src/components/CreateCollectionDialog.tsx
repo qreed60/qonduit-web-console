@@ -51,28 +51,31 @@ const CreateCollectionDialog: React.FC<CreateCollectionDialogProps> = ({ open, p
       if (metadataJson.trim()) {
         try {
           metadata = JSON.parse(metadataJson);
-        } catch {
-          setToastMessage('Invalid JSON for metadata', 'error');
-          return;
-        }
+                  } catch {
+                    setToastMessage('Invalid JSON for metadata');
+                    setToastType('error');
+                    return;
+                  }
       }
 
       const req: RagCreateCollectionRequest = {
-        name: name.trim(),
-        ...(displayName.trim() && { display_name: displayName.trim() }),
-        ...(description.trim() && { description: description.trim() }),
-        ...(metadata && { metadata }),
-      };
-
-      const result = await createLogicalCollection(projectId, req);
-      setToastMessage(`Collection "${result.display_name || result.name}" created successfully`, 'success');
-      setTimeout(() => setToastMessage(null), 3000);
-      onSuccess(result);
-      onClose();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to create collection';
-      setToastMessage(msg, 'error');
-    } finally {
+              name: name.trim(),
+              ...(displayName.trim() && { display_name: displayName.trim() }),
+              ...(description.trim() && { description: description.trim() }),
+              ...(metadata && { metadata }),
+            };
+      
+            const result = await createLogicalCollection(projectId, req);
+            setToastMessage(`Collection "${result.display_name || result.name}" created successfully`);
+            setToastType('success');
+            setTimeout(() => setToastMessage(null), 3000);
+            onSuccess(result);
+            onClose();
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Failed to create collection';
+            setToastMessage(msg);
+            setToastType('error');
+          } finally {
       setSaving(false);
     }
   };

@@ -48,14 +48,16 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = ({ open, project, on
       };
 
       const result = await updateRegistryProject(project.project_id, req);
-      setToastMessage(`Project "${result.display_name}" updated successfully`, 'success');
-      setTimeout(() => setToastMessage(null), 3000);
-      onSuccess(result);
-      onClose();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to update project';
-      setToastMessage(msg, 'error');
-    } finally {
+            setToastMessage(`Project "${result.display_name}" updated successfully`);
+            setToastType('success');
+            setTimeout(() => setToastMessage(null), 3000);
+            onSuccess(result);
+            onClose();
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Failed to update project';
+            setToastMessage(msg);
+            setToastType('error');
+          } finally {
       setSaving(false);
     }
   };

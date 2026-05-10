@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { RefreshCw, Loader2, Database, Edit2, Trash2, Magnet, ExternalLink } from 'lucide-react';
+import { RefreshCw, Loader2, Database, Edit2, Trash2, Magnet } from 'lucide-react';
 import { RagRegistryProject } from '../types';
-import EndpointErrorInline from './EndpointErrorInline';
 
 interface RagRegistryProjectCardProps {
   project: RagRegistryProject;

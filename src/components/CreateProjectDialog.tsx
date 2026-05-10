@@ -58,24 +58,27 @@ const CreateProjectDialog: React.FC<CreateProjectDialogProps> = ({ open, onClose
       const result = await createRegistryProject(req);
 
       if (!result.ok && result.error) {
-        // Check for idempotent/existing project response
-        if (result.message?.toLowerCase().includes('already exists') || result.message?.toLowerCase().includes('exists')) {
-          setToastMessage(`Project "${result.project_id}" already exists`, 'success');
-          setTimeout(() => setToastMessage(null), 3000);
-          onClose();
-          return;
-        }
-        throw new Error(result.error);
-      }
-
-      setToastMessage(`Project "${result.display_name}" created successfully`, 'success');
-      setTimeout(() => setToastMessage(null), 3000);
-      onSuccess(result as RagRegistryProject);
-      onClose();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to create project';
-      setToastMessage(msg, 'error');
-    } finally {
+              // Check for idempotent/existing project response
+              if (result.message?.toLowerCase().includes('already exists') || result.message?.toLowerCase().includes('exists')) {
+                setToastMessage(`Project "${result.project_id}" already exists`);
+                setToastType('success');
+                setTimeout(() => setToastMessage(null), 3000);
+                onClose();
+                return;
+              }
+              throw new Error(result.error);
+            }
+      
+            setToastMessage(`Project "${result.display_name}" created successfully`);
+            setToastType('success');
+            setTimeout(() => setToastMessage(null), 3000);
+            onSuccess(result as RagRegistryProject);
+            onClose();
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Failed to create project';
+            setToastMessage(msg);
+            setToastType('error');
+          } finally {
       setSaving(false);
     }
   };

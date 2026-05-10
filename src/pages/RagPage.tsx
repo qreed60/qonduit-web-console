@@ -1,33 +1,36 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   getRagHealth,
-  getRagProjects,
   getRagProjectDetail,
   getRagProjectStats,
-  getRagCollections,
   getRagDocuments,
   getRagDocumentChunks,
   searchRagProject,
   deleteRagDocument,
   reingestRagDocument,
 } from '../services/ragApi';
+import {
+  fetchRegistryProjects,
+  deleteRegistryProject,
+  fetchLogicalCollections,
+} from '../services/ragProjectsApi';
 import { ENDPOINTS, getMode } from '../config/endpoints';
 import {
   RagHealthResponse,
-  RagProjectSummary,
   RagProjectDetail,
   RagProjectStats,
-  RagCollectionsResponse,
   RagDocumentSummary,
   RagChunk,
   RagSearchResponseNew,
   RagEndpointError,
+  RagRegistryProject,
+  RagLogicalCollection,
 } from '../types';
-import { RefreshCw, Loader2, Database, Layers, FileText } from 'lucide-react';
+import { RefreshCw, Loader2, Database, Layers, FileText, Plus } from 'lucide-react';
 import RagHealthCard from '../components/RagHealthCard';
-import RagProjectCard from '../components/RagProjectCard';
+import RagRegistryProjectCard from '../components/RagRegistryProjectCard';
 import RagProjectDetailPanel from '../components/RagProjectDetailPanel';
-import RagCollectionsCard from '../components/RagCollectionsCard';
+import RagLogicalCollectionsCard from '../components/RagLogicalCollectionsCard';
 import RagDocumentsCard from '../components/RagDocumentsCard';
 import RagChunkViewer from '../components/RagChunkViewer';
 import RagDiagnosticSearchCard from '../components/RagDiagnosticSearchCard';
@@ -36,6 +39,11 @@ import RagTextNoteCard from '../components/RagTextNoteCard';
 import RagDocumentSourceViewer from '../components/RagDocumentSourceViewer';
 import MobileCollapsibleCard from '../components/MobileCollapsibleCard';
 import Toast from '../components/Toast';
+import CreateProjectDialog from '../components/CreateProjectDialog';
+import EditProjectDialog from '../components/EditProjectDialog';
+import CreateCollectionDialog from '../components/CreateCollectionDialog';
+import EditCollectionDialog from '../components/EditCollectionDialog';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { buildRagCollectionOptions } from '../utils/ragCollectionOptions';
 
 const RagPage: React.FC = () => {
@@ -46,10 +54,21 @@ const RagPage: React.FC = () => {
   const [healthError, setHealthError] = useState<RagEndpointError | null>(null);
   const [healthLastChecked, setHealthLastChecked] = useState<number | null>(Date.now());
 
-  // Projects
-  const [projects, setProjects] = useState<RagProjectSummary[]>([]);
-  const [projectsError, setProjectsError] = useState<RagEndpointError | null>(null);
-  const [projectsFetched, setProjectsFetched] = useState(false);
+  // Registry projects
+   const [registryProjects, setRegistryProjects] = useState<RagRegistryProject[]>([]);
+   const [registryProjectsLoading, setRegistryProjectsLoading] = useState(false);
+   const [registryProjectsError, setRegistryProjectsError] = useState<RagEndpointError | null>(null);
+   const [registryProjectsFetched, setRegistryProjectsFetched] = useState(false);
+ 
+   // Logical collections (registry)
+   const [logicalCollections, setLogicalCollections] = useState<RagLogicalCollection[]>([]);
+   const [logicalCollectionsLoading, setLogicalCollectionsLoading] = useState(false);
+   const [logicalCollectionsError, setLogicalCollectionsError] = useState<RagEndpointError | null>(null);
+ 
+   // Legacy collections (for upload/search dropdown options)
+     const [legacyCollections, setLegacyCollections] = useState<
+       { name: string; point_count?: number; counts_are_estimated?: boolean }[]
+     >([]);
 
   // Project detail
   const [projectDetail, setProjectDetail] = useState<RagProjectDetail | null>(null);
@@ -57,9 +76,6 @@ const RagPage: React.FC = () => {
   const [projectStats, setProjectStats] = useState<RagProjectStats | null>(null);
   const [projectStatsError, setProjectStatsError] = useState<RagEndpointError | null>(null);
 
-  // Collections
-  const [collections, setCollections] = useState<RagCollectionsResponse | null>(null);
-  const [collectionsError, setCollectionsError] = useState<RagEndpointError | null>(null);
 
   // Documents
   const [documents, setDocuments] = useState<RagDocumentSummary[]>([]);
@@ -88,8 +104,24 @@ const RagPage: React.FC = () => {
    const [toastType, setToastType] = useState<'success' | 'error'>('success');
  
    // Refresh
-   const [refreshing, setRefreshing] = useState(false);
-   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+     const [refreshing, setRefreshing] = useState(false);
+     const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+   
+     // ── Dialog state ──────────────────────────────────────────────────────────
+   
+     // Project dialogs
+     const [createProjectOpen, setCreateProjectOpen] = useState(false);
+     const [editProjectOpen, setEditProjectOpen] = useState(false);
+     const [editProjectTarget, setEditProjectTarget] = useState<RagRegistryProject | null>(null);
+     const [deleteProjectTarget, setDeleteProjectTarget] = useState<RagRegistryProject | null>(null);
+     const [deleteProjectConfirmOpen, setDeleteProjectConfirmOpen] = useState(false);
+   
+     // Collection dialogs
+     const [createCollectionOpen, setCreateCollectionOpen] = useState(false);
+     const [editCollectionOpen, setEditCollectionOpen] = useState(false);
+     const [editCollectionTarget, setEditCollectionTarget] = useState<RagLogicalCollection | null>(null);
+     const [deleteCollectionTarget, setDeleteCollectionTarget] = useState<RagLogicalCollection | null>(null);
+     const [deleteCollectionConfirmOpen, setDeleteCollectionConfirmOpen] = useState(false);
 
   // Refs
   const inFlightRef = useRef(false);
@@ -126,23 +158,54 @@ const RagPage: React.FC = () => {
        } : null);
      }
    }, [gatewayUrl]);
-
-  const fetchProjects = useCallback(async () => {
+   
+     const fetchRegistryProjectsData = useCallback(async () => {
+       setRegistryProjectsLoading(true);
        try {
-         const result = await getRagProjects();
-         setProjects(result.projects);
-         setProjectsFetched(true);
-         setProjectsError(null);
+         const result = await fetchRegistryProjects();
+         setRegistryProjects(result);
+         setRegistryProjectsError(null);
+         setRegistryProjectsFetched(true);
        } catch (err) {
-         console.error('[RAG] projects error', err);
-         setProjectsError(err instanceof Error ? {
+         console.error('[RAG] registry projects error', err);
+         setRegistryProjectsError(err instanceof Error ? {
            url: `${gatewayUrl}/v1/rag/projects`,
            message: err.message,
            timestamp: Date.now(),
          } : null);
-         setProjectsFetched(true);
+         setRegistryProjectsFetched(true);
+       } finally {
+         setRegistryProjectsLoading(false);
        }
      }, [gatewayUrl]);
+   
+     const fetchLogicalCollectionsData = useCallback(async (projectId: string) => {
+       setLogicalCollectionsLoading(true);
+       try {
+         const result = await fetchLogicalCollections(projectId);
+         setLogicalCollections(result);
+         setLogicalCollectionsError(null);
+       } catch (err) {
+         console.error('[RAG] logical collections error', err);
+         setLogicalCollectionsError(err instanceof Error ? {
+           url: `${gatewayUrl}/v1/rag/projects/${projectId}/collections`,
+           message: err.message,
+           timestamp: Date.now(),
+         } : null);
+       } finally {
+         setLogicalCollectionsLoading(false);
+       }
+     }, [gatewayUrl]);
+   
+     const fetchLegacyCollectionsData = useCallback(async (projectId: string) => {
+         try {
+           const { getRagCollections } = await import('../services/ragApi');
+           const result = await getRagCollections(projectId);
+           setLegacyCollections(result.collections);
+         } catch (err) {
+           console.error('[RAG] legacy collections error', err);
+         }
+       }, [gatewayUrl]);
 
   const fetchProjectDetail = useCallback(async (projectId: string) => {
     try {
@@ -172,19 +235,6 @@ const RagPage: React.FC = () => {
     }
   }, [gatewayUrl]);
 
-  const fetchCollections = useCallback(async (projectId: string) => {
-    try {
-      const result = await getRagCollections(projectId);
-      setCollections(result);
-      setCollectionsError(null);
-    } catch (err) {
-      setCollectionsError(err instanceof Error ? {
-        url: `${gatewayUrl}/v1/rag/projects/${projectId}/collections`,
-        message: err.message,
-        timestamp: Date.now(),
-      } : null);
-    }
-  }, [gatewayUrl]);
 
   const fetchDocuments = useCallback(async (projectId: string) => {
     try {
@@ -229,59 +279,62 @@ const RagPage: React.FC = () => {
     abortRef.current = new AbortController();
 
     try {
-      await Promise.allSettled([
-        fetchHealth(),
-        fetchProjects(),
-      ]);
-
-      if (selectedProjectId) {
-        await Promise.allSettled([
-          fetchProjectDetail(selectedProjectId),
-          fetchProjectStats(selectedProjectId),
-          fetchCollections(selectedProjectId),
-          fetchDocuments(selectedProjectId),
-        ]);
-      }
-
-      setLastUpdated(Date.now());
-    } finally {
-      setRefreshing(false);
-      inFlightRef.current = false;
-    }
-  }, [fetchHealth, fetchProjects, fetchProjectDetail, fetchProjectStats, fetchCollections, fetchDocuments, selectedProjectId]);
+          await Promise.allSettled([
+            fetchHealth(),
+            fetchRegistryProjectsData(),
+          ]);
+    
+          if (selectedProjectId) {
+            await Promise.allSettled([
+              fetchProjectDetail(selectedProjectId),
+              fetchProjectStats(selectedProjectId),
+              fetchLogicalCollectionsData(selectedProjectId),
+              fetchLegacyCollectionsData(selectedProjectId),
+              fetchDocuments(selectedProjectId),
+            ]);
+          }
+    
+          setLastUpdated(Date.now());
+        } finally {
+          setRefreshing(false);
+          inFlightRef.current = false;
+        }
+      }, [fetchHealth, fetchRegistryProjectsData, fetchLogicalCollectionsData,
+          fetchLegacyCollectionsData, fetchProjectDetail, fetchProjectStats,
+          fetchDocuments, selectedProjectId]);
 
   // ── Initial load: fetch health and projects independently ──────────────────
   
       useEffect(() => {
-        fetchHealth();
-        fetchProjects();
-      }, [fetchHealth, fetchProjects, gatewayUrl]);
+              fetchHealth();
+              fetchRegistryProjectsData();
+            }, [fetchHealth, fetchRegistryProjectsData]);
   
     // ── Auto-select first existing project ─────────────────────────────────────
   
       useEffect(() => {
-        if (!selectedProjectId && projects.length > 0 && projectsFetched) {
-          const firstExisting = projects.find(p => p.exists);
-          const firstProject = projects[0];
-          const target = firstExisting || firstProject;
-          if (target) {
-            setSelectedProjectId(target.project_id);
-          } else {
-            console.warn('[RAG] auto-select failed: no valid project found');
-          }
-        }
-      }, [projects, projectsFetched, selectedProjectId]);
+              if (!selectedProjectId && registryProjects.length > 0 && registryProjectsFetched) {
+                const firstExisting = registryProjects.find(p => p.exists_in_qdrant);
+                const firstProject = registryProjects[0];
+                const target = firstExisting || firstProject;
+                if (target) {
+                  setSelectedProjectId(target.project_id);
+                }
+              }
+            }, [registryProjects, registryProjectsFetched, selectedProjectId]);
   
     // ── Fetch detail when project is selected ──────────────────────────────────
   
     useEffect(() => {
-      if (selectedProjectId) {
-        fetchProjectDetail(selectedProjectId);
-        fetchProjectStats(selectedProjectId);
-        fetchCollections(selectedProjectId);
-        fetchDocuments(selectedProjectId);
-      }
-    }, [selectedProjectId, fetchProjectDetail, fetchProjectStats, fetchCollections, fetchDocuments]);
+          if (selectedProjectId) {
+            fetchProjectDetail(selectedProjectId);
+            fetchProjectStats(selectedProjectId);
+            fetchLogicalCollectionsData(selectedProjectId);
+            fetchLegacyCollectionsData(selectedProjectId);
+            fetchDocuments(selectedProjectId);
+          }
+        }, [selectedProjectId, fetchProjectDetail, fetchProjectStats,
+            fetchLogicalCollectionsData, fetchLegacyCollectionsData, fetchDocuments]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -295,11 +348,104 @@ const RagPage: React.FC = () => {
   // ── Toast helper ────────────────────────────────────────────────────────────
  
    const showToast = useCallback((msg: string, type: 'success' | 'error') => {
-     setToastMessage(msg);
-     setToastType(type);
-   }, []);
- 
-   // ── Document action handlers ────────────────────────────────────────────────
+        setToastMessage(msg);
+        setToastType(type);
+      }, []);
+   
+      // ── Project action handlers ────────────────────────────────────────────────
+   
+      const handleCreateProject = useCallback(async (project: RagRegistryProject) => {
+        await fetchRegistryProjectsData();
+        if (!selectedProjectId) {
+          setSelectedProjectId(project.project_id);
+        }
+      }, [selectedProjectId, fetchRegistryProjectsData]);
+   
+      const handleEditProject = useCallback((project: RagRegistryProject) => {
+        setEditProjectTarget(project);
+        setEditProjectOpen(true);
+      }, []);
+   
+      const handleUpdateProject = useCallback(async (project: RagRegistryProject) => {
+        await fetchRegistryProjectsData();
+        if (selectedProjectId === project.project_id) {
+          fetchProjectDetail(selectedProjectId);
+          fetchProjectStats(selectedProjectId);
+        }
+      }, [selectedProjectId, fetchRegistryProjectsData, fetchProjectDetail, fetchProjectStats]);
+   
+      const handleDeleteProjectClick = useCallback((project: RagRegistryProject) => {
+        setDeleteProjectTarget(project);
+        setDeleteProjectConfirmOpen(true);
+      }, []);
+   
+      const handleDeleteProjectConfirm = useCallback(async () => {
+        if (!deleteProjectTarget) return;
+        try {
+          await deleteRegistryProject(deleteProjectTarget.project_id);
+          showToast(`Project "${deleteProjectTarget.display_name}" deleted`, 'success');
+          if (selectedProjectId === deleteProjectTarget.project_id) {
+            setSelectedProjectId(null);
+          }
+          await fetchRegistryProjectsData();
+        } catch (err) {
+          showToast(err instanceof Error ? err.message : 'Delete failed', 'error');
+        } finally {
+          setDeleteProjectConfirmOpen(false);
+          setDeleteProjectTarget(null);
+        }
+      }, [deleteProjectTarget, selectedProjectId, fetchRegistryProjectsData, showToast]);
+   
+      const handleRefreshProject = useCallback(async (_projectId: string) => {
+              await fetchRegistryProjectsData();
+            }, [fetchRegistryProjectsData]);
+   
+      // ── Collection action handlers ─────────────────────────────────────────────
+   
+      const handleCreateCollection = useCallback(() => {
+        if (selectedProjectId) {
+          setCreateCollectionOpen(true);
+        }
+      }, [selectedProjectId]);
+   
+      const handleCollectionCreated = useCallback(async (_collection: RagLogicalCollection) => {
+              if (selectedProjectId) {
+                await fetchLogicalCollectionsData(selectedProjectId);
+              }
+            }, [selectedProjectId, fetchLogicalCollectionsData]);
+   
+      const handleEditCollection = useCallback((collection: RagLogicalCollection) => {
+        setEditCollectionTarget(collection);
+        setEditCollectionOpen(true);
+      }, []);
+   
+      const handleCollectionUpdated = useCallback(async (_collection: RagLogicalCollection) => {
+              if (selectedProjectId) {
+                await fetchLogicalCollectionsData(selectedProjectId);
+              }
+            }, [selectedProjectId, fetchLogicalCollectionsData]);
+   
+      const handleDeleteCollectionClick = useCallback((collection: RagLogicalCollection) => {
+        setDeleteCollectionTarget(collection);
+        setDeleteCollectionConfirmOpen(true);
+      }, []);
+   
+      const handleDeleteCollectionConfirm = useCallback(async () => {
+        if (!deleteCollectionTarget || !selectedProjectId) return;
+        try {
+          const { deleteLogicalCollection } = await import('../services/ragProjectsApi');
+          await deleteLogicalCollection(selectedProjectId, deleteCollectionTarget.name);
+          showToast(`Collection "${deleteCollectionTarget.display_name || deleteCollectionTarget.name}" deleted`, 'success');
+          await fetchLogicalCollectionsData(selectedProjectId);
+        } catch (err) {
+          showToast(err instanceof Error ? err.message : 'Delete failed', 'error');
+        } finally {
+          setDeleteCollectionConfirmOpen(false);
+          setDeleteCollectionTarget(null);
+        }
+      }, [deleteCollectionTarget, selectedProjectId, fetchLogicalCollectionsData, showToast]);
+   
+      // ── Document action handlers ────────────────────────────────────────────────
  
    const handleViewSource = useCallback((doc: RagDocumentSummary) => {
         setSourceViewerDocument(doc);
@@ -345,16 +491,16 @@ const RagPage: React.FC = () => {
    // ── Event handlers ─────────────────────────────────────────────────────────
  
    const handleSelectProject = useCallback((projectId: string) => {
-    setSelectedProjectId(prev => prev === projectId ? null : projectId);
-    // Reset detail state when switching
-    setProjectDetail(null);
-    setProjectStats(null);
-    setCollections(null);
-    setDocuments([]);
-    setSearchResults(null);
-    setChunks([]);
-    setSelectedDocumentId(null);
-  }, []);
+       setSelectedProjectId(prev => prev === projectId ? null : projectId);
+       setProjectDetail(null);
+       setProjectStats(null);
+       setLogicalCollections([]);
+       setLegacyCollections([]);
+       setDocuments([]);
+       setSearchResults(null);
+       setChunks([]);
+       setSelectedDocumentId(null);
+     }, []);
 
   const handleSelectDocument = useCallback((documentId: string) => {
       setSelectedDocumentId(prev => prev === documentId ? null : documentId);
@@ -390,16 +536,22 @@ const RagPage: React.FC = () => {
   // ── Derived state ──────────────────────────────────────────────────────────
   
     // Full merged collection options (logical + detail), used by upload/text-note/search
-    const allCollectionOptions = useMemo(
-      () => buildRagCollectionOptions(projectDetail, collections),
-      [projectDetail, collections]
-    );
-  
-    // Extract names for dropdowns passed to child components
-    const availableCollections = allCollectionOptions.map(opt => opt.name);
- 
-   // Total points across all projects
-     const totalPoints = projects.reduce((sum, p) => sum + (p.points_count || 0), 0);
+        const allCollectionOptions = useMemo(
+          () => buildRagCollectionOptions(projectDetail, legacyCollections.length > 0 ? {
+            collections: legacyCollections.map(c => ({ name: c.name, point_count: c.point_count, counts_are_estimated: c.counts_are_estimated })),
+            project_id: selectedProjectId || '',
+          } : null),
+          [projectDetail, legacyCollections, selectedProjectId]
+        );
+    
+        // Extract names for dropdowns passed to child components
+        const availableCollections = allCollectionOptions.map(opt => opt.name);
+    
+      // Registry stats
+      const totalProjects = registryProjects.length;
+      const qdrantBackedCount = registryProjects.filter(p => p.exists_in_qdrant).length;
+      const discoveredCount = registryProjects.filter(p => p.discovered).length;
+      const totalPoints = registryProjects.reduce((sum, p) => sum + p.points_count, 0);
    
      // Project detail metrics
      const detailPoints = projectStats?.points_count?.toString() || '0';
@@ -407,6 +559,9 @@ const RagPage: React.FC = () => {
      const detailIndexed = projectStats?.indexed_vectors_count?.toString() || '0';
 
   const selectedDocument = documents.find(d => d.document_id === selectedDocumentId) || null;
+  
+    // Selected registry project
+    const selectedRegistryProject = registryProjects.find(p => p.project_id === selectedProjectId) || null;
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -449,14 +604,7 @@ const RagPage: React.FC = () => {
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
           <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
-            {/* Debug info — hidden in production */}
-             <div className="hidden bg-yellow-900/20 border border-yellow-700/30 rounded-xl p-3">
-               <p className="text-[10px] text-yellow-400 font-mono">
-                 projects.length: {projects.length} | projectsError: {projectsError?.message || 'none'} | projectsFetched: {projectsFetched ? 'yes' : 'no'} | selectedProjectId: {selectedProjectId || 'none'} | gatewayUrl: {gatewayUrl}
-               </p>
-             </div>
-  
-            {/* Top row: Health */}
+                      {/* Top row: Health */}
             <div className="grid grid-cols-1 gap-4 sm:gap-6">
               <RagHealthCard
                 health={health}
@@ -469,53 +617,77 @@ const RagPage: React.FC = () => {
             </div>
   
             {/* Projects Overview */}
-                  <MobileCollapsibleCard
-                    title="Projects"
-                    icon={<Database className="w-5 h-5 text-accent-primary" />}
-                    statusBadge={
-                      projects.length > 0 ? { status: 'online', label: `${projects.length} project${projects.length > 1 ? 's' : ''}` } :
-                      { status: 'unknown', label: 'None' }
-                    }
-                    summaryText={
-                      selectedProjectId ? `Selected: ${selectedProjectId}` :
-                      projects.length > 0 ? 'Tap a project to select' :
-                      'No projects'
-                    }
-                    metrics={projects.length > 0 ? [
-                      { label: 'Total Points', value: totalPoints.toLocaleString() },
-                    ] : undefined}
-                    defaultExpanded={true}
-                    defaultExpandedMobile={false}
-                    localStorageKey="rag-projects"
-                  >
-                    {projectsError ? (
-                      <div className="flex items-center gap-2 text-xs text-status-error">
-                        <span>Unable to fetch projects: {projectsError.message}</span>
-                        <span className="text-[10px] font-mono opacity-70">({gatewayUrl}/v1/rag/projects)</span>
-                      </div>
-                    ) : projectsFetched && projects.length === 0 ? (
-                      <div className="text-center py-6">
-                        <Database className="w-8 h-8 mx-auto text-text-tertiary/30 mb-2" />
-                        <p className="text-sm text-text-secondary">No projects returned by the backend.</p>
-                        <p className="text-xs text-text-tertiary mt-1">
-                          Expected endpoint: <code className="font-mono">{gatewayUrl}/v1/rag/projects</code>
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                        {projects.map(project => (
-                          <RagProjectCard
-                            key={project.project_id}
-                            project={project}
-                            isSelected={selectedProjectId === project.project_id}
-                            onSelect={handleSelectProject}
-                            onRefresh={fetchAllData}
-                            refreshing={refreshing}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </MobileCollapsibleCard>
+                      <MobileCollapsibleCard
+                        title="Projects"
+                        icon={<Database className="w-5 h-5 text-accent-primary" />}
+                        statusBadge={
+                          registryProjectsFetched && registryProjects.length > 0
+                            ? { status: 'online' as const, label: `${registryProjects.length} project${registryProjects.length > 1 ? 's' : ''}` }
+                            : { status: 'unknown' as const, label: 'None' }
+                        }
+                        summaryText={
+                          selectedProjectId
+                            ? `Selected: ${selectedRegistryProject?.display_name || selectedProjectId}`
+                            : registryProjectsFetched && registryProjects.length > 0
+                              ? 'Tap a project to select'
+                              : 'No projects'
+                        }
+                        action={{
+                                      label: 'New Project',
+                                      onClick: () => setCreateProjectOpen(true),
+                                      variant: 'primary',
+                                    }}
+                        metrics={registryProjects.length > 0 ? [
+                          { label: 'Qdrant Backed', value: `${qdrantBackedCount}/${totalProjects}` },
+                          { label: 'Discovered', value: `${discoveredCount}` },
+                          { label: 'Total Points', value: totalPoints.toLocaleString() },
+                        ] : undefined}
+                        defaultExpanded={true}
+                        defaultExpandedMobile={false}
+                        localStorageKey="rag-projects"
+                      >
+                        {registryProjectsError ? (
+                          <div className="flex items-center gap-2 text-xs text-status-error">
+                            <span>Unable to fetch projects: {registryProjectsError.message}</span>
+                            <span className="text-[10px] font-mono opacity-70">({gatewayUrl}/v1/rag/projects)</span>
+                          </div>
+                        ) : registryProjectsLoading ? (
+                          <div className="flex items-center gap-2 text-xs text-text-tertiary py-4">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Loading registry projects...</span>
+                          </div>
+                        ) : registryProjectsFetched && registryProjects.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-8 text-center">
+                            <Database className="w-10 h-10 text-text-tertiary/30 mb-3" />
+                            <p className="text-sm text-text-secondary">No registry projects found</p>
+                            <p className="text-xs text-text-tertiary mt-1">
+                              Create your first project or discover existing Qdrant collections.
+                            </p>
+                            <button
+                              onClick={() => setCreateProjectOpen(true)}
+                              className="mt-4 px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 transition-all duration-200 flex items-center gap-1.5"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Create Project
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                            {registryProjects.map(project => (
+                              <RagRegistryProjectCard
+                                key={project.project_id}
+                                project={project}
+                                isSelected={selectedProjectId === project.project_id}
+                                onSelect={handleSelectProject}
+                                onEdit={handleEditProject}
+                                onDelete={handleDeleteProjectClick}
+                                onRefresh={handleRefreshProject}
+                                refreshing={refreshing}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </MobileCollapsibleCard>
   
             {/* Detail area: Project detail + Collections + Documents + Search */}
              {selectedProjectId && (
@@ -523,53 +695,72 @@ const RagPage: React.FC = () => {
                              {/* Left: Project detail + Collections */}
                              <div className="lg:col-span-1 space-y-4 sm:space-y-6">
                                <MobileCollapsibleCard
-                                 title="Project Detail"
-                                 icon={<Database className="w-5 h-5 text-accent-primary" />}
-                                 statusBadge={projectDetail ? { status: 'online', label: 'Found' } : { status: 'offline', label: 'Not Found' }}
-                                 summaryText={
-                                   projectDetail ? `${projectDetail.project_id} — ${detailPoints} points, ${detailVectors} vectors` :
-                                   'No detail data'
-                                 }
-                                 metrics={projectDetail ? [
-                                   { label: 'Points', value: detailPoints },
-                                   { label: 'Vectors', value: detailVectors },
-                                   { label: 'Indexed', value: detailIndexed },
-                                 ] : undefined}
-                                 defaultExpanded={false}
-                                 defaultExpandedMobile={false}
-                                 localStorageKey="rag-detail"
-                               >
-                                 <RagProjectDetailPanel
-                                   detail={projectDetail}
-                                   stats={projectStats}
-                                   detailError={projectDetailError}
-                                   statsError={projectStatsError}
-                                 />
-                               </MobileCollapsibleCard>
-                               <MobileCollapsibleCard
-                                 title="Collections"
-                                 icon={<Layers className="w-5 h-5 text-accent-secondary" />}
-                                 statusBadge={
-                                   collections?.collections && collections.collections.length > 0
-                                     ? { status: 'online', label: `${collections.collections.length} collection${collections.collections.length > 1 ? 's' : ''}` }
-                                     : { status: 'unknown', label: 'None' }
-                                 }
-                                 summaryText={
-                                   collections?.collections && collections.collections.length > 0
-                                     ? `${collections.collections.length} collections`
-                                     : 'No collections'
-                                 }
-                                 defaultExpanded={false}
-                                 defaultExpandedMobile={false}
-                                 localStorageKey="rag-collections"
-                               >
-                                 <RagCollectionsCard
-                                    collections={collections}
-                                    collectionsError={collectionsError}
-                                    projectId={selectedProjectId}
-                                    projectDetail={projectDetail}
-                                  />
-                               </MobileCollapsibleCard>
+                                                                title="Project Detail"
+                                                                icon={<Database className="w-5 h-5 text-accent-primary" />}
+                                                                statusBadge={selectedRegistryProject
+                                                                  ? { status: selectedRegistryProject.exists_in_qdrant ? 'online' as const : 'offline' as const, label: selectedRegistryProject.exists_in_qdrant ? 'Exists' : 'Not Found' }
+                                                                  : projectDetail
+                                                                    ? { status: 'online' as const, label: 'Found' }
+                                                                    : { status: 'offline' as const, label: 'Loading...' }
+                                                                }
+                                                                summaryText={
+                                                                  selectedRegistryProject
+                                                                    ? `${selectedRegistryProject.display_name} — ${detailPoints} points`
+                                                                    : projectDetail
+                                                                      ? `${projectDetail.project_id} — ${detailPoints} points, ${detailVectors} vectors`
+                                                                      : 'No detail data'
+                                                                }
+                                                                metrics={projectDetail ? [
+                                                                  { label: 'Points', value: detailPoints },
+                                                                  { label: 'Vectors', value: detailVectors },
+                                                                  { label: 'Indexed', value: detailIndexed },
+                                                                ] : undefined}
+                                                                defaultExpanded={false}
+                                                                defaultExpandedMobile={false}
+                                                                localStorageKey="rag-detail"
+                                                              >
+                                                                <RagProjectDetailPanel
+                                                                  detail={projectDetail}
+                                                                  stats={projectStats}
+                                                                  detailError={projectDetailError}
+                                                                  statsError={projectStatsError}
+                                                                  registryProject={selectedRegistryProject}
+                                                                />
+                                                              </MobileCollapsibleCard>
+                                                              <MobileCollapsibleCard
+                                                                title="Logical Collections"
+                                                                icon={<Layers className="w-5 h-5 text-accent-secondary" />}
+                                                                statusBadge={
+                                                                  logicalCollections.length > 0
+                                                                    ? { status: 'online' as const, label: `${logicalCollections.length} collection${logicalCollections.length > 1 ? 's' : ''}` }
+                                                                    : { status: 'unknown' as const, label: 'None' }
+                                                                }
+                                                                summaryText={
+                                                                  logicalCollections.length > 0
+                                                                    ? `${logicalCollections.length} collections`
+                                                                    : 'No collections'
+                                                                }
+                                                                defaultExpanded={false}
+                                                                defaultExpandedMobile={false}
+                                                                localStorageKey="rag-collections"
+                                                              >
+                                                                {logicalCollectionsError ? (
+                                                                  <div className="flex items-center gap-2 text-xs text-status-error">
+                                                                    <span>Unable to fetch collections: {logicalCollectionsError.message}</span>
+                                                                  </div>
+                                                                ) : (
+                                                                  <RagLogicalCollectionsCard
+                                                                    projectId={selectedProjectId}
+                                                                    collections={logicalCollections}
+                                                                    loading={logicalCollectionsLoading}
+                                                                    error={logicalCollectionsError}
+                                                                    onRefresh={() => fetchLogicalCollectionsData(selectedProjectId)}
+                                                                    onCreate={handleCreateCollection}
+                                                                    onEdit={handleEditCollection}
+                                                                    onDelete={handleDeleteCollectionClick}
+                                                                  />
+                                                                )}
+                                                              </MobileCollapsibleCard>
                              </div>
  
                  {/* Right: Upload + Documents + Search */}
@@ -668,10 +859,64 @@ const RagPage: React.FC = () => {
            />
          )}
  
-         {/* Toast */}
-         {toastMessage && (
-           <Toast message={toastMessage} type={toastType} onClose={() => setToastMessage(null)} />
-         )}
+         {/* Create Project Dialog */}
+                 <CreateProjectDialog
+                   open={createProjectOpen}
+                   onClose={() => setCreateProjectOpen(false)}
+                   onSuccess={handleCreateProject}
+                 />
+         
+                 {/* Edit Project Dialog */}
+                 <EditProjectDialog
+                   open={editProjectOpen}
+                   project={editProjectTarget}
+                   onClose={() => { setEditProjectOpen(false); setEditProjectTarget(null); }}
+                   onSuccess={handleUpdateProject}
+                 />
+         
+                 {/* Delete Project Confirm Dialog */}
+                 <ConfirmDialog
+                   open={deleteProjectConfirmOpen}
+                   title="Delete Project"
+                   message={`Are you sure you want to delete project "${deleteProjectTarget?.display_name}"? This will only remove the registry entry and will NOT affect the underlying Qdrant collection.`}
+                   confirmLabel="Delete"
+                   confirmVariant="danger"
+                   onConfirm={handleDeleteProjectConfirm}
+                   onCancel={() => { setDeleteProjectConfirmOpen(false); setDeleteProjectTarget(null); }}
+                 />
+         
+                 {/* Create Collection Dialog */}
+                 <CreateCollectionDialog
+                   open={createCollectionOpen}
+                   projectId={selectedProjectId!}
+                   onClose={() => setCreateCollectionOpen(false)}
+                   onSuccess={handleCollectionCreated}
+                 />
+         
+                 {/* Edit Collection Dialog */}
+                 <EditCollectionDialog
+                   open={editCollectionOpen}
+                   projectId={selectedProjectId!}
+                   collection={editCollectionTarget}
+                   onClose={() => { setEditCollectionOpen(false); setEditCollectionTarget(null); }}
+                   onSuccess={handleCollectionUpdated}
+                 />
+         
+                 {/* Delete Collection Confirm Dialog */}
+                 <ConfirmDialog
+                   open={deleteCollectionConfirmOpen}
+                   title="Delete Collection"
+                   message={`Are you sure you want to delete collection "${deleteCollectionTarget?.display_name || deleteCollectionTarget?.name}"? This will only remove the logical collection registry entry.`}
+                   confirmLabel="Delete"
+                   confirmVariant="danger"
+                   onConfirm={handleDeleteCollectionConfirm}
+                   onCancel={() => { setDeleteCollectionConfirmOpen(false); setDeleteCollectionTarget(null); }}
+                 />
+         
+                 {/* Toast */}
+                 {toastMessage && (
+                   <Toast message={toastMessage} type={toastType} onClose={() => setToastMessage(null)} />
+                 )}
        </div>
      );
 };

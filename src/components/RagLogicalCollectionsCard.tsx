@@ -1,7 +1,6 @@
 import React from 'react';
 import { Layers, Plus, AlertCircle, Edit2, Trash2 } from 'lucide-react';
 import { RagLogicalCollection } from '../types';
-import EndpointErrorInline from './EndpointErrorInline';
 
 interface RagLogicalCollectionsCardProps {
   projectId: string;
