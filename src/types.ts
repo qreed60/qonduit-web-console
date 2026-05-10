@@ -789,8 +789,90 @@ export interface RagPageState {
   }
   
   export interface ChatAttachmentDiagnostics {
-    processed?: boolean;
-    tokens_approximate?: number;
-    error?: string | null;
-    [key: string]: unknown;
-  }
+     processed?: boolean;
+     tokens_approximate?: number;
+     error?: string | null;
+     [key: string]: unknown;
+   }
+ 
+   // ── RAG Project Registry Types ───────────────────────────────────────────────
+ 
+   /** Individual project in the Registry API response */
+   export interface RagRegistryProject {
+     project_id: string;
+     display_name: string;
+     description: string | null;
+     qdrant_collection: string;
+     default_collection: string;
+     created_at: string | null;
+     updated_at: string | null;
+     collections_count: number;
+     exists_in_qdrant: boolean;
+     points_count: number;
+     discovered: boolean;
+     error: string | null;
+   }
+ 
+   /** POST /v1/rag/projects request body */
+   export interface RagCreateProjectRequest {
+     project_id?: string;
+     display_name: string;
+     description?: string;
+     default_collection?: string;
+     ensure_qdrant?: boolean;
+   }
+ 
+   /** POST /v1/rag/projects response (same shape as RagRegistryProject + message) */
+   export interface RagCreateProjectResponse {
+     ok: boolean;
+     project_id: string;
+     display_name: string;
+     description: string | null;
+     qdrant_collection: string;
+     default_collection: string;
+     created_at: string | null;
+     updated_at: string | null;
+     collections_count: number;
+     exists_in_qdrant: boolean;
+     points_count: number;
+     discovered: boolean;
+     error: string | null;
+     message?: string;
+   }
+ 
+   /** PATCH /v1/rag/projects/{project_id} request body */
+   export interface RagUpdateProjectRequest {
+     display_name?: string;
+     description?: string;
+     default_collection?: string;
+   }
+ 
+   // ── RAG Logical Collection Registry Types ────────────────────────────────────
+ 
+   /** Logical collection object */
+   export interface RagLogicalCollection {
+     name: string;
+     display_name: string | null;
+     description: string | null;
+     created_at: string | null;
+     updated_at: string | null;
+     metadata: Record<string, unknown>;
+     document_count: number | null;
+     chunk_count: number | null;
+     counts_are_estimated: boolean;
+   }
+ 
+   /** POST /v1/rag/projects/{project_id}/collections request body */
+   export interface RagCreateCollectionRequest {
+     name: string;
+     display_name?: string;
+     description?: string;
+     metadata?: Record<string, unknown>;
+   }
+ 
+   /** PATCH /v1/rag/projects/{project_id}/collections/{name} request body */
+   export interface RagUpdateCollectionRequest {
+     display_name?: string;
+     description?: string;
+     metadata?: Record<string, unknown>;
+   }
