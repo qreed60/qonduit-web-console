@@ -41,6 +41,10 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
   const [isOpen, setIsOpen] = useState(false);
 
   const popupRef = useRef<HTMLDivElement>(null);
+   const selectedProjectIdRef = useRef<string>('');
+   const selectedCollectionRef = useRef<string | null>(null);
+   selectedProjectIdRef.current = selectedProjectId;
+   selectedCollectionRef.current = selectedCollection;
 
   // Load persisted selection
   useEffect(() => {
@@ -58,49 +62,51 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
   }, []);
 
   const fetchProjects = useCallback(async () => {
-    setProjectsLoading(true);
-    setProjectsError(null);
-    try {
-      const result = await getRagProjects();
-      setProjects(result.projects);
-      if (!selectedProjectId && result.projects.length > 0) {
-        const firstExisting = result.projects.find(p => p.exists);
-        const firstProject = result.projects[0];
-        const target = firstExisting || firstProject;
-        if (target) {
-          setSelectedProjectId(target.project_id);
-        }
-      }
-    } catch (err) {
-      setProjectsError(err instanceof Error ? {
-        url: 'gateway/v1/rag/projects',
-        message: err.message,
-        timestamp: Date.now(),
-      } : null);
-    } finally {
-      setProjectsLoading(false);
-    }
-  }, [selectedProjectId]);
+     setProjectsLoading(true);
+     setProjectsError(null);
+     try {
+       const result = await getRagProjects();
+       setProjects(result.projects);
+       if (!selectedProjectIdRef.current && result.projects.length > 0) {
+         const firstExisting = result.projects.find(p => p.exists);
+         const firstProject = result.projects[0];
+         const target = firstExisting || firstProject;
+         if (target) {
+           setSelectedProjectId(target.project_id);
+         }
+       }
+     } catch (err) {
+       setProjectsError(err instanceof Error ? {
+         url: 'gateway/v1/rag/projects',
+         message: err.message,
+         timestamp: Date.now(),
+       } : null);
+     } finally {
+       setProjectsLoading(false);
+     }
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, []);
 
   const fetchCollections = useCallback(async (projectId: string) => {
-    setCollectionsLoading(true);
-    setCollectionsError(null);
-    try {
-      const result = await getRagCollections(projectId);
-      setCollections(result.collections);
-      if (!selectedCollection && result.collections.length > 0) {
-        setSelectedCollection(result.collections[0].name);
+      setCollectionsLoading(true);
+      setCollectionsError(null);
+      try {
+        const result = await getRagCollections(projectId);
+        setCollections(result.collections);
+        if (!selectedCollectionRef.current && result.collections.length > 0) {
+          setSelectedCollection(result.collections[0].name);
+        }
+      } catch (err) {
+        setCollectionsError(err instanceof Error ? {
+          url: `gateway/v1/rag/projects/${projectId}/collections`,
+          message: err.message,
+          timestamp: Date.now(),
+        } : null);
+      } finally {
+        setCollectionsLoading(false);
       }
-    } catch (err) {
-      setCollectionsError(err instanceof Error ? {
-        url: `gateway/v1/rag/projects/${projectId}/collections`,
-        message: err.message,
-        timestamp: Date.now(),
-      } : null);
-    } finally {
-      setCollectionsLoading(false);
-    }
-  }, [selectedCollection]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
   const fetchProjectDetail = useCallback(async (projectId: string) => {
     setProjectDetailLoading(true);
@@ -120,17 +126,30 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ onSelectionChan
   }, []);
 
   // Fetch collections and project detail when project changes
-  useEffect(() => {
-    if (selectedProjectId) {
-      fetchCollections(selectedProjectId);
-      fetchProjectDetail(selectedProjectId);
-    }
-  }, [selectedProjectId, fetchCollections, fetchProjectDetail]);
+    useEffect(() => {
+      if (selectedProjectId) {
+        fetchCollections(selectedProjectId);
+        fetchProjectDetail(selectedProjectId);
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedProjectId]);
 
-  // Notify parent of selection changes
-  useEffect(() => {
-    onSelectionChange({ projectId: selectedProjectId, collection: selectedCollection, enabled });
-  }, [selectedProjectId, selectedCollection, enabled, onSelectionChange]);
+  // Notify parent of selection changes (only when values actually changed)
+    const prevSelectionRef = useRef<{ projectId: string; collection: string | null; enabled: boolean } | null>(null);
+    useEffect(() => {
+      const current = { projectId: selectedProjectId, collection: selectedCollection, enabled };
+      if (
+        prevSelectionRef.current &&
+        prevSelectionRef.current.projectId === current.projectId &&
+        prevSelectionRef.current.collection === current.collection &&
+        prevSelectionRef.current.enabled === current.enabled
+      ) {
+        return; // No change, skip notify
+      }
+      prevSelectionRef.current = current;
+      onSelectionChange(current);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedProjectId, selectedCollection, enabled]);
 
   // Persist selection changes
   useEffect(() => {

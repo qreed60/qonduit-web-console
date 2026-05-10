@@ -38,13 +38,21 @@ const ChatPage: React.FC = () => {
   }, []);
 
   // RAG context selection (only used when Gateway mode is active)
-    const [ragSelection, setRagSelection] = useState<{
-      projectId: string;
-      collection: string | null;
-      enabled: boolean;
-    }>({ projectId: '', collection: null, enabled: true });
+      const [ragSelection, setRagSelection] = useState<{
+        projectId: string;
+        collection: string | null;
+        enabled: boolean;
+      }>({ projectId: '', collection: null, enabled: true });
   
-    // Chat attachments
+    // Memoized RAG selection handler to prevent render loop in RagContextSelector
+    const handleRagSelectionChange = useCallback(
+      (selection: { projectId: string; collection: string | null; enabled: boolean }) => {
+        setRagSelection(selection);
+      },
+      [] // setRagSelection is a stable useState setter
+    );
+  
+      // Chat attachments
     const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -308,12 +316,12 @@ const ChatPage: React.FC = () => {
                <div className="flex flex-row items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
                  {/* RAG Context Selector (only in Gateway mode) */}
                  {currentProvider === 'Gateway' && (
-                   <div className="flex items-center gap-2 w-full sm:w-auto">
-                     <RagContextSelector
-                       onSelectionChange={(selection) => setRagSelection(selection)}
-                     />
-                   </div>
-                 )}
+                                   <div className="flex items-center gap-2 w-full sm:w-auto">
+                                     <RagContextSelector
+                                       onSelectionChange={handleRagSelectionChange}
+                                     />
+                                   </div>
+                                 )}
                  {/* Settings Toggle */}
                  <button
                   onClick={() => setShowSettings(!showSettings)}

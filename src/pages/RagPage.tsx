@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   getRagHealth,
   getRagProjects,
@@ -36,6 +36,7 @@ import RagTextNoteCard from '../components/RagTextNoteCard';
 import RagDocumentSourceViewer from '../components/RagDocumentSourceViewer';
 import MobileCollapsibleCard from '../components/MobileCollapsibleCard';
 import Toast from '../components/Toast';
+import { buildRagCollectionOptions } from '../utils/ragCollectionOptions';
 
 const RagPage: React.FC = () => {
   // ── State ──────────────────────────────────────────────────────────────────
@@ -387,8 +388,15 @@ const RagPage: React.FC = () => {
   }, [selectedProjectId, gatewayUrl]);
 
   // ── Derived state ──────────────────────────────────────────────────────────
- 
-   const availableCollections = collections?.collections.map(c => c.name) || [];
+  
+    // Full merged collection options (logical + detail), used by upload/text-note/search
+    const allCollectionOptions = useMemo(
+      () => buildRagCollectionOptions(projectDetail, collections),
+      [projectDetail, collections]
+    );
+  
+    // Extract names for dropdowns passed to child components
+    const availableCollections = allCollectionOptions.map(opt => opt.name);
  
    // Total points across all projects
      const totalPoints = projects.reduce((sum, p) => sum + (p.points_count || 0), 0);
