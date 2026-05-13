@@ -157,6 +157,13 @@ export interface GpuInfo {
   memory_total_mib: number;
   memory_used_mib: number;
   memory_free_mib: number;
+  memory_total_human?: string;
+  memory_used_human?: string;
+  memory_free_human?: string;
+  /** Legacy field aliases occasionally returned by older router builds. */
+  total_memory_human?: string;
+  used_memory_human?: string;
+  free_memory_human?: string;
 }
 
 /**
@@ -165,12 +172,109 @@ export interface GpuInfo {
 export interface GpuStatus {
   ok: boolean;
   gpus: GpuInfo[];
+  excluded_gpus?: GpuInfo[];
+  usable_gpus?: GpuInfo[];
+  inference_gpus?: GpuInfo[];
   memory_total_mib: number;
   memory_used_mib: number;
   memory_free_mib: number;
   memory_total_human: string;
   memory_used_human: string;
   memory_free_human: string;
+  /** Legacy field aliases occasionally returned by older router builds. */
+  total_memory_human?: string;
+  used_memory_human?: string;
+  free_memory_human?: string;
+}
+
+export type RouterSlotStatus = 'running' | 'stopped' | 'starting' | 'stopping' | 'error' | 'unknown';
+
+/**
+ * Multi-slot router slot from GET /api/v1/qonduit-router/slots.
+ */
+export interface RouterSlot {
+  slot_id: string;
+  name?: string;
+  status?: RouterSlotStatus | string;
+  running?: boolean;
+  ready?: boolean;
+  model?: string;
+  model_path?: string;
+  container_name?: string;
+  openai_base?: string;
+  host?: string;
+  host_port?: number | string;
+  port?: number | string;
+  context_size?: number;
+  n_ctx?: number;
+  gpu_devices?: string | number[] | GpuInfo[];
+  effective_gpu_devices?: string | number[] | GpuInfo[];
+  tensor_split?: string | number[];
+  embeddings?: boolean;
+  extra_args?: string | string[];
+  last_error?: string | null;
+  [key: string]: unknown;
+}
+
+/**
+ * OpenAI-compatible endpoint exposed by a router slot.
+ */
+export interface RouterEndpoint {
+  slot_id: string;
+  name?: string;
+  openai_base: string;
+  status?: RouterSlotStatus | string;
+  running?: boolean;
+  ready?: boolean;
+  model?: string;
+  container_name?: string;
+  [key: string]: unknown;
+}
+
+export interface RouterSlotsResponse {
+  ok?: boolean;
+  slots: RouterSlot[];
+  [key: string]: unknown;
+}
+
+export interface RouterEndpointsResponse {
+  ok?: boolean;
+  endpoints: RouterEndpoint[];
+  [key: string]: unknown;
+}
+
+export interface RouterPreflightRequest {
+  slot_id?: string;
+  model?: string;
+  model_path?: string;
+  context_size?: number;
+  n_ctx?: number;
+  gpu_devices?: string | number[];
+  tensor_split?: string | number[];
+  embeddings?: boolean;
+  host_port?: number | string;
+  container_name?: string;
+  extra_args?: string | string[];
+  [key: string]: unknown;
+}
+
+export interface RouterPreflightCheck {
+  name: string;
+  ok: boolean;
+  message?: string;
+  details?: unknown;
+  [key: string]: unknown;
+}
+
+export interface RouterPreflightResponse {
+  ok: boolean;
+  slot_id?: string;
+  message?: string;
+  checks?: RouterPreflightCheck[];
+  warnings?: string[];
+  errors?: string[];
+  request?: RouterPreflightRequest;
+  [key: string]: unknown;
 }
 
 // ── Hugging Face Search ──────────────────────────────────────────────
