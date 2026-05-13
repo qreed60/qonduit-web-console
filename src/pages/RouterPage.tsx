@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   fetchRouterEndpoints,
   fetchRouterGpu,
+  fetchRouterModels,
   fetchRouterSlotLogs,
   fetchRouterSlots,
   getSettings,
@@ -9,12 +10,14 @@ import {
   runRouterSlotAction,
 } from '../services/api';
 import { ENDPOINTS } from '../config/endpoints';
-import { GpuInfo, RouterEndpoint, RouterSlot } from '../types';
+import { GpuInfo, NormalizedModel, RouterEndpoint, RouterPreflightRequest, RouterSlot } from '../types';
 import { formatGpuLabel, getGpuStatusSummaryFields, isExcludedDisplayGpu } from '../utils/routerDisplay';
 import Toast from '../components/Toast';
 import MobileAccordionSection from '../components/MobileAccordionSection';
 import MobileCollapsibleCard from '../components/MobileCollapsibleCard';
 import SlotList from '../components/SlotList';
+import AddSlotDialog from '../components/AddSlotDialog';
+import EditSlotDialog from '../components/EditSlotDialog';
 import EndpointsPanel from '../components/EndpointsPanel';
 import RouterGpuPanel from '../components/RouterGpuPanel';
 import {
@@ -37,11 +40,14 @@ const RouterPage: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [slots, setSlots] = useState<RouterSlot[]>([]);
   const [endpoints, setEndpoints] = useState<RouterEndpoint[]>([]);
+  const [routerModels, setRouterModels] = useState<NormalizedModel[]>([]);
+  const [gpus, setGpus] = useState<GpuInfo[]>([]);
   const [vramData, setVramData] = useState<{ total: string; used: string; free: string } | null>(null);
   const [gpuRows, setGpuRows] = useState<Array<{ index: number; label: string; name: string; total: string; used: string; free: string; isDisplay?: boolean }>>([]);
 
   const [slotsError, setSlotsError] = useState<string | null>(null);
   const [endpointsError, setEndpointsError] = useState<string | null>(null);
+  const [modelsError, setModelsError] = useState<string | null>(null);
   const [vramError, setVramError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
@@ -53,6 +59,11 @@ const RouterPage: React.FC = () => {
   const [preflightErrorBySlot, setPreflightErrorBySlot] = useState<Record<string, string | null>>({});
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [editingSlot, setEditingSlot] = useState<RouterSlot | null>(null);
+  const [dialogPreflightLoading, setDialogPreflightLoading] = useState(false);
+  const [dialogPreflightResult, setDialogPreflightResult] = useState<string | null>(null);
+  const [dialogPreflightError, setDialogPreflightError] = useState<string | null>(null);
 
   const fetchData = async () => {
     if (inFlightRef.current) return;
@@ -80,10 +91,19 @@ const RouterPage: React.FC = () => {
       }
 
       try {
+        const modelData = await fetchRouterModels();
+        setRouterModels(modelData.models || []);
+        setModelsError(null);
+      } catch (err) {
+        setModelsError(err instanceof Error ? err.message : 'Model refresh failed — showing last known models');
+      }
+
+      try {
         const gpu = await fetchRouterGpu();
         if (gpu.ok) {
           setVramData(getGpuStatusSummaryFields(gpu));
-          setGpuRows(gpu.gpus.map((g: GpuInfo) => {
+          setGpus(gpu.gpus || []);
+          setGpuRows((gpu.gpus || []).map((g: GpuInfo) => {
             const gpuMemory = getGpuStatusSummaryFields(g);
             return {
               index: g.index,
@@ -174,7 +194,32 @@ const RouterPage: React.FC = () => {
   };
 
   const handleEdit = (slot: RouterSlot) => {
-    showToast(`Edit slot ${slot.slot_id} opens in Phase 4.`, 'info');
+    setDialogPreflightResult(null);
+    setDialogPreflightError(null);
+    setEditingSlot(slot);
+  };
+
+  const handleAddSlot = () => {
+    setDialogPreflightResult(null);
+    setDialogPreflightError(null);
+    setAddDialogOpen(true);
+  };
+
+  const handleDialogPreflight = async (slotId: string, draft: RouterPreflightRequest) => {
+    setDialogPreflightLoading(true);
+    setDialogPreflightResult(null);
+    setDialogPreflightError(null);
+    try {
+      const result = await preflightRouterSlot(slotId, draft);
+      setDialogPreflightResult(JSON.stringify(result, null, 2));
+      showToast(`Draft preflight complete for ${slotId}`, result.ok ? 'success' : 'info');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : `Draft preflight failed for ${slotId}`;
+      setDialogPreflightError(message);
+      showToast(message, 'error');
+    } finally {
+      setDialogPreflightLoading(false);
+    }
   };
 
   const handleCopy = async (value: string, label: string) => {
@@ -246,6 +291,7 @@ const RouterPage: React.FC = () => {
           defaultExpanded={true}
           defaultExpandedMobile={true}
           localStorageKey="qonduit-router-slots"
+          action={{ label: 'Add Slot', onClick: handleAddSlot, variant: 'primary' }}
         >
           <SlotList
             slots={slots}
@@ -312,6 +358,33 @@ const RouterPage: React.FC = () => {
           </div>
         </MobileAccordionSection>
       </div>
+
+      <AddSlotDialog
+        open={addDialogOpen}
+        models={routerModels}
+        gpus={gpus}
+        modelError={modelsError}
+        gpuError={vramError}
+        preflightLoading={dialogPreflightLoading}
+        preflightResult={dialogPreflightResult}
+        preflightError={dialogPreflightError}
+        onPreflight={handleDialogPreflight}
+        onClose={() => setAddDialogOpen(false)}
+      />
+
+      <EditSlotDialog
+        open={Boolean(editingSlot)}
+        slot={editingSlot}
+        models={routerModels}
+        gpus={gpus}
+        modelError={modelsError}
+        gpuError={vramError}
+        preflightLoading={dialogPreflightLoading}
+        preflightResult={dialogPreflightResult}
+        preflightError={dialogPreflightError}
+        onPreflight={handleDialogPreflight}
+        onClose={() => setEditingSlot(null)}
+      />
 
       {toastMessage && (
         <Toast message={toastMessage} type={toastType} onClose={() => setToastMessage(null)} />
