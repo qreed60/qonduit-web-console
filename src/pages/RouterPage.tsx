@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { getSettings, getRouterStatus, fetchRouterModels, fetchRouterGpu, launchModel as apiLaunchModel, stopModel as apiStopModel, restartRouterModel as apiRestartRouterModel, NormalizedModel } from '../services/api';
 import { ENDPOINTS } from '../config/endpoints';
 import { GpuInfo } from '../types';
+import { formatGpuLabel, getGpuStatusSummaryFields, isExcludedDisplayGpu } from '../utils/routerDisplay';
 import Toast from '../components/Toast';
 import GpuSummary from '../components/GpuSummary';
 import GpuTable from '../components/GpuTable';
@@ -43,7 +44,7 @@ const RouterPage: React.FC = () => {
    const [selectedModel, setSelectedModel] = useState('');
    const [ctxSize, setCtxSize] = useState(4096);
    const [vramData, setVramData] = useState<{ total: string; used: string; free: string } | null>(null);
-   const [gpuRows, setGpuRows] = useState<Array<{ index: number; name: string; total: string; used: string; free: string; isDisplay?: boolean }>>([]);
+   const [gpuRows, setGpuRows] = useState<Array<{ index: number; label: string; name: string; total: string; used: string; free: string; isDisplay?: boolean }>>([]);
  
    // ── State: errors & timestamps ──
    const [contentError, setContentError] = useState<string | null>(null);
@@ -95,20 +96,20 @@ const RouterPage: React.FC = () => {
        try {
          const gpu = await fetchRouterGpu();
          if (gpu.ok) {
-           setVramData({
-             total: gpu.memory_total_human,
-             used: gpu.memory_used_human,
-             free: gpu.memory_free_human,
-           });
+           setVramData(getGpuStatusSummaryFields(gpu));
            setVramError(null);
-           const rows = gpu.gpus.map((g: GpuInfo) => ({
-             index: g.index,
-             name: g.name,
-             total: `${(g.memory_total_mib / 1024).toFixed(1)} GiB`,
-             used: `${(g.memory_used_mib / 1024).toFixed(1)} GiB`,
-             free: `${(g.memory_free_mib / 1024).toFixed(1)} GiB`,
-             isDisplay: /quadro|display|integrated|igd/i.test(g.name),
-           }));
+           const rows = gpu.gpus.map((g: GpuInfo) => {
+             const gpuMemory = getGpuStatusSummaryFields(g);
+             return {
+               index: g.index,
+               label: formatGpuLabel(g),
+               name: g.name || 'Unknown GPU',
+               total: gpuMemory.total,
+               used: gpuMemory.used,
+               free: gpuMemory.free,
+               isDisplay: isExcludedDisplayGpu(g),
+             };
+           });
            setGpuRows(rows);
          } else {
            setVramError('VRAM unavailable — GPU endpoint returned ok:false');

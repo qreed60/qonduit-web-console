@@ -1,8 +1,8 @@
-import { Settings, ProviderType, ChatMessage, NormalizedModel, GpuStatus, RouterStatus, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse, ChatAttachmentPayload } from '../types';
+import { Settings, ProviderType, ChatMessage, NormalizedModel, GpuStatus, RouterStatus, RouterSlotsResponse, RouterEndpointsResponse, RouterPreflightRequest, RouterPreflightResponse, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse, ChatAttachmentPayload } from '../types';
 import { getMode, apiPath } from '../config/endpoints';
 
 // Re-export NormalizedModel for convenience
-export type { NormalizedModel, GpuStatus, RouterStatus, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse };
+export type { NormalizedModel, GpuStatus, RouterStatus, RouterSlotsResponse, RouterEndpointsResponse, RouterPreflightRequest, RouterPreflightResponse, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse };
 
 // ── Model metadata helpers ──────────────────────────────────────────────────
 
@@ -393,6 +393,80 @@ export async function fetchRouterModels(): Promise<{ models: NormalizedModel[]; 
     'Router /api/v1/qonduit-router/models'
   );
   return parseRouterModelsResponse(raw, url);
+}
+
+/**
+ * Fetch multi-slot router slots from GET /api/v1/qonduit-router/slots.
+ * Accepts either the canonical { slots: [...] } response or a bare array for
+ * forward/backward compatibility, but always returns { slots } to callers.
+ */
+export async function fetchRouterSlots(): Promise<RouterSlotsResponse> {
+  const url = apiPath('router', '/api/v1/qonduit-router/slots');
+  const raw = await parseJsonSafe<unknown>(
+    await fetch(url),
+    'Router /api/v1/qonduit-router/slots'
+  );
+
+  if (Array.isArray(raw)) {
+    return { ok: true, slots: raw as RouterSlotsResponse['slots'] };
+  }
+
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    return {
+      ...obj,
+      ok: typeof obj.ok === 'boolean' ? obj.ok : undefined,
+      slots: Array.isArray(obj.slots) ? obj.slots as RouterSlotsResponse['slots'] : [],
+    };
+  }
+
+  return { ok: false, slots: [] };
+}
+
+/**
+ * Fetch OpenAI-compatible endpoints for router slots from
+ * GET /api/v1/qonduit-router/endpoints.
+ */
+export async function fetchRouterEndpoints(): Promise<RouterEndpointsResponse> {
+  const url = apiPath('router', '/api/v1/qonduit-router/endpoints');
+  const raw = await parseJsonSafe<unknown>(
+    await fetch(url),
+    'Router /api/v1/qonduit-router/endpoints'
+  );
+
+  if (Array.isArray(raw)) {
+    return { ok: true, endpoints: raw as RouterEndpointsResponse['endpoints'] };
+  }
+
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    return {
+      ...obj,
+      ok: typeof obj.ok === 'boolean' ? obj.ok : undefined,
+      endpoints: Array.isArray(obj.endpoints) ? obj.endpoints as RouterEndpointsResponse['endpoints'] : [],
+    };
+  }
+
+  return { ok: false, endpoints: [] };
+}
+
+/**
+ * Run a slot preflight check via POST /api/v1/qonduit-router/slots/{slot_id}/preflight.
+ * The body is always JSON so callers can preflight unsaved draft slot values.
+ */
+export async function preflightRouterSlot(
+  slotId: string,
+  request: RouterPreflightRequest = {},
+): Promise<RouterPreflightResponse> {
+  const url = apiPath('router', `/api/v1/qonduit-router/slots/${encodeURIComponent(slotId)}/preflight`);
+  return parseJsonSafe<RouterPreflightResponse>(
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...request, slot_id: request.slot_id ?? slotId }),
+    }),
+    `Router /api/v1/qonduit-router/slots/${slotId}/preflight`
+  );
 }
 
 // ── Unified provider model fetcher ──────────────────────────────────────────
