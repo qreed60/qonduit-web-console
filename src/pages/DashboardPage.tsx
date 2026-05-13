@@ -1,16 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getSettings, fetchRouterModels, fetchProviderModels, fetchRouterGpu, launchModel as apiLaunchModel, stopModel as apiStopModel, restartRouterModel as apiRestartRouterModel, testEndpointWithError, testRouterHealthWithError, getRouterStatus, NormalizedModel, GpuStatus, RouterStatus } from '../services/api';
+import { getSettings, fetchProviderModels, fetchRouterEndpoints, fetchRouterGpu, fetchRouterSlots, testEndpointWithError, testRouterHealthWithError, GpuStatus } from '../services/api';
 import { getRagHealth } from '../services/ragApi';
 import { fetchRegistryProjects } from '../services/ragProjectsApi';
-import { RagHealthResponse, RagRegistryProject } from '../types';
+import { RagHealthResponse, RagRegistryProject, RouterEndpoint, RouterSlot } from '../types';
 import { Settings } from '../types';
 import { ENDPOINTS } from '../config/endpoints';
+import { getGpuStatusSummaryFields } from '../utils/routerDisplay';
 import StatusBar from '../components/StatusBar';
 import Toast from '../components/Toast';
 import EndpointCard from '../components/EndpointCard';
-import ModelControlCard from '../components/ModelControlCard';
-import LogsPanel from '../components/LogsPanel';
 import SystemOverview from '../components/SystemOverview';
 import MobileCollapsibleCard from '../components/MobileCollapsibleCard';
 import {
@@ -21,7 +20,6 @@ import {
   Server,
   Globe,
   Cpu,
-  Terminal,
   MessageSquare,
   Router,
   Activity,
@@ -50,14 +48,12 @@ const DashboardPage: React.FC = () => {
   const [healthLoading, setHealthLoading] = useState(false);
 
   // ── State: content data (preserved across refreshes) ──
-   const [routerStatus, setRouterStatus] = useState<RouterStatus | null>(null);
-   const [routerModels, setRouterModels] = useState<NormalizedModel[]>([]);
-   const [selectedRouterModel, setSelectedRouterModel] = useState('');
-   const [ctxSize, setCtxSize] = useState(4096);
-   const [suggestedCtx, setSuggestedCtx] = useState<number | null>(null);
+   const [routerSlots, setRouterSlots] = useState<RouterSlot[]>([]);
+   const [routerEndpoints, setRouterEndpoints] = useState<RouterEndpoint[]>([]);
+   const [routerSlotsError, setRouterSlotsError] = useState<string | null>(null);
+   const [routerEndpointsError, setRouterEndpointsError] = useState<string | null>(null);
    const [gpuStatus, setGpuStatus] = useState<GpuStatus | null>(null);
    const [gpuError, setGpuError] = useState<string | null>(null);
-   const [chatModels, setChatModels] = useState<NormalizedModel[]>([]);
    const [selectedChatModel, setSelectedChatModel] = useState('');
  
    // ── State: RAG data ──
@@ -69,9 +65,6 @@ const DashboardPage: React.FC = () => {
       const registryDiscovered = registryProjects.filter(p => p.discovered).length;
 
   // ── State: action feedback ──
-  const [actionLoading, setActionLoading] = useState(false);
-  const [actionStatus, setActionStatus] = useState<'idle' | 'launching' | 'stopping' | 'restarting' | 'success' | 'error'>('idle');
-  const [actionMessage, setActionMessage] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // ── Data fetch (stale-while-revalidate) ──
@@ -82,13 +75,21 @@ const DashboardPage: React.FC = () => {
     setContentRefreshing(true);
 
     try {
-      // ── Health: fetch router status — update immediately ──
+      // ── Content: fetch slot-based router summary — preserve old data on failure ──
       try {
-        const status = await getRouterStatus();
-        setRouterStatus(status);
-      } catch {
-        // Router might not be available — set null immediately
-        setRouterStatus(null);
+        const slotData = await fetchRouterSlots();
+        setRouterSlots(slotData.slots || []);
+        setRouterSlotsError(null);
+      } catch (err) {
+        setRouterSlotsError(err instanceof Error ? err.message : 'Failed to fetch router slots');
+      }
+
+      try {
+        const endpointData = await fetchRouterEndpoints();
+        setRouterEndpoints(endpointData.endpoints || []);
+        setRouterEndpointsError(null);
+      } catch (err) {
+        setRouterEndpointsError(err instanceof Error ? err.message : 'Failed to fetch router endpoints');
       }
 
       // ── Content: fetch GPU/VRAM — preserve old data on failure ──
@@ -101,24 +102,9 @@ const DashboardPage: React.FC = () => {
         setGpuError(err instanceof Error ? err.message : 'Failed to fetch GPU status');
       }
 
-      // ── Content: fetch router models — preserve old data on failure ──
-      try {
-        const data = await fetchRouterModels();
-        setRouterModels(data.models || []);
-        if (data.suggestedCtx) {
-          setSuggestedCtx(data.suggestedCtx);
-          if (!selectedRouterModel) {
-            setCtxSize(data.suggestedCtx);
-          }
-        }
-      } catch {
-        // Keep old router models
-      }
-
       // ── Content: fetch chat models — preserve old data on failure ──
        try {
          const providerModels = await fetchProviderModels(settings.defaultProvider);
-         setChatModels(providerModels);
          if (providerModels.length > 0) {
            const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
            setSelectedChatModel(defaultModel?.id || providerModels[0].id);
@@ -163,7 +149,6 @@ const DashboardPage: React.FC = () => {
     const loadChatModels = async () => {
       try {
         const providerModels = await fetchProviderModels(settings.defaultProvider);
-        setChatModels(providerModels);
         if (providerModels.length > 0) {
           const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
           setSelectedChatModel(defaultModel?.id || providerModels[0].id);
@@ -200,113 +185,6 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  const handleLaunch = async () => {
-      if (!selectedRouterModel) return;
-
-      setActionLoading(true);
-      setActionStatus('launching');
-      setActionMessage('');
-
-      try {
-        const result = await apiLaunchModel(selectedRouterModel, ctxSize);
-      if (result.ok) {
-        setActionStatus('success');
-        setActionMessage(result.message || 'Model launched successfully');
-        setToastMessage('Model launched successfully');
-        setRouterStatus((prev) => (prev ? { ...prev, running: true } : null));
-      } else {
-        setActionStatus('error');
-        setActionMessage(result.message || 'Failed to launch model');
-      }
-    } catch (err) {
-      setActionStatus('error');
-      setActionMessage(err instanceof Error ? err.message : 'Failed to launch model');
-    } finally {
-      setActionLoading(false);
-      setTimeout(() => {
-        setActionMessage('');
-        setActionStatus('idle');
-      }, 5000);
-    }
-  };
-
-  const handleStop = async () => {
-      setActionLoading(true);
-      setActionStatus('stopping');
-      setActionMessage('');
-
-      try {
-        const result = await apiStopModel();
-        if (result.ok) {
-          setActionStatus('success');
-          setActionMessage(result.message || 'Model stopped successfully');
-          setToastMessage('Model stopped successfully');
-          setRouterStatus((prev) => (prev ? { ...prev, running: false } : null));
-        } else {
-          setActionStatus('error');
-          setActionMessage(result.message || 'Failed to stop model');
-        }
-      } catch (err) {
-        setActionStatus('error');
-        setActionMessage(err instanceof Error ? err.message : 'Failed to stop model');
-      } finally {
-        setActionLoading(false);
-        setTimeout(() => {
-          setActionMessage('');
-          setActionStatus('idle');
-        }, 5000);
-      }
-    };
-
-    const handleRestart = async () => {
-       if (!selectedRouterModel) return;
-
-       setActionLoading(true);
-       setActionStatus('restarting');
-       setActionMessage('');
-
-       try {
-         const result = await apiRestartRouterModel(selectedRouterModel, ctxSize);
-         if (result.ok) {
-           setActionStatus('success');
-           setActionMessage(result.message || 'Model restarted successfully');
-           setToastMessage('Model restarted successfully');
-           setRouterStatus((prev) => (prev ? { ...prev, running: true } : null));
-         } else {
-           setActionStatus('error');
-           setActionMessage(result.message || 'Failed to restart model');
-         }
-       } catch (err) {
-         const msg = err instanceof Error ? err.message : 'Failed to restart model';
-         // Handle backend "model_required" error
-         if (msg.includes('model_required') || msg.includes('model')) {
-           setActionMessage('No model selected for restart. Please select a model first.');
-         } else {
-           setActionMessage(msg);
-         }
-         setActionStatus('error');
-       } finally {
-         setActionLoading(false);
-         setTimeout(() => {
-           setActionMessage('');
-           setActionStatus('idle');
-         }, 5000);
-       }
-     };
-
-    // Auto-select first model if none selected and models available
-      useEffect(() => {
-        if (!selectedRouterModel && routerModels.length > 0) {
-          setSelectedRouterModel(routerModels[0].name);
-        }
-      }, [routerModels, selectedRouterModel]);
-
-    // Auto-select first chat model if none selected
-      useEffect(() => {
-        if (!selectedChatModel && chatModels.length > 0) {
-          setSelectedChatModel(chatModels[0].id);
-        }
-      }, [chatModels, selectedChatModel]);
 
   const mode = settings.endpointMode;
 
@@ -317,7 +195,25 @@ const DashboardPage: React.FC = () => {
     const healthAllOnline = healthStatuses.every(s => s === true);
     const healthOverallStatus: 'online' | 'offline' | 'loading' | 'unknown' =
      healthStatuses.some(s => s === null) ? 'loading' : healthAllOnline ? 'online' : 'offline';
-   const healthSummary = `Gateway · Direct · Router · ${routerStatus?.running_model ? 'Model' : 'Stopped'}`;
+   const primarySlot = routerSlots.find((slot) => slot.slot_id === 'primary');
+   const openHandsSlot = routerSlots.find((slot) => slot.slot_id === 'openhands');
+   const slotIsRunning = (slot?: RouterSlot) => slot?.running === true || slot?.status === 'running';
+   const slotIsReady = (slot?: RouterSlot) => slot?.ready === true || slotIsRunning(slot);
+   const runningSlots = routerSlots.filter(slotIsRunning).length;
+   const readySlots = routerSlots.filter(slotIsReady).length;
+   const activeEndpoints = routerEndpoints.filter((endpoint) => endpoint.ready === true || endpoint.running === true || endpoint.status === 'running').length;
+   const gpuSummary = gpuStatus ? getGpuStatusSummaryFields(gpuStatus) : null;
+   const routerSummaryStatus: 'online' | 'offline' | 'loading' | 'unknown' =
+     routerSlots.length > 0 ? (runningSlots > 0 || readySlots > 0 ? 'online' : 'offline') : routerSlotsError ? 'offline' : contentRefreshing ? 'loading' : 'unknown';
+   const primaryStatus = primarySlot ? (slotIsReady(primarySlot) ? 'Ready' : slotIsRunning(primarySlot) ? 'Running' : String(primarySlot.status || 'Stopped')) : 'Missing';
+   const openHandsStatus = openHandsSlot ? (slotIsReady(openHandsSlot) ? 'Ready' : slotIsRunning(openHandsSlot) ? 'Running' : String(openHandsSlot.status || 'Stopped')) : null;
+   const routerStatusForOverview = primarySlot ? {
+     running: slotIsRunning(primarySlot),
+     exists: true,
+     running_model: typeof primarySlot.model === 'string' ? primarySlot.model : null,
+     context_size: typeof primarySlot.context_size === 'number' ? primarySlot.context_size : null,
+   } : null;
+   const healthSummary = `Gateway · Direct · Router · ${primaryStatus}`;
   
     // Endpoints summary
    const onlineCount = healthStatuses.filter(s => s === true).length;
@@ -326,16 +222,7 @@ const DashboardPage: React.FC = () => {
      healthStatuses.some(s => s === null) ? 'loading' : onlineCount === totalEndpoints ? 'online' : onlineCount > 0 ? 'offline' : 'unknown';
    const endpointSummaryText = 'Gateway, Direct, Router';
    const endpointSummaryLabel = `${onlineCount}/${totalEndpoints} Online`;
- 
-   // Router Model Control summary
-   const modelControlStatus: 'online' | 'offline' | 'loading' | 'unknown' =
-     routerStatus?.running ? 'online' : routerStatus ? 'offline' : 'unknown';
-   const modelControlSummary = routerStatus?.running_model
-     ? `${routerStatus.running_model} · ctx: ${ctxSize.toLocaleString()}`
-     : 'No model selected';
- 
-   // Terminal summary
-   const terminalSummary = 'Polling · Click to expand';
+
  
    // RAG Browser summary
       const ragQdrantStatus = ragHealth?.qdrant.ok ? 'Connected' : ragHealth?.qdrant.ok === false ? 'Disconnected' : 'Checking';
@@ -345,7 +232,7 @@ const DashboardPage: React.FC = () => {
    const quickActions = [
      { id: 'chat', label: 'Chat', description: 'Send messages to your model', icon: MessageSquare, route: '/chat', color: 'text-accent-primary' },
      { id: 'models', label: 'Models', description: 'Browse and manage models', icon: Cpu, route: '/models', color: 'text-accent-secondary' },
-     { id: 'router', label: 'Router', description: 'Launch and control models', icon: Router, route: '/router', color: 'text-accent-tertiary' },
+     { id: 'router', label: 'Router', description: 'Manage router slots', icon: Router, route: '/router', color: 'text-accent-tertiary' },
      { id: 'rag', label: 'RAG Browser', description: 'Search knowledge bases', icon: Database, route: '/rag', color: 'text-accent-primary' },
      { id: 'diagnostics', label: 'Diagnostics', description: 'Health and debugging tools', icon: Activity, route: '/diagnostics', color: 'text-status-warning' },
      { id: 'settings', label: 'Settings', description: 'Configure endpoints & gateway', icon: Settings2, route: '/settings', color: 'text-text-secondary' },
@@ -403,9 +290,9 @@ const DashboardPage: React.FC = () => {
                       <SystemOverview
                         endpointHealth={endpointHealth}
                         healthLoading={healthLoading}
-                        routerStatus={routerStatus}
+                        routerStatus={routerStatusForOverview}
                         chatModel={selectedChatModel}
-                        routerRunningModel={routerStatus?.running_model || undefined}
+                        routerRunningModel={routerStatusForOverview?.running_model || undefined}
                         gpuStatus={gpuStatus}
                         gpuError={gpuError}
                         endpointErrors={endpointErrors}
@@ -482,46 +369,48 @@ const DashboardPage: React.FC = () => {
            </div>
           </MobileCollapsibleCard>
  
-        {/* Router Model Control — always visible, always enabled */}
-                  <MobileCollapsibleCard
-                    title="Router Model Control"
-                    icon={<Cpu className="w-5 h-5 text-accent-primary" />}
-                    statusBadge={{ status: modelControlStatus, label: routerStatus?.running ? 'Running' : 'Stopped' }}
-                    summaryText={modelControlSummary}
-                    defaultExpanded={true}
-                    defaultExpandedMobile={false}
-                    localStorageKey="qonduit-dashboard-model-control-expanded"
-                  >
-                    <ModelControlCard
-                     routerStatus={routerStatus}
-                     models={routerModels}
-                     selectedModel={selectedRouterModel}
-                     ctxSize={ctxSize}
-                     suggestedCtx={suggestedCtx}
-                     onSelectModel={setSelectedRouterModel}
-                     onCtxChange={setCtxSize}
-                     onLaunch={handleLaunch}
-                     onStop={handleStop}
-                     onRestart={handleRestart}
-                     loading={actionLoading}
-                     actionStatus={actionStatus}
-                     actionMessage={actionMessage}
-                   />
-                  </MobileCollapsibleCard>
- 
-        {/* Live Logs */}
-          <MobileCollapsibleCard
-            title="Terminal"
-            icon={<Terminal className="w-5 h-5 text-accent-primary" />}
-            statusBadge={{ status: 'unknown', label: terminalSummary }}
-            summaryText="Click to expand logs"
-            defaultExpanded={true}
-            defaultExpandedMobile={false}
-            localStorageKey="qonduit-dashboard-terminal-expanded"
-          >
-            <LogsPanel routerStatus={routerStatus} />
-          </MobileCollapsibleCard>
- 
+        <MobileCollapsibleCard
+          title="Slot Router Summary"
+          icon={<Router className="w-5 h-5 text-accent-tertiary" />}
+          statusBadge={{ status: routerSummaryStatus, label: routerSlots.length > 0 ? `${runningSlots}/${routerSlots.length} running` : routerSlotsError ? 'Unavailable' : 'Loading' }}
+          summaryText={routerSlots.length > 0 ? `${readySlots} ready · ${activeEndpoints} active endpoints` : routerSlotsError || 'Waiting for slot router data'}
+          metrics={[
+            { label: 'Total Slots', value: String(routerSlots.length) },
+            { label: 'Running', value: String(runningSlots) },
+            { label: 'Ready', value: String(readySlots) },
+            { label: 'Endpoints', value: String(activeEndpoints) },
+          ]}
+          action={{ label: 'Open Router', onClick: () => navigate('/router'), variant: 'primary' }}
+          defaultExpanded={true}
+          defaultExpandedMobile={false}
+          localStorageKey="qonduit-dashboard-slot-router-expanded"
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-3">
+              <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Primary</span>
+              <p className="text-sm font-mono text-text-primary mt-1">{primaryStatus}</p>
+            </div>
+            {openHandsStatus && (
+              <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-3">
+                <span className="text-[10px] text-text-tertiary uppercase tracking-wider">OpenHands</span>
+                <p className="text-sm font-mono text-text-primary mt-1">{openHandsStatus}</p>
+              </div>
+            )}
+            <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-3">
+              <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Detected GPU Memory</span>
+              <p className="text-sm font-mono text-text-primary mt-1">
+                {gpuSummary ? `${gpuSummary.used} used / ${gpuSummary.free} free` : gpuError || 'Unavailable'}
+              </p>
+              {gpuSummary && <p className="text-[10px] text-text-tertiary mt-1">Total: {gpuSummary.total}</p>}
+            </div>
+          </div>
+          {(routerSlotsError || routerEndpointsError || gpuError) && (
+            <div className="mt-3 rounded-lg border border-status-warning/20 bg-status-warning/5 p-3 text-xs text-status-warning">
+              {[routerSlotsError, routerEndpointsError, gpuError].filter(Boolean).join(' · ')}
+            </div>
+          )}
+        </MobileCollapsibleCard>
+
         {/* RAG Browser Card */}
                          <MobileCollapsibleCard
                            title="RAG Browser"
