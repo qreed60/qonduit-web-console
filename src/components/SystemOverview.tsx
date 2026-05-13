@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import StatusBadge from './StatusBadge';
 import GpuSummary from './GpuSummary';
 import { GpuStatus } from '../types';
+import { getGpuStatusSummaryFields } from '../utils/routerDisplay';
 import {
   Globe,
   Zap,
@@ -212,15 +213,18 @@ const SystemOverview: React.FC<SystemOverviewProps> = ({
                  )}
   
         {/* VRAM Summary */}
-                        {gpuStatus && (
-                          <div className="mt-3">
-                            <GpuSummary
-                              total={gpuStatus.memory_total_human}
-                              used={gpuStatus.memory_used_human}
-                              free={gpuStatus.memory_free_human}
-                            />
-                          </div>
-                        )}
+                        {gpuStatus && (() => {
+                          const gpuSummary = getGpuStatusSummaryFields(gpuStatus);
+                          return (
+                            <div className="mt-3">
+                              <GpuSummary
+                                total={gpuSummary.total}
+                                used={gpuSummary.used}
+                                free={gpuSummary.free}
+                              />
+                            </div>
+                          );
+                        })()}
                         {gpuError && !gpuStatus && (
                           <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-status-error/5 rounded-lg border border-status-error/15">
                             <Cpu className="w-3.5 h-3.5 text-status-error flex-shrink-0" />

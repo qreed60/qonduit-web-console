@@ -1,596 +1,323 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { getSettings, getRouterStatus, fetchRouterModels, fetchRouterGpu, launchModel as apiLaunchModel, stopModel as apiStopModel, restartRouterModel as apiRestartRouterModel, NormalizedModel } from '../services/api';
-import { ENDPOINTS } from '../config/endpoints';
-import { GpuInfo } from '../types';
-import Toast from '../components/Toast';
-import GpuSummary from '../components/GpuSummary';
-import GpuTable from '../components/GpuTable';
-import MobileCollapsibleCard from '../components/MobileCollapsibleCard';
-import MobileAccordionSection from '../components/MobileAccordionSection';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  Cpu,
+  fetchRouterEndpoints,
+  fetchRouterGpu,
+  fetchRouterSlotLogs,
+  fetchRouterSlots,
+  getSettings,
+  preflightRouterSlot,
+  runRouterSlotAction,
+} from '../services/api';
+import { ENDPOINTS } from '../config/endpoints';
+import { GpuInfo, RouterEndpoint, RouterSlot } from '../types';
+import { formatGpuLabel, getGpuStatusSummaryFields, isExcludedDisplayGpu } from '../utils/routerDisplay';
+import Toast from '../components/Toast';
+import MobileAccordionSection from '../components/MobileAccordionSection';
+import MobileCollapsibleCard from '../components/MobileCollapsibleCard';
+import SlotList from '../components/SlotList';
+import EndpointsPanel from '../components/EndpointsPanel';
+import RouterGpuPanel from '../components/RouterGpuPanel';
+import {
   AlertCircle,
   CheckCircle2,
+  Cpu,
+  Globe,
+  Layers3,
   Loader2,
-  Play,
-   Square,
-   RotateCcw,
-   HardDrive,
-   Plus,
-   ArrowRight,
 } from 'lucide-react';
 
-/**
- * Context size presets supporting up to 262k context models.
- */
-const PRESET_CTX = [4096, 8192, 16384, 32768, 65536, 131072, 262144];
-
 const RouterPage: React.FC = () => {
-  const navigate = useNavigate();
   const settings = getSettings();
   const mode = settings.endpointMode;
+  const routerBase = ENDPOINTS.router[mode];
 
-  // ── State: separate loading phases ──
-   const [refreshing, setRefreshing] = useState(false);
-   const inFlightRef = useRef(false);
-   const hasEverLoadedRef = useRef(false);
- 
-   // ── State: content data (preserved across refreshes) ──
-   const [routerStatus, setRouterStatus] = useState<{ running: boolean; exists: boolean } | null>(null);
-   const [routerModels, setRouterModels] = useState<NormalizedModel[]>([]);
-   const [suggestedCtx, setSuggestedCtx] = useState<number | null>(null);
-   const [selectedModel, setSelectedModel] = useState('');
-   const [ctxSize, setCtxSize] = useState(4096);
-   const [vramData, setVramData] = useState<{ total: string; used: string; free: string } | null>(null);
-   const [gpuRows, setGpuRows] = useState<Array<{ index: number; name: string; total: string; used: string; free: string; isDisplay?: boolean }>>([]);
- 
-   // ── State: errors & timestamps ──
-   const [contentError, setContentError] = useState<string | null>(null);
-   const [vramError, setVramError] = useState<string | null>(null);
-   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  const inFlightRef = useRef(false);
+  const hasEverLoadedRef = useRef(false);
 
-  // ── State: action feedback ──
-  const [actionLoading, setActionLoading] = useState(false);
-  const [actionStatus, setActionStatus] = useState<'idle' | 'launching' | 'stopping' | 'restarting' | 'success' | 'error'>('idle');
-  const [actionMessage, setActionMessage] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [slots, setSlots] = useState<RouterSlot[]>([]);
+  const [endpoints, setEndpoints] = useState<RouterEndpoint[]>([]);
+  const [vramData, setVramData] = useState<{ total: string; used: string; free: string } | null>(null);
+  const [gpuRows, setGpuRows] = useState<Array<{ index: number; label: string; name: string; total: string; used: string; free: string; isDisplay?: boolean }>>([]);
+
+  const [slotsError, setSlotsError] = useState<string | null>(null);
+  const [endpointsError, setEndpointsError] = useState<string | null>(null);
+  const [vramError, setVramError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [logsOpenBySlot, setLogsOpenBySlot] = useState<Record<string, boolean>>({});
+  const [logsBySlot, setLogsBySlot] = useState<Record<string, string[]>>({});
+  const [logsErrorBySlot, setLogsErrorBySlot] = useState<Record<string, string | null>>({});
+  const [preflightBySlot, setPreflightBySlot] = useState<Record<string, string | null>>({});
+  const [preflightErrorBySlot, setPreflightErrorBySlot] = useState<Record<string, string | null>>({});
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
 
-  // Track the context size used when the model was launched,
-  // so we can detect when context has changed and needs restart.
-  const [runningCtxSize, setRunningCtxSize] = useState<number | null>(null);
+  const fetchData = async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
 
-  // ── Data fetch (stale-while-revalidate) ──
-   const fetchData = async () => {
-     if (inFlightRef.current) return;
-     inFlightRef.current = true;
- 
-     // Use ref (not state) to avoid stale closure capturing initialLoading
-     if (hasEverLoadedRef.current) {
-       setRefreshing(true);
-       setContentError(null);
-     }
- 
-     try {
-       // ── Health: fetch router status — update immediately ──
-       try {
-         const status = await getRouterStatus();
-         setRouterStatus({ running: status.running, exists: status.exists });
-       } catch {
-         // Health failure — immediately show null (unknown/offline)
-         setRouterStatus(null);
-       }
- 
-       // ── Content: fetch models — preserve old data on failure ──
-       try {
-         const data = await fetchRouterModels();
-         setRouterModels(data.models || []);
-         if (data.suggestedCtx) setSuggestedCtx(data.suggestedCtx);
-         setContentError(null);
-       } catch {
-         setContentError('Model list refresh failed — showing last known data');
-       }
- 
-       // ── Content: fetch GPU/VRAM — preserve old data on failure ──
-       try {
-         const gpu = await fetchRouterGpu();
-         if (gpu.ok) {
-           setVramData({
-             total: gpu.memory_total_human,
-             used: gpu.memory_used_human,
-             free: gpu.memory_free_human,
-           });
-           setVramError(null);
-           const rows = gpu.gpus.map((g: GpuInfo) => ({
-             index: g.index,
-             name: g.name,
-             total: `${(g.memory_total_mib / 1024).toFixed(1)} GiB`,
-             used: `${(g.memory_used_mib / 1024).toFixed(1)} GiB`,
-             free: `${(g.memory_free_mib / 1024).toFixed(1)} GiB`,
-             isDisplay: /quadro|display|integrated|igd/i.test(g.name),
-           }));
-           setGpuRows(rows);
-         } else {
-           setVramError('VRAM unavailable — GPU endpoint returned ok:false');
-         }
-       } catch (err) {
-         setVramError(err instanceof Error ? err.message : 'Failed to fetch GPU status');
-       }
- 
-       setLastUpdated(Date.now());
-     } finally {
-       setRefreshing(false);
-       inFlightRef.current = false;
-       hasEverLoadedRef.current = true;
-     }
-   };
+    if (hasEverLoadedRef.current) {
+      setRefreshing(true);
+    }
+
+    try {
+      try {
+        const slotData = await fetchRouterSlots();
+        setSlots(slotData.slots || []);
+        setSlotsError(null);
+      } catch (err) {
+        setSlotsError(err instanceof Error ? err.message : 'Slot refresh failed — showing last known slots');
+      }
+
+      try {
+        const endpointData = await fetchRouterEndpoints();
+        setEndpoints(endpointData.endpoints || []);
+        setEndpointsError(null);
+      } catch (err) {
+        setEndpointsError(err instanceof Error ? err.message : 'Endpoint refresh failed — showing last known endpoints');
+      }
+
+      try {
+        const gpu = await fetchRouterGpu();
+        if (gpu.ok) {
+          setVramData(getGpuStatusSummaryFields(gpu));
+          setGpuRows(gpu.gpus.map((g: GpuInfo) => {
+            const gpuMemory = getGpuStatusSummaryFields(g);
+            return {
+              index: g.index,
+              label: formatGpuLabel(g),
+              name: g.name || 'Unknown GPU',
+              total: gpuMemory.total,
+              used: gpuMemory.used,
+              free: gpuMemory.free,
+              isDisplay: isExcludedDisplayGpu(g),
+            };
+          }));
+          setVramError(null);
+        } else {
+          setVramError('GPU endpoint returned ok:false — showing last known GPU data');
+        }
+      } catch (err) {
+        setVramError(err instanceof Error ? err.message : 'GPU refresh failed — showing last known GPU data');
+      }
+
+      setLastUpdated(Date.now());
+    } finally {
+      setRefreshing(false);
+      inFlightRef.current = false;
+      hasEverLoadedRef.current = true;
+    }
+  };
 
   useEffect(() => {
     fetchData();
-    // Refresh every 10 seconds
     const interval = setInterval(fetchData, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  // Track running context size when model starts/stops
-  useEffect(() => {
-    if (routerStatus?.running && selectedModel) {
-      setRunningCtxSize(ctxSize);
-    } else if (!routerStatus?.running) {
-      setRunningCtxSize(null);
-    }
-  }, [routerStatus?.running, selectedModel, ctxSize]);
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToastMessage(message);
+    setToastType(type);
+  };
 
-  // Auto-select first model if none selected
-  useEffect(() => {
-    if (!selectedModel && routerModels.length > 0) {
-      setSelectedModel(routerModels[0].name);
-    }
-  }, [routerModels, selectedModel]);
+  const refreshAfterAction = async () => {
+    hasEverLoadedRef.current = true;
+    await fetchData();
+  };
 
-  const isStale = (routerModels.length > 0 || vramData) && routerStatus === null;
-
-  const handleLaunch = async () => {
-    if (!selectedModel) return;
-    setActionLoading(true);
-    setActionStatus('launching');
-    setActionMessage('');
+  const handleSlotAction = async (slot: RouterSlot, action: 'launch' | 'stop' | 'restart') => {
+    setActionLoading(`${slot.slot_id}:${action}`);
     try {
-      const result = await apiLaunchModel(selectedModel, ctxSize);
-      if (result.ok) {
-        setActionStatus('success');
-        setActionMessage(result.message || 'Model launched successfully');
-        setToastMessage('Model launched successfully');
-        setRouterStatus(prev => prev ? { ...prev, running: true } : null);
-      } else {
-        setActionStatus('error');
-        setActionMessage(result.message || 'Failed to launch model');
-      }
+      const result = await runRouterSlotAction(slot.slot_id, action);
+      showToast(result.message || `${action} requested for ${slot.slot_id}`);
+      await refreshAfterAction();
     } catch (err) {
-      setActionStatus('error');
-      setActionMessage(err instanceof Error ? err.message : 'Failed to launch model');
+      showToast(err instanceof Error ? err.message : `Failed to ${action} ${slot.slot_id}`, 'error');
     } finally {
-      setActionLoading(false);
-      setTimeout(() => { setActionMessage(''); setActionStatus('idle'); }, 5000);
+      setActionLoading(null);
     }
   };
 
-  const handleStop = async () => {
-    setActionLoading(true);
-    setActionStatus('stopping');
-    setActionMessage('');
+  const handlePreflight = async (slot: RouterSlot) => {
+    setActionLoading(`${slot.slot_id}:preflight`);
+    setPreflightErrorBySlot((prev) => ({ ...prev, [slot.slot_id]: null }));
     try {
-      const result = await apiStopModel();
-      if (result.ok) {
-        setActionStatus('success');
-        setActionMessage(result.message || 'Model stopped successfully');
-        setToastMessage('Model stopped successfully');
-        setRouterStatus(prev => prev ? { ...prev, running: false } : null);
-      } else {
-        setActionStatus('error');
-        setActionMessage(result.message || 'Failed to stop model');
-      }
+      const result = await preflightRouterSlot(slot.slot_id, slot);
+      setPreflightBySlot((prev) => ({ ...prev, [slot.slot_id]: JSON.stringify(result, null, 2) }));
+      showToast(`Preflight complete for ${slot.slot_id}`, result.ok ? 'success' : 'info');
     } catch (err) {
-      setActionStatus('error');
-      setActionMessage(err instanceof Error ? err.message : 'Failed to stop model');
+      const message = err instanceof Error ? err.message : `Preflight failed for ${slot.slot_id}`;
+      setPreflightErrorBySlot((prev) => ({ ...prev, [slot.slot_id]: message }));
+      showToast(message, 'error');
     } finally {
-      setActionLoading(false);
-      setTimeout(() => { setActionMessage(''); setActionStatus('idle'); }, 5000);
+      setActionLoading(null);
     }
   };
 
-  const handleRestart = async () => {
-     if (!selectedModel) return;
-     setActionLoading(true);
-     setActionStatus('restarting');
-     setActionMessage('');
-     try {
-       const result = await apiRestartRouterModel(selectedModel, ctxSize);
-       if (result.ok) {
-         setActionStatus('success');
-         setActionMessage(result.message || 'Model restarted successfully');
-         setToastMessage('Model restarted successfully');
-         setRouterStatus(prev => prev ? { ...prev, running: true } : null);
-       } else {
-         setActionStatus('error');
-         setActionMessage(result.message || 'Failed to restart model');
-       }
-     } catch (err) {
-       const msg = err instanceof Error ? err.message : 'Failed to restart model';
-       if (msg.includes('model_required') || msg.includes('model')) {
-         setActionMessage('No model selected for restart. Please select a model first.');
-       } else {
-         setActionMessage(msg);
-       }
-       setActionStatus('error');
-     } finally {
-       setActionLoading(false);
-       setTimeout(() => { setActionMessage(''); setActionStatus('idle'); }, 5000);
-     }
-   };
+  const handleLogs = async (slot: RouterSlot) => {
+    const currentlyOpen = logsOpenBySlot[slot.slot_id] === true;
+    setLogsOpenBySlot((prev) => ({ ...prev, [slot.slot_id]: !currentlyOpen }));
+    if (currentlyOpen) return;
 
-  const isRunning = routerStatus?.running;
-  const canLaunch = !isRunning && !actionLoading && routerModels.length > 0 && !!selectedModel;
-  const canStop = isRunning && !actionLoading;
-  const canRestart = isRunning && !actionLoading && !!selectedModel;
-
-  // Context size has changed from what was used at launch
-  const ctxChanged = isRunning && runningCtxSize !== null && ctxSize !== runningCtxSize;
-
-  const handlePresetClick = (ctx: number) => {
-    setCtxSize(ctx);
+    setActionLoading(`${slot.slot_id}:logs`);
+    setLogsErrorBySlot((prev) => ({ ...prev, [slot.slot_id]: null }));
+    try {
+      const result = await fetchRouterSlotLogs(slot.slot_id);
+      setLogsBySlot((prev) => ({ ...prev, [slot.slot_id]: result.logs || [] }));
+    } catch (err) {
+      setLogsErrorBySlot((prev) => ({ ...prev, [slot.slot_id]: err instanceof Error ? err.message : `Failed to load logs for ${slot.slot_id}` }));
+    } finally {
+      setActionLoading(null);
+    }
   };
+
+  const handleEdit = (slot: RouterSlot) => {
+    showToast(`Edit slot ${slot.slot_id} opens in Phase 4.`, 'info');
+  };
+
+  const handleCopy = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      showToast(`${label} copied`);
+    } catch {
+      showToast(`Could not copy ${label}`, 'error');
+    }
+  };
+
+  const runningSlots = slots.filter((slot) => slot.running === true || slot.status === 'running').length;
+  const readySlots = slots.filter((slot) => slot.ready === true || slot.running === true || slot.status === 'running').length;
+  const activeEndpoints = endpoints.filter((endpoint) => endpoint.ready === true || endpoint.running === true || endpoint.status === 'running').length;
+  const slotStatus = slots.length > 0 ? (runningSlots > 0 ? 'online' : 'offline') : (slotsError ? 'offline' : 'unknown');
+  const endpointStatus = endpoints.length > 0 ? (activeEndpoints > 0 ? 'online' : 'offline') : (endpointsError ? 'offline' : 'unknown');
+  const gpuStatus = vramData ? 'online' : (vramError ? 'offline' : 'unknown');
+
+  const isStale = Boolean((slotsError || endpointsError || vramError) && hasEverLoadedRef.current);
 
   const formatTimeAgo = (ts: number) => {
     const diff = Date.now() - ts;
     const secs = Math.floor(diff / 1000);
     if (secs < 10) return 'just now';
     if (secs < 60) return `${secs}s ago`;
-    const mins = Math.floor(secs / 60);
-    return `${mins}m ago`;
+    return `${Math.floor(secs / 60)}m ago`;
   };
 
   return (
-        <div className={`px-4 py-4 sm:px-6 sm:py-6 h-full flex flex-col ${isStale ? 'opacity-80' : ''}`}>
-          {/* Header */}
-          <div className="mb-4 sm:mb-6">
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
-                Router
-              </h2>
-              {refreshing && (
-                <span className="flex items-center gap-1 text-[10px] sm:text-xs text-text-tertiary">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Refreshing…
-                </span>
-              )}
-              {isStale && (
-                <span className="flex items-center gap-1 text-[10px] sm:text-xs text-status-warning bg-status-warning/10 px-2 py-0.5 rounded-full">
-                  <AlertCircle className="w-3 h-3" />
-                  Data stale
-                </span>
-              )}
-            </div>
-            <p className="text-sm text-text-secondary mt-1">
-               Launch and manage local GGUF models via the Qonduit Router
-             </p>
-             <button
-               onClick={() => navigate('/models')}
-               className="mt-2 inline-flex items-center gap-1.5 text-xs text-accent-primary hover:text-accent-primary-hover font-medium transition-colors"
-             >
-               <Plus className="w-3 h-3" />
-               Add model from Hugging Face
-               <ArrowRight className="w-3 h-3" />
-             </button>
-             {lastUpdated && !refreshing && (
-               <p className="text-[10px] sm:text-xs text-text-tertiary mt-0.5">
-                 Updated {formatTimeAgo(lastUpdated)}
-               </p>
-             )}
-          </div>
-  
-        {/* Main Content */}
-        <div className="flex-1 overflow-y-auto space-y-4">
-          {/* Router Status */}
-          <div className="bg-bg-card rounded-xl border border-border-primary p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-text-primary">Router Status</h3>
-              {refreshing && !routerStatus ? (
-                <Loader2 className="w-4 h-4 text-text-tertiary animate-spin" />
-              ) : routerStatus ? (
-                <div className="flex items-center gap-2">
-                  {routerStatus.running ? (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 text-status-success" />
-                      <span className="text-xs font-medium text-status-success">Running</span>
-                    </>
-                  ) : routerStatus.exists ? (
-                    <>
-                      <AlertCircle className="w-4 h-4 text-status-warning" />
-                      <span className="text-xs font-medium text-status-warning">Stopped</span>
-                    </>
-                  ) : (
-                    <>
-                      <AlertCircle className="w-4 h-4 text-text-tertiary" />
-                      <span className="text-xs font-medium text-text-tertiary">Not Found</span>
-                    </>
-                  )}
-                </div>
-              ) : (
-                <span className="text-xs text-text-tertiary">Unknown</span>
-              )}
-            </div>
-            <div className="bg-bg-secondary/50 rounded-lg p-3 border border-border-subtle">
-              <p className="text-xs text-text-secondary mb-1">Router Endpoint</p>
-              <p className="text-xs font-mono text-text-primary break-all">{ENDPOINTS.router[mode]}</p>
-            </div>
-          </div>
-  
-          {/* GPU Status Card */}
-           <MobileCollapsibleCard
-             title="GPU Status"
-             icon={<Cpu className="w-5 h-5 text-accent-primary" />}
-             statusBadge={vramData ? { status: 'online', label: `${vramData.total} total` } : { status: 'unknown', label: 'Unavailable' }}
-             summaryText={vramData ? `Used: ${vramData.used} / Free: ${vramData.free}` : 'GPU information unavailable'}
-             metrics={vramData ? [
-               { label: 'Total', value: vramData.total },
-               { label: 'Used', value: vramData.used },
-               { label: 'Free', value: vramData.free },
-             ] : undefined}
-             defaultExpanded={true}
-             defaultExpandedMobile={false}
-             localStorageKey="qonduit-router-gpu"
-           >
-             {vramData ? (
-               <div className="space-y-3">
-                 <GpuSummary total={vramData.total} used={vramData.used} free={vramData.free} />
-                 {gpuRows.length > 0 && <GpuTable rows={gpuRows} />}
-               </div>
-             ) : (
-               <div className="bg-bg-secondary/50 rounded-lg p-3 border border-border-subtle">
-                 <p className="text-xs text-text-tertiary">{vramError || 'VRAM data unavailable'}</p>
-               </div>
-             )}
-           </MobileCollapsibleCard>
-  
-          {/* Launchable Models Card */}
-           <MobileCollapsibleCard
-             title="Launchable Models"
-             icon={<Cpu className="w-5 h-5 text-accent-tertiary" />}
-             statusBadge={
-               routerModels.length > 0 && isRunning ? { status: 'online', label: `Running: ${selectedModel}` } :
-               routerModels.length > 0 ? { status: 'offline', label: `${routerModels.length} available` } :
-               { status: 'unknown', label: 'None' }
-             }
-             summaryText={
-               isRunning ? `Running: ${selectedModel}` :
-               selectedModel ? `Selected: ${selectedModel}` :
-               'No models available'
-             }
-             defaultExpanded={true}
-             defaultExpandedMobile={false}
-             localStorageKey="qonduit-router-launchable"
-           >
-             {!hasEverLoadedRef.current ? (
-               <div className="flex items-center justify-center py-8">
-                 <Loader2 className="w-6 h-6 text-text-tertiary animate-spin" />
-               </div>
-             ) : routerModels.length > 0 ? (
-               <div className="space-y-4">
-                 {/* Content Error Warning */}
-                 {contentError && (
-                   <div className="p-2 bg-status-warning/5 border border-status-warning/20 rounded-lg">
-                     <p className="text-[10px] text-status-warning flex items-center gap-1">
-                       <AlertCircle className="w-3 h-3" />
-                       {contentError}
-                     </p>
-                   </div>
-                 )}
- 
-                 {/* Model selection grid */}
-                 <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 ${isStale ? 'opacity-70' : ''}`}>
-                   {routerModels.map((model) => {
-                     const isSelected = model.name === selectedModel;
-                     const isThisRunning = isRunning && isSelected;
-                     return (
-                       <button
-                         key={model.name}
-                         onClick={() => setSelectedModel(model.name)}
-                         className={`text-left p-4 rounded-lg border-2 transition-all duration-200 ${
-                           isSelected
-                             ? 'border-accent-primary bg-accent-primary/5'
-                             : isThisRunning
-                             ? 'border-status-success bg-status-success/5'
-                             : 'border-border-subtle bg-bg-secondary/30 hover:border-border-primary'
-                         }`}
-                       >
-                         <div className="flex items-start justify-between mb-2">
-                           <p className="text-xs font-mono text-text-primary truncate flex-1" title={model.name}>
-                             {model.name}
-                           </p>
-                           {isThisRunning && (
-                             <CheckCircle2 className="w-3.5 h-3.5 text-status-success flex-shrink-0 ml-2" />
-                           )}
-                         </div>
-                         {model.path && (
-                           <p className="text-[10px] font-mono text-text-tertiary truncate mb-2" title={model.path}>
-                             {model.path}
-                           </p>
-                         )}
-                         <div className="flex items-center gap-2 text-[10px] text-text-tertiary flex-wrap">
-                           {model.parameterSize && model.parameterSize !== 'unknown' ? (
-                             <span className="flex items-center gap-1">
-                               <Cpu className="w-3 h-3" />
-                               {model.parameterSize}
-                             </span>
-                           ) : (
-                             <span className="text-text-tertiary/50">Param: unknown</span>
-                           )}
-                           {model.fileSize && model.fileSize !== 'unknown' ? (
-                             <span className="flex items-center gap-1">
-                               <HardDrive className="w-3 h-3" />
-                               {model.fileSize}
-                             </span>
-                           ) : (
-                             <span className="text-text-tertiary/50">
-                               <HardDrive className="w-3 h-3 inline" />
-                               Size: unknown
-                             </span>
-                           )}
-                           {suggestedCtx && (
-                             <span className="text-accent-primary">ctx: {suggestedCtx}</span>
-                           )}
-                         </div>
-                       </button>
-                     );
-                   })}
-                 </div>
- 
-                 {/* Context Size Selector */}
-                 <div className="pt-4 border-t border-border-subtle">
-                   <div className="flex items-center justify-between mb-2">
-                     <label className="text-xs font-medium text-text-secondary">Context Size</label>
-                     <span className="text-xs font-mono text-accent-primary font-semibold">{ctxSize.toLocaleString()}</span>
-                   </div>
-                   <div className="flex gap-1.5 mb-2 overflow-x-auto pb-1 -mx-1 px-1 sm:flex-nowrap sm:overflow-visible">
-                     {PRESET_CTX.map((ctx) => (
-                       <button
-                         key={ctx}
-                         onClick={() => handlePresetClick(ctx)}
-                         disabled={actionLoading}
-                         className={`flex-shrink-0 min-w-[60px] sm:flex-1 px-2 py-2 rounded-md text-xs font-medium transition-all duration-200 ${
-                           ctxSize === ctx
-                             ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/30'
-                             : 'bg-bg-secondary border border-border-subtle text-text-tertiary hover:text-text-primary hover:border-border-primary disabled:opacity-50 disabled:cursor-not-allowed'
-                         }`}
-                       >
-                         {ctx >= 1000 ? `${ctx / 1000}k` : ctx}
-                       </button>
-                     ))}
-                   </div>
-                   {suggestedCtx && ctxSize !== suggestedCtx && (
-                     <p className="text-[10px] sm:text-xs text-accent-primary">Suggested: {suggestedCtx}</p>
-                   )}
-                   {ctxChanged && (
-                     <p className="text-[10px] sm:text-xs text-status-warning flex items-center gap-1 mt-1">
-                       <AlertCircle className="w-3 h-3" />
-                       Context changed from {runningCtxSize?.toLocaleString()} — restart to apply
-                     </p>
-                   )}
-                 </div>
- 
-                 {/* Action Buttons */}
-                 <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-                   <button
-                     onClick={handleLaunch}
-                     disabled={!canLaunch}
-                     className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
-                       canLaunch
-                         ? 'bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20'
-                         : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
-                     }`}
-                   >
-                     {actionLoading && actionStatus === 'launching' ? (
-                       <Loader2 className="w-4 h-4 animate-spin" />
-                     ) : (
-                       <Play className="w-4 h-4" />
-                     )}
-                     {actionLoading && actionStatus === 'launching' ? 'Launching...' : 'Start'}
-                   </button>
-                   <button
-                     onClick={handleRestart}
-                     disabled={!canRestart}
-                     className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
-                       canRestart
-                         ? ctxChanged
-                           ? 'bg-status-warning/10 text-status-warning border border-status-warning/30 hover:bg-status-warning/20 animate-pulse'
-                           : 'bg-accent-secondary/10 text-accent-secondary border border-accent-secondary/20 hover:bg-accent-secondary/20'
-                         : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
-                     }`}
-                   >
-                     {actionLoading && actionStatus === 'restarting' ? (
-                       <Loader2 className="w-4 h-4 animate-spin" />
-                     ) : (
-                       <RotateCcw className="w-4 h-4" />
-                     )}
-                     {actionLoading && actionStatus === 'restarting' ? 'Restarting...' : 'Restart'}
-                   </button>
-                   <button
-                     onClick={handleStop}
-                     disabled={!canStop}
-                     className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
-                       canStop
-                         ? 'bg-status-error/10 text-status-error border border-status-error/20 hover:bg-status-error/20'
-                         : 'bg-bg-tertiary text-text-secondary border border-border-primary cursor-not-allowed'
-                     }`}
-                   >
-                     {actionLoading && actionStatus === 'stopping' ? (
-                       <Loader2 className="w-4 h-4 animate-spin" />
-                     ) : (
-                       <Square className="w-4 h-4" />
-                     )}
-                     {actionLoading && actionStatus === 'stopping' ? 'Stopping...' : 'Stop'}
-                   </button>
-                 </div>
- 
-                 {/* Action Message */}
-                 {actionMessage && (
-                   <div className={`flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs ${
-                     actionStatus === 'success'
-                       ? 'bg-status-success/10 text-status-success border border-status-success/20'
-                       : actionStatus === 'error'
-                       ? 'bg-status-error/10 text-status-error border border-status-error/20'
-                       : 'bg-bg-secondary/50 text-text-secondary border border-border-subtle'
-                   }`}>
-                     {actionStatus === 'success' ? (
-                       <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                     ) : actionStatus === 'error' ? (
-                       <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                     ) : null}
-                     <span>{actionMessage}</span>
-                   </div>
-                 )}
- 
-                 {/* Info note */}
-                 <p className="text-[10px] text-text-tertiary mt-3 text-center">
-                   Select a model card above, then use the action buttons. Context changes take effect on launch or restart.
-                 </p>
-               </div>
-             ) : (
-               <div className="text-center py-8">
-                 <p className="text-text-tertiary text-sm">No models available</p>
-                 <p className="text-text-tertiary/60 text-xs mt-1">Add GGUF files to the Router&apos;s model directory</p>
-                 <button
-                   onClick={() => navigate('/models')}
-                   className="mt-3 flex items-center gap-1.5 mx-auto px-3 py-1.5 bg-accent-primary/10 text-accent-primary border border-accent-primary/30 rounded-lg text-xs font-medium hover:bg-accent-primary/20 transition-colors"
-                 >
-                   <Plus className="w-3 h-3" />
-                   Add model from Hugging Face →
-                 </button>
-               </div>
-             )}
-           </MobileCollapsibleCard>
-  
-          {/* About the Router — collapsed by default on mobile */}
-            <MobileAccordionSection title="About the Router" defaultOpen={false} localStorageKey="qonduit-router-about">
-              <p className="text-xs sm:text-sm text-text-secondary leading-relaxed">
-                The Qonduit Router is a control-plane service that manages model lifecycle.
-                It launches and stops llama.cpp servers that serve GGUF models via the Direct endpoint.
-                Router operation is independent of your chat provider setting (Gateway or Direct) —
-                you can launch models from the Dashboard at any time.
-              </p>
-              <p className="text-[10px] sm:text-xs text-text-tertiary mt-2">
-                Note: GPU memory shown includes all detected GPUs (including display adapters). Not all detected VRAM may be available for inference.
-              </p>
-            </MobileAccordionSection>
+    <div className={`px-4 py-4 sm:px-6 sm:py-6 h-full flex flex-col ${isStale ? 'opacity-90' : ''}`}>
+      <div className="mb-4 sm:mb-6">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg sm:text-xl font-bold bg-gradient-to-r from-accent-primary to-accent-tertiary bg-clip-text text-transparent">
+            Router
+          </h2>
+          {refreshing && (
+            <span className="flex items-center gap-1 text-[10px] sm:text-xs text-text-tertiary">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Refreshing…
+            </span>
+          )}
+          {isStale && (
+            <span className="flex items-center gap-1 text-[10px] sm:text-xs text-status-warning bg-status-warning/10 px-2 py-0.5 rounded-full">
+              <AlertCircle className="w-3 h-3" />
+              Showing last known data
+            </span>
+          )}
         </div>
-  
-        {/* Toast */}
-        {toastMessage && (
-          <Toast message={toastMessage} type="success" onClose={() => setToastMessage(null)} />
-        )}
+        <p className="text-sm text-text-secondary mt-1">
+          Manage the multi-slot Qonduit Router, slot endpoints, and GPU allocation status.
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] sm:text-xs text-text-tertiary">
+          <span className="font-mono bg-bg-secondary/60 border border-border-subtle rounded px-2 py-1">{routerBase}</span>
+          {lastUpdated && !refreshing && <span>Updated {formatTimeAgo(lastUpdated)}</span>}
+        </div>
       </div>
-    );
-  };
-  
-  export default RouterPage;
+
+      <div className="flex-1 overflow-y-auto space-y-4">
+        <MobileCollapsibleCard
+          title="Slots"
+          icon={<Layers3 className="w-5 h-5 text-accent-primary" />}
+          statusBadge={{ status: slotStatus, label: slots.length > 0 ? `${runningSlots}/${slots.length} running` : 'No slots' }}
+          summaryText={slots.length > 0 ? `${readySlots} ready · ${slots.length} total` : 'No slot data loaded'}
+          metrics={slots.length > 0 ? [
+            { label: 'Total', value: String(slots.length) },
+            { label: 'Running', value: String(runningSlots) },
+            { label: 'Ready', value: String(readySlots) },
+          ] : undefined}
+          defaultExpanded={true}
+          defaultExpandedMobile={true}
+          localStorageKey="qonduit-router-slots"
+        >
+          <SlotList
+            slots={slots}
+            error={slotsError}
+            actionLoading={actionLoading}
+            logsOpenBySlot={logsOpenBySlot}
+            logsBySlot={logsBySlot}
+            logsErrorBySlot={logsErrorBySlot}
+            preflightBySlot={preflightBySlot}
+            preflightErrorBySlot={preflightErrorBySlot}
+            onLaunch={(slot) => handleSlotAction(slot, 'launch')}
+            onStop={(slot) => handleSlotAction(slot, 'stop')}
+            onRestart={(slot) => handleSlotAction(slot, 'restart')}
+            onEdit={handleEdit}
+            onPreflight={handlePreflight}
+            onLogs={handleLogs}
+          />
+        </MobileCollapsibleCard>
+
+        <MobileCollapsibleCard
+          title="Endpoints"
+          icon={<Globe className="w-5 h-5 text-accent-secondary" />}
+          statusBadge={{ status: endpointStatus, label: endpoints.length > 0 ? `${activeEndpoints}/${endpoints.length} active` : 'No endpoints' }}
+          summaryText={endpoints.length > 0 ? 'OpenAI-compatible slot base URLs' : 'No endpoint data loaded'}
+          metrics={endpoints.length > 0 ? [
+            { label: 'Total', value: String(endpoints.length) },
+            { label: 'Active', value: String(activeEndpoints) },
+          ] : undefined}
+          defaultExpanded={true}
+          defaultExpandedMobile={false}
+          localStorageKey="qonduit-router-endpoints"
+        >
+          <EndpointsPanel routerBase={routerBase} endpoints={endpoints} error={endpointsError} onCopy={handleCopy} />
+        </MobileCollapsibleCard>
+
+        <MobileCollapsibleCard
+          title="GPU Status"
+          icon={<Cpu className="w-5 h-5 text-accent-tertiary" />}
+          statusBadge={{ status: gpuStatus, label: vramData ? `${vramData.total} total` : 'Unavailable' }}
+          summaryText={vramData ? `Used: ${vramData.used} / Free: ${vramData.free}` : 'GPU information unavailable'}
+          metrics={vramData ? [
+            { label: 'Total', value: vramData.total },
+            { label: 'Used', value: vramData.used },
+            { label: 'Free', value: vramData.free },
+          ] : undefined}
+          defaultExpanded={true}
+          defaultExpandedMobile={false}
+          localStorageKey="qonduit-router-gpu"
+        >
+          <RouterGpuPanel vramData={vramData} gpuRows={gpuRows} error={vramError} />
+        </MobileCollapsibleCard>
+
+        <MobileAccordionSection title="About the Multi-Slot Router" defaultOpen={false} localStorageKey="qonduit-router-about">
+          <p className="text-xs sm:text-sm text-text-secondary leading-relaxed">
+            The multi-slot Qonduit Router manages independent llama.cpp slots such as Primary and OpenHands.
+            Each slot can expose its own OpenAI-compatible base URL while sharing the router control plane.
+          </p>
+          <div className="flex items-start gap-2 mt-3 text-[10px] sm:text-xs text-text-tertiary">
+            <CheckCircle2 className="w-3.5 h-3.5 text-status-success flex-shrink-0 mt-0.5" />
+            <p>
+              Background polling refreshes slots, endpoints, and GPU data without blanking the last successful response.
+              GPU 1 / Quadro K620 is displayed as an excluded display adapter and is not labeled as an inference GPU.
+            </p>
+          </div>
+        </MobileAccordionSection>
+      </div>
+
+      {toastMessage && (
+        <Toast message={toastMessage} type={toastType} onClose={() => setToastMessage(null)} />
+      )}
+    </div>
+  );
+};
+
+export default RouterPage;
