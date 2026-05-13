@@ -1,8 +1,8 @@
-import { Settings, ProviderType, ChatMessage, NormalizedModel, GpuStatus, RouterStatus, RouterSlotsResponse, RouterEndpointsResponse, RouterPreflightRequest, RouterPreflightResponse, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse, ChatAttachmentPayload } from '../types';
+import { Settings, ProviderType, ChatMessage, NormalizedModel, GpuStatus, RouterStatus, RouterSlotsResponse, RouterEndpointsResponse, RouterPreflightRequest, RouterPreflightResponse, RouterSlotActionResponse, RouterSlotLogsResponse, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse, ChatAttachmentPayload } from '../types';
 import { getMode, apiPath } from '../config/endpoints';
 
 // Re-export NormalizedModel for convenience
-export type { NormalizedModel, GpuStatus, RouterStatus, RouterSlotsResponse, RouterEndpointsResponse, RouterPreflightRequest, RouterPreflightResponse, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse };
+export type { NormalizedModel, GpuStatus, RouterStatus, RouterSlotsResponse, RouterEndpointsResponse, RouterPreflightRequest, RouterPreflightResponse, RouterSlotActionResponse, RouterSlotLogsResponse, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse };
 
 // ── Model metadata helpers ──────────────────────────────────────────────────
 
@@ -467,6 +467,45 @@ export async function preflightRouterSlot(
     }),
     `Router /api/v1/qonduit-router/slots/${slotId}/preflight`
   );
+}
+
+export async function runRouterSlotAction(
+  slotId: string,
+  action: 'launch' | 'stop' | 'restart',
+): Promise<RouterSlotActionResponse> {
+  const url = apiPath('router', `/api/v1/qonduit-router/slots/${encodeURIComponent(slotId)}/${action}`);
+  return parseJsonSafe<RouterSlotActionResponse>(
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slot_id: slotId }),
+    }),
+    `Router /api/v1/qonduit-router/slots/${slotId}/${action}`
+  );
+}
+
+export async function fetchRouterSlotLogs(slotId: string): Promise<RouterSlotLogsResponse> {
+  const url = apiPath('router', `/api/v1/qonduit-router/slots/${encodeURIComponent(slotId)}/logs`);
+  const raw = await parseJsonSafe<unknown>(
+    await fetch(url),
+    `Router /api/v1/qonduit-router/slots/${slotId}/logs`
+  );
+
+  if (Array.isArray(raw)) {
+    return { ok: true, slot_id: slotId, logs: raw.map((line) => String(line)) };
+  }
+
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    const logs = Array.isArray(obj.logs)
+      ? obj.logs.map((line) => typeof line === 'string' ? line : JSON.stringify(line))
+      : typeof obj.text === 'string'
+        ? obj.text.split('\n')
+        : [];
+    return { ...obj, ok: typeof obj.ok === 'boolean' ? obj.ok : undefined, slot_id: typeof obj.slot_id === 'string' ? obj.slot_id : slotId, logs };
+  }
+
+  return { ok: false, slot_id: slotId, logs: [] };
 }
 
 // ── Unified provider model fetcher ──────────────────────────────────────────

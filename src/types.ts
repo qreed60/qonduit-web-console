@@ -249,7 +249,7 @@ export interface RouterPreflightRequest {
   model_path?: string;
   context_size?: number;
   n_ctx?: number;
-  gpu_devices?: string | number[];
+  gpu_devices?: string | number[] | GpuInfo[];
   tensor_split?: string | number[];
   embeddings?: boolean;
   host_port?: number | string;
@@ -274,6 +274,21 @@ export interface RouterPreflightResponse {
   warnings?: string[];
   errors?: string[];
   request?: RouterPreflightRequest;
+  [key: string]: unknown;
+}
+
+export interface RouterSlotActionResponse {
+  ok: boolean;
+  slot_id?: string;
+  action?: 'launch' | 'stop' | 'restart' | string;
+  message?: string;
+  [key: string]: unknown;
+}
+
+export interface RouterSlotLogsResponse {
+  ok?: boolean;
+  slot_id?: string;
+  logs: string[];
   [key: string]: unknown;
 }
 
