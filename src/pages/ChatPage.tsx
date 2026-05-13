@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { fetchProviderModels, fetchChatCompletions, streamChatCompletions, getSettings, NormalizedModel } from '../services/api';
-import { ChatMessage, ProviderType, ChatAttachment, ChatAttachmentMode, ChatAttachmentPayload } from '../types';
+import { fetchProviderModels, fetchChatCompletions, streamChatCompletions, getSettings, NormalizedModel, fetchRouterEndpoints, fetchOpenAiModelsFromBase } from '../services/api';
+import { ChatMessage, ProviderType, ChatAttachment, ChatAttachmentMode, ChatAttachmentPayload, RouterEndpoint } from '../types';
 import Toast from '../components/Toast';
 import RagContextSelector from '../components/RagContextSelector';
 import ChatAttachmentChips from '../components/ChatAttachmentChips';
 import { fileToBase64, formatFileSize, MAX_ATTACHMENT_SIZE } from '../utils/fileUtils';
+import { safeDisplayValue } from '../utils/routerDisplay';
 import {
   Send,
   Loader2,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react';
 
 const RAG_SELECTION_KEY = 'qonduit-rag-chat-selection';
+type ChatEndpointMode = 'gateway' | 'direct-slot' | 'gateway-slot';
 
 const ChatPage: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -31,6 +33,11 @@ const ChatPage: React.FC = () => {
   const [selectedModel, setSelectedModel] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [currentProvider, setCurrentProvider] = useState<ProviderType>('Direct');
+  const [endpointMode, setEndpointMode] = useState<ChatEndpointMode>('gateway');
+  const [slotEndpoints, setSlotEndpoints] = useState<RouterEndpoint[]>([]);
+  const [selectedSlotId, setSelectedSlotId] = useState('');
+  const [slotEndpointsLoading, setSlotEndpointsLoading] = useState(false);
+  const [slotEndpointsError, setSlotEndpointsError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -61,18 +68,6 @@ const ChatPage: React.FC = () => {
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load models when provider changes or on mount
-  useEffect(() => {
-    const settings = getSettings();
-    setCurrentProvider(settings.defaultProvider);
-    loadModels(settings.defaultProvider);
-  }, []);
-
-  // Reload models when provider changes
-  useEffect(() => {
-    loadModels(currentProvider);
-  }, [currentProvider]);
-
   // Auto-scroll to bottom on new messages or streaming content
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -83,11 +78,46 @@ const ChatPage: React.FC = () => {
     inputRef.current?.focus();
   }, []);
 
+  const loadSlotEndpoints = async () => {
+    setSlotEndpointsLoading(true);
+    try {
+      const data = await fetchRouterEndpoints();
+      const endpoints = data.endpoints || [];
+      setSlotEndpoints(endpoints);
+      setSlotEndpointsError(null);
+      if (!selectedSlotId && endpoints.length > 0) {
+        const primary = endpoints.find((endpoint) => endpoint.slot_id === 'primary');
+        setSelectedSlotId(primary?.slot_id || endpoints[0].slot_id);
+      }
+    } catch (err) {
+      setSlotEndpointsError(err instanceof Error ? err.message : 'Failed to fetch router slot endpoints');
+    } finally {
+      setSlotEndpointsLoading(false);
+    }
+  };
+
+  const selectedSlotEndpoint = slotEndpoints.find((endpoint) => endpoint.slot_id === selectedSlotId) || null;
+  const selectedSlotReady = selectedSlotEndpoint
+    ? selectedSlotEndpoint.ready === true || selectedSlotEndpoint.running === true || selectedSlotEndpoint.status === 'running'
+    : false;
+  const selectedEndpointBase = endpointMode === 'direct-slot' ? selectedSlotEndpoint?.openai_base || '' : 'Gateway/default';
+  const directSlotWarning = endpointMode === 'direct-slot'
+    ? !selectedSlotEndpoint
+      ? 'Selected router slot endpoint is unavailable.'
+      : !selectedSlotReady
+        ? `${safeDisplayValue(selectedSlotEndpoint.slot_id)} is not ready.`
+        : !selectedSlotEndpoint.openai_base
+          ? `${safeDisplayValue(selectedSlotEndpoint.slot_id)} has no OpenAI base URL.`
+          : null
+    : null;
+  const gatewaySlotRoutingSupported = false;
+
   const loadModels = async (provider: ProviderType = currentProvider) => {
     setModelLoading(true);
     try {
       const providerModels = await fetchProviderModels(provider);
       setModels(providerModels);
+      setError(null);
       if (providerModels.length > 0) {
         const settings = getSettings();
         const defaultModel = providerModels.find(m => m.id === settings.defaultModel);
@@ -100,8 +130,50 @@ const ChatPage: React.FC = () => {
     }
   };
 
+  // Load models and router slot endpoints on mount
+  useEffect(() => {
+    const settings = getSettings();
+    setCurrentProvider(settings.defaultProvider);
+    loadModels(settings.defaultProvider);
+    loadSlotEndpoints();
+  }, []);
+
+  // Reload Gateway/default models when provider changes
+  useEffect(() => {
+    if (endpointMode === 'gateway') {
+      loadModels(currentProvider);
+    }
+  }, [currentProvider, endpointMode]);
+
+  // Reload models from a direct slot endpoint when that endpoint selection changes
+  useEffect(() => {
+    if (endpointMode !== 'direct-slot') return;
+    if (!selectedSlotEndpoint?.openai_base || !selectedSlotReady) {
+      setModels([]);
+      setSelectedModel('');
+      return;
+    }
+
+    setModelLoading(true);
+    fetchOpenAiModelsFromBase(selectedSlotEndpoint.openai_base, 'Direct')
+      .then((slotModels) => {
+        setModels(slotModels);
+        setSelectedModel(slotModels[0]?.id || '');
+      })
+      .catch((err) => {
+        setModels([]);
+        setSelectedModel('');
+        setError(err instanceof Error ? err.message : 'Failed to fetch direct slot models');
+      })
+      .finally(() => setModelLoading(false));
+  }, [endpointMode, selectedSlotEndpoint?.openai_base, selectedSlotEndpoint?.slot_id, selectedSlotReady]);
+
   const handleSend = async () => {
     if (!input.trim() || !selectedModel || loading || isStreaming) return;
+    if (endpointMode === 'direct-slot' && (directSlotWarning || !selectedSlotEndpoint?.openai_base)) {
+      setError(directSlotWarning || 'No direct router slot endpoint selected.');
+      return;
+    }
 
     const userMessage: ChatMessage = { role: 'user', content: input.trim() };
     const newMessages = [...messages, userMessage];
@@ -114,7 +186,7 @@ const ChatPage: React.FC = () => {
 
     try {
       // Build RAG selection for Gateway mode
-      const ragPayload = (currentProvider === 'Gateway' && appliedRag.enabled && appliedRag.projectId)
+      const ragPayload = (endpointMode === 'gateway' && currentProvider === 'Gateway' && appliedRag.enabled && appliedRag.projectId)
         ? {
             projectId: appliedRag.projectId,
             collection: appliedRag.collection || undefined,
@@ -140,6 +212,8 @@ const ChatPage: React.FC = () => {
         attachmentPayloads = processed;
       }
 
+      const chatEndpointBase = endpointMode === 'direct-slot' ? selectedSlotEndpoint?.openai_base : undefined;
+
       // Try streaming first
       let assistantContent = '';
       let streamSupported = false;
@@ -150,7 +224,9 @@ const ChatPage: React.FC = () => {
           newMessages,
           undefined,
           ragPayload,
-          attachmentPayloads
+          attachmentPayloads,
+          undefined,
+          chatEndpointBase
         )) {
           if (chunk.type === 'delta') {
             assistantContent += chunk.content;
@@ -169,6 +245,7 @@ const ChatPage: React.FC = () => {
             undefined,
             ragPayload,
             attachmentPayloads,
+            chatEndpointBase,
           );
           const assistantMessage = response.choices?.[0]?.message;
           assistantContent = assistantMessage?.content || '';
@@ -347,10 +424,50 @@ const ChatPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Endpoint mode + slot selector */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+            <select
+              value={endpointMode}
+              onChange={(e) => setEndpointMode(e.target.value as ChatEndpointMode)}
+              disabled={loading || isStreaming}
+              className="flex-1 sm:flex-initial px-4 py-3 bg-bg-secondary border border-border-primary rounded-lg text-sm font-medium text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]"
+            >
+              <option value="gateway">Gateway/default</option>
+              <option value="direct-slot">Direct router slot</option>
+              <option value="gateway-slot" disabled={!gatewaySlotRoutingSupported}>Gateway-routed slot (backend support needed)</option>
+            </select>
+            {endpointMode === 'direct-slot' && (
+              <select
+                value={selectedSlotId}
+                onChange={(e) => setSelectedSlotId(e.target.value)}
+                disabled={loading || isStreaming || slotEndpointsLoading || slotEndpoints.length === 0}
+                className="flex-1 sm:flex-initial px-4 py-3 bg-bg-secondary border border-border-primary rounded-lg text-sm font-medium text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]"
+              >
+                {slotEndpoints.length === 0 ? (
+                  <option value="">No slots</option>
+                ) : (
+                  slotEndpoints.map((endpoint) => (
+                    <option key={endpoint.slot_id} value={endpoint.slot_id}>
+                      {safeDisplayValue(endpoint.name || endpoint.slot_id)} — {endpoint.ready || endpoint.running ? 'ready' : safeDisplayValue(endpoint.status || 'unavailable')}
+                    </option>
+                  ))
+                )}
+              </select>
+            )}
+            <button
+              onClick={() => { loadModels(currentProvider); loadSlotEndpoints(); }}
+              disabled={loading || isStreaming || modelLoading || slotEndpointsLoading}
+              className="p-3 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-h-[48px] min-w-[48px] flex items-center justify-center"
+              title="Refresh models and slot endpoints"
+            >
+              <RefreshCw className={`w-5 h-5 ${modelLoading || slotEndpointsLoading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
           {/* Row 2: RAG + Settings on mobile, side by side on desktop */}
           <div className="flex flex-row items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
             {/* RAG Context Selector (only in Gateway mode) */}
-            {currentProvider === 'Gateway' && (
+            {endpointMode === 'gateway' && currentProvider === 'Gateway' && (
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <RagContextSelector
                   appliedRag={appliedRag}
@@ -384,7 +501,15 @@ const ChatPage: React.FC = () => {
                 <span>Provider: <span className="font-medium text-text-primary">{currentProvider}</span></span>
                 <span>·</span>
                 <span>Models loaded: <span className="font-medium text-text-primary">{models.length}</span></span>
-                {currentProvider === 'Gateway' && (
+                <span>·</span>
+                <span>Endpoint: <span className="font-mono text-accent-primary">{safeDisplayValue(selectedEndpointBase)}</span></span>
+                {endpointMode === 'direct-slot' && (
+                  <>
+                    <span>·</span>
+                    <span>Status: <span className={`font-medium ${directSlotWarning ? 'text-status-warning' : 'text-status-success'}`}>{directSlotWarning || 'running/ready'}</span></span>
+                  </>
+                )}
+                {endpointMode === 'gateway' && currentProvider === 'Gateway' && (
                   <>
                     <span>·</span>
                     <span>RAG: <span className={`font-medium ${appliedRag.enabled && appliedRag.projectId ? 'text-accent-primary' : 'text-text-tertiary'}`}>
@@ -409,7 +534,7 @@ const ChatPage: React.FC = () => {
             </div>
             <h3 className="text-lg font-semibold text-text-primary mb-2">Start a Conversation</h3>
             <p className="text-sm text-text-secondary max-w-md">
-              Send a message to chat with your AI model through the Memory Gateway.
+              Send a message to chat with your AI model through the selected endpoint.
               {models.length === 0 && ' No models are currently available — check your Gateway endpoint.'}
             </p>
           </div>
@@ -481,6 +606,24 @@ const ChatPage: React.FC = () => {
         )}
       </div>
 
+      {directSlotWarning && (
+        <div className="px-6 py-2 bg-status-warning/10 border-t border-status-warning/20">
+          <div className="max-w-3xl mx-auto flex items-center gap-2 text-xs text-status-warning">
+            <AlertCircle className="w-3.5 h-3.5" />
+            {directSlotWarning}
+          </div>
+        </div>
+      )}
+
+      {slotEndpointsError && endpointMode === 'direct-slot' && (
+        <div className="px-6 py-2 bg-status-error/10 border-t border-status-error/20">
+          <div className="max-w-3xl mx-auto flex items-center gap-2 text-xs text-status-error">
+            <AlertCircle className="w-3.5 h-3.5" />
+            {slotEndpointsError}
+          </div>
+        </div>
+      )}
+
       {/* Error Banner */}
       {error && (
         <div className="px-6 py-2 bg-status-error/10 border-t border-status-error/20">
@@ -536,8 +679,8 @@ const ChatPage: React.FC = () => {
                 value={input}
                 onChange={handleTextareaInput}
                 onKeyDown={handleKeyDown}
-                placeholder={models.length === 0 ? 'No models available — check your Gateway endpoint' : 'Type a message... (Enter to send, Shift+Enter for new line)'}
-                disabled={loading || isStreaming || models.length === 0}
+                placeholder={models.length === 0 ? 'No models available — check the selected endpoint' : 'Type a message... (Enter to send, Shift+Enter for new line)'}
+                disabled={loading || isStreaming || models.length === 0 || Boolean(directSlotWarning)}
                 rows={1}
                 className="w-full px-4 py-4 pr-12 bg-bg-secondary border border-border-primary rounded-xl text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 min-h-[52px]"
               />
@@ -564,7 +707,7 @@ const ChatPage: React.FC = () => {
               </button>
               <button
                 onClick={handleSend}
-                disabled={loading || isStreaming || !input.trim() || models.length === 0}
+                disabled={loading || isStreaming || !input.trim() || models.length === 0 || Boolean(directSlotWarning)}
                 className="p-3 rounded-xl bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 hover:shadow-accent-primary/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none min-h-[52px] min-w-[52px] flex items-center justify-center"
                 title="Send message"
               >
@@ -577,7 +720,7 @@ const ChatPage: React.FC = () => {
             </div>
           </div>
           <p className="text-[10px] sm:text-xs text-text-tertiary mt-2 text-center">
-            Responses are generated by the selected model via the Memory Gateway
+            Responses use the selected endpoint: <span className="font-mono text-text-secondary">{safeDisplayValue(selectedEndpointBase)}</span>
           </p>
         </div>
       </div>

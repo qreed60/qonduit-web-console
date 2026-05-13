@@ -1,8 +1,8 @@
-import { Settings, ProviderType, ChatMessage, NormalizedModel, GpuStatus, RouterStatus, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse, ChatAttachmentPayload } from '../types';
+import { Settings, ProviderType, ChatMessage, NormalizedModel, GpuStatus, RouterStatus, RouterSlotsResponse, RouterEndpointsResponse, RouterPreflightRequest, RouterPreflightResponse, RouterSlotActionResponse, RouterSlotLogsResponse, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse, ChatAttachmentPayload } from '../types';
 import { getMode, apiPath } from '../config/endpoints';
 
 // Re-export NormalizedModel for convenience
-export type { NormalizedModel, GpuStatus, RouterStatus, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse };
+export type { NormalizedModel, GpuStatus, RouterStatus, RouterSlotsResponse, RouterEndpointsResponse, RouterPreflightRequest, RouterPreflightResponse, RouterSlotActionResponse, RouterSlotLogsResponse, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse };
 
 // ── Model metadata helpers ──────────────────────────────────────────────────
 
@@ -382,6 +382,21 @@ export async function fetchDirectModels(): Promise<NormalizedModel[]> {
 }
 
 /**
+ * Fetch OpenAI-compatible models from an explicit base URL, such as a router
+ * slot's openai_base. The base may include or omit /v1.
+ */
+export async function fetchOpenAiModelsFromBase(baseUrl: string, provider: 'Gateway' | 'Direct' = 'Direct'): Promise<NormalizedModel[]> {
+  const cleanBase = baseUrl.replace(/\/$/, '');
+  const url = cleanBase.endsWith('/v1') ? `${cleanBase}/models` : `${cleanBase}/v1/models`;
+  const raw = await parseJsonSafe<unknown>(
+    await fetch(url),
+    `${provider} ${url}`
+  );
+  const models = parseModelsResponse(raw, provider);
+  return models.map(m => ({ ...m, sourceUrl: url }));
+}
+
+/**
  * Fetch the list of GGUF models from the Flask router API.
  * Handles: { ok: true, models: ["a.gguf"], suggested_context: 32768 }
  *          { models: [{ name: "a.gguf", path: "/path" }] }
@@ -393,6 +408,119 @@ export async function fetchRouterModels(): Promise<{ models: NormalizedModel[]; 
     'Router /api/v1/qonduit-router/models'
   );
   return parseRouterModelsResponse(raw, url);
+}
+
+/**
+ * Fetch multi-slot router slots from GET /api/v1/qonduit-router/slots.
+ * Accepts either the canonical { slots: [...] } response or a bare array for
+ * forward/backward compatibility, but always returns { slots } to callers.
+ */
+export async function fetchRouterSlots(): Promise<RouterSlotsResponse> {
+  const url = apiPath('router', '/api/v1/qonduit-router/slots');
+  const raw = await parseJsonSafe<unknown>(
+    await fetch(url),
+    'Router /api/v1/qonduit-router/slots'
+  );
+
+  if (Array.isArray(raw)) {
+    return { ok: true, slots: raw as RouterSlotsResponse['slots'] };
+  }
+
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    return {
+      ...obj,
+      ok: typeof obj.ok === 'boolean' ? obj.ok : undefined,
+      slots: Array.isArray(obj.slots) ? obj.slots as RouterSlotsResponse['slots'] : [],
+    };
+  }
+
+  return { ok: false, slots: [] };
+}
+
+/**
+ * Fetch OpenAI-compatible endpoints for router slots from
+ * GET /api/v1/qonduit-router/endpoints.
+ */
+export async function fetchRouterEndpoints(): Promise<RouterEndpointsResponse> {
+  const url = apiPath('router', '/api/v1/qonduit-router/endpoints');
+  const raw = await parseJsonSafe<unknown>(
+    await fetch(url),
+    'Router /api/v1/qonduit-router/endpoints'
+  );
+
+  if (Array.isArray(raw)) {
+    return { ok: true, endpoints: raw as RouterEndpointsResponse['endpoints'] };
+  }
+
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    return {
+      ...obj,
+      ok: typeof obj.ok === 'boolean' ? obj.ok : undefined,
+      endpoints: Array.isArray(obj.endpoints) ? obj.endpoints as RouterEndpointsResponse['endpoints'] : [],
+    };
+  }
+
+  return { ok: false, endpoints: [] };
+}
+
+/**
+ * Run a slot preflight check via POST /api/v1/qonduit-router/slots/{slot_id}/preflight.
+ * The body is always JSON so callers can preflight unsaved draft slot values.
+ */
+export async function preflightRouterSlot(
+  slotId: string,
+  request: RouterPreflightRequest = {},
+): Promise<RouterPreflightResponse> {
+  const url = apiPath('router', `/api/v1/qonduit-router/slots/${encodeURIComponent(slotId)}/preflight`);
+  return parseJsonSafe<RouterPreflightResponse>(
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...request, slot_id: request.slot_id ?? slotId }),
+    }),
+    `Router /api/v1/qonduit-router/slots/${slotId}/preflight`
+  );
+}
+
+export async function runRouterSlotAction(
+  slotId: string,
+  action: 'launch' | 'stop' | 'restart',
+): Promise<RouterSlotActionResponse> {
+  const url = apiPath('router', `/api/v1/qonduit-router/slots/${encodeURIComponent(slotId)}/${action}`);
+  return parseJsonSafe<RouterSlotActionResponse>(
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slot_id: slotId }),
+    }),
+    `Router /api/v1/qonduit-router/slots/${slotId}/${action}`
+  );
+}
+
+export async function fetchRouterSlotLogs(slotId: string): Promise<RouterSlotLogsResponse> {
+  const url = apiPath('router', `/api/v1/qonduit-router/slots/${encodeURIComponent(slotId)}/logs`);
+  const raw = await parseJsonSafe<unknown>(
+    await fetch(url),
+    `Router /api/v1/qonduit-router/slots/${slotId}/logs`
+  );
+
+  if (Array.isArray(raw)) {
+    return { ok: true, slot_id: slotId, logs: raw.map((line) => String(line)) };
+  }
+
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    const logs = Array.isArray(obj.logs)
+      ? obj.logs.map((line) => typeof line === 'string' ? line : JSON.stringify(line))
+      : typeof obj.text === 'string'
+        ? obj.text.split('\n')
+        : [];
+    return { ...obj, ok: typeof obj.ok === 'boolean' ? obj.ok : undefined, slot_id: typeof obj.slot_id === 'string' ? obj.slot_id : slotId, logs };
+  }
+
+  return { ok: false, slot_id: slotId, logs: [] };
 }
 
 // ── Unified provider model fetcher ──────────────────────────────────────────
@@ -442,6 +570,7 @@ export async function fetchChatCompletions(
   ctxSize: number = 8192,
   ragSelection?: RagChatSelection,
   attachments?: ChatAttachmentPayload[],
+  endpointBase?: string,
 ): Promise<{ choices: Array<{ message: ChatMessage; finish_reason: string | null }> }> {
   const body: Record<string, unknown> = {
     model,
@@ -472,7 +601,10 @@ export async function fetchChatCompletions(
     body.attachments = attachments;
   }
 
-    const response = await fetch(apiPath('gateway', '/v1/chat/completions'), {
+    const chatUrl = endpointBase
+    ? `${endpointBase.replace(/\/$/, '')}/chat/completions`
+    : apiPath('gateway', '/v1/chat/completions');
+  const response = await fetch(chatUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -497,6 +629,7 @@ export async function* streamChatCompletions(
   ragSelection?: RagChatSelection,
   attachments?: ChatAttachmentPayload[],
   signal?: AbortSignal,
+  endpointBase?: string,
 ): AsyncGenerator<{ type: 'delta'; content: string } | { type: 'done' } | { type: 'error'; error: string }> {
   const body: Record<string, unknown> = {
     model,
@@ -518,7 +651,10 @@ export async function* streamChatCompletions(
     body.attachments = attachments;
   }
 
-  const response = await fetch(apiPath('gateway', '/v1/chat/completions'), {
+  const chatUrl = endpointBase
+    ? `${endpointBase.replace(/\/$/, '')}/chat/completions`
+    : apiPath('gateway', '/v1/chat/completions');
+  const response = await fetch(chatUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -532,11 +668,9 @@ export async function* streamChatCompletions(
 
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.includes('text/event-stream')) {
-    // Backend doesn't support streaming for this request (e.g., attachments not supported)
-    // Fall through to non-streaming parse — caller will handle the mismatch
-    await response.json();
-    yield { type: 'done' };
-    return;
+    // Backend doesn't support streaming for this request (e.g., attachments not supported).
+    // Throw before consuming the body so callers can retry with non-streaming.
+    throw new Error('Streaming is not supported by the selected endpoint');
   }
 
   const reader = response.body?.getReader();
