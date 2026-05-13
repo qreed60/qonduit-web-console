@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { GpuInfo, NormalizedModel, RouterPreflightRequest, RouterSlot } from '../types';
 import { formatGpuLabel, isExcludedDisplayGpu, safeDisplayValue } from '../utils/routerDisplay';
+import CollapsibleDetail from './CollapsibleDetail';
 
 export const CONTEXT_PRESETS = [8192, 16384, 32768, 65536, 131072, 262144];
 
@@ -139,7 +140,6 @@ const fieldClass = 'w-full bg-bg-secondary/60 border border-border-primary round
 const labelClass = 'block text-xs font-medium text-text-secondary mb-1.5';
 
 const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, models, gpus, modelError, gpuError }) => {
-  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const modelNames = useMemo(() => {
     const names = models.map((model) => model.name).filter(Boolean);
@@ -267,7 +267,7 @@ const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, 
             All usable inference GPUs
           </label>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2 border-t border-border-subtle">
+          <div className="grid grid-cols-1 gap-2 pt-2 border-t border-border-subtle">
             {gpus.map((gpu) => {
               const excluded = isExcludedDisplayGpu(gpu);
               const gpuId = String(gpu.index);
@@ -292,9 +292,8 @@ const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, 
         </div>
       </div>
 
-      <details open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)} className="rounded-lg border border-border-primary bg-bg-secondary/20">
-        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-text-primary">Advanced</summary>
-        <div className="space-y-4 border-t border-border-subtle p-4">
+      <CollapsibleDetail title="Advanced" defaultOpen={false}>
+         <div className="space-y-4">
           <label className="flex items-center gap-3 text-sm text-text-primary">
             <input
               type="checkbox"
@@ -374,9 +373,9 @@ const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, 
               placeholder={'--arg-one\n--arg-two value'}
             />
             <p className="text-[10px] text-text-tertiary mt-1">Each non-empty line is sent as one extra_args entry.</p>
-          </div>
-        </div>
-      </details>
+           </div>
+         </div>
+       </CollapsibleDetail>
     </div>
   );
 };

@@ -294,21 +294,22 @@ const RouterPage: React.FC = () => {
           action={{ label: 'Add Slot', onClick: handleAddSlot, variant: 'primary' }}
         >
           <SlotList
-            slots={slots}
-            error={slotsError}
-            actionLoading={actionLoading}
-            logsOpenBySlot={logsOpenBySlot}
-            logsBySlot={logsBySlot}
-            logsErrorBySlot={logsErrorBySlot}
-            preflightBySlot={preflightBySlot}
-            preflightErrorBySlot={preflightErrorBySlot}
-            onLaunch={(slot) => handleSlotAction(slot, 'launch')}
-            onStop={(slot) => handleSlotAction(slot, 'stop')}
-            onRestart={(slot) => handleSlotAction(slot, 'restart')}
-            onEdit={handleEdit}
-            onPreflight={handlePreflight}
-            onLogs={handleLogs}
-          />
+             slots={slots}
+             error={slotsError}
+             actionLoading={actionLoading}
+             logsOpenBySlot={logsOpenBySlot}
+             logsBySlot={logsBySlot}
+             logsErrorBySlot={logsErrorBySlot}
+             preflightBySlot={preflightBySlot}
+             preflightErrorBySlot={preflightErrorBySlot}
+             onLaunch={(slot) => handleSlotAction(slot, 'launch')}
+             onStop={(slot) => handleSlotAction(slot, 'stop')}
+             onRestart={(slot) => handleSlotAction(slot, 'restart')}
+             onEdit={handleEdit}
+             onPreflight={handlePreflight}
+             onLogs={handleLogs}
+             onCopy={handleCopy}
+           />
         </MobileCollapsibleCard>
 
         <MobileCollapsibleCard

@@ -370,46 +370,68 @@ const DashboardPage: React.FC = () => {
           </MobileCollapsibleCard>
  
         <MobileCollapsibleCard
-          title="Slot Router Summary"
-          icon={<Router className="w-5 h-5 text-accent-tertiary" />}
-          statusBadge={{ status: routerSummaryStatus, label: routerSlots.length > 0 ? `${runningSlots}/${routerSlots.length} running` : routerSlotsError ? 'Unavailable' : 'Loading' }}
-          summaryText={routerSlots.length > 0 ? `${readySlots} ready · ${activeEndpoints} active endpoints` : routerSlotsError || 'Waiting for slot router data'}
-          metrics={[
-            { label: 'Total Slots', value: String(routerSlots.length) },
-            { label: 'Running', value: String(runningSlots) },
-            { label: 'Ready', value: String(readySlots) },
-            { label: 'Endpoints', value: String(activeEndpoints) },
-          ]}
-          action={{ label: 'Open Router', onClick: () => navigate('/router'), variant: 'primary' }}
-          defaultExpanded={true}
-          defaultExpandedMobile={false}
-          localStorageKey="qonduit-dashboard-slot-router-expanded"
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-3">
-              <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Primary</span>
-              <p className="text-sm font-mono text-text-primary mt-1">{primaryStatus}</p>
-            </div>
-            {openHandsStatus && (
-              <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-3">
-                <span className="text-[10px] text-text-tertiary uppercase tracking-wider">OpenHands</span>
-                <p className="text-sm font-mono text-text-primary mt-1">{openHandsStatus}</p>
-              </div>
-            )}
-            <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-3">
-              <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Detected GPU Memory</span>
-              <p className="text-sm font-mono text-text-primary mt-1">
-                {gpuSummary ? `${gpuSummary.used} used / ${gpuSummary.free} free` : gpuError || 'Unavailable'}
-              </p>
-              {gpuSummary && <p className="text-[10px] text-text-tertiary mt-1">Total: {gpuSummary.total}</p>}
-            </div>
-          </div>
-          {(routerSlotsError || routerEndpointsError || gpuError) && (
-            <div className="mt-3 rounded-lg border border-status-warning/20 bg-status-warning/5 p-3 text-xs text-status-warning">
-              {[routerSlotsError, routerEndpointsError, gpuError].filter(Boolean).join(' · ')}
-            </div>
-          )}
-        </MobileCollapsibleCard>
+           title="Slot Router Summary"
+           icon={<Router className="w-5 h-5 text-accent-tertiary" />}
+           statusBadge={{ status: routerSummaryStatus, label: routerSlots.length > 0 ? `${runningSlots}/${routerSlots.length} running` : routerSlotsError ? 'Unavailable' : 'Loading' }}
+           summaryText={routerSlots.length > 0 ? `${readySlots} ready · ${activeEndpoints} active endpoints` : routerSlotsError || 'Waiting for slot router data'}
+           metrics={[
+             { label: 'Total Slots', value: String(routerSlots.length) },
+             { label: 'Running', value: String(runningSlots) },
+             { label: 'Ready', value: String(readySlots) },
+             { label: 'Endpoints', value: String(activeEndpoints) },
+           ]}
+           action={{ label: 'Open Router', onClick: () => navigate('/router'), variant: 'primary' }}
+           defaultExpanded={true}
+           defaultExpandedMobile={false}
+           localStorageKey="qonduit-dashboard-slot-router-expanded"
+         >
+           <div className="space-y-3">
+             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+               <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-3">
+                 <span className="text-[10px] text-text-tertiary uppercase tracking-wider">Primary</span>
+                 <div className="flex items-center gap-2 mt-1.5">
+                   {primaryStatus === 'Ready' ? (
+                     <div className="w-2 h-2 rounded-full bg-status-success" />
+                   ) : primaryStatus === 'Running' ? (
+                     <div className="w-2 h-2 rounded-full bg-status-warning" />
+                   ) : primaryStatus === 'Missing' ? (
+                     <div className="w-2 h-2 rounded-full bg-text-tertiary" />
+                   ) : (
+                     <div className="w-2 h-2 rounded-full bg-status-error" />
+                   )}
+                   <p className="text-sm text-text-primary">{primaryStatus}</p>
+                 </div>
+               </div>
+               {openHandsStatus && (
+                 <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-3">
+                   <span className="text-[10px] text-text-tertiary uppercase tracking-wider">OpenHands</span>
+                   <div className="flex items-center gap-2 mt-1.5">
+                     {openHandsStatus === 'Ready' ? (
+                       <div className="w-2 h-2 rounded-full bg-status-success" />
+                     ) : openHandsStatus === 'Running' ? (
+                       <div className="w-2 h-2 rounded-full bg-status-warning" />
+                     ) : (
+                       <div className="w-2 h-2 rounded-full bg-status-error" />
+                     )}
+                     <p className="text-sm text-text-primary">{openHandsStatus}</p>
+                   </div>
+                 </div>
+               )}
+               <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-3">
+                 <span className="text-[10px] text-text-tertiary uppercase tracking-wider">GPU Memory</span>
+                 <p className="text-sm text-text-primary mt-1.5">
+                   {gpuSummary ? `${gpuSummary.used} / ${gpuSummary.free}` : gpuError || '—'}
+                 </p>
+                 {gpuSummary && <p className="text-[10px] text-text-tertiary mt-0.5">Total: {gpuSummary.total}</p>}
+               </div>
+             </div>
+             {(routerSlotsError || routerEndpointsError || gpuError) && (
+               <div className="rounded-lg border border-status-warning/20 bg-status-warning/5 p-3 text-xs text-status-warning">
+                 {[routerSlotsError, routerEndpointsError, gpuError].filter(Boolean).join(' · ')}
+               </div>
+             )}
+           </div>
+         </MobileCollapsibleCard>
 
         {/* RAG Browser Card */}
                          <MobileCollapsibleCard

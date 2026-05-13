@@ -17,6 +17,7 @@ interface SlotListProps {
   onEdit: (slot: RouterSlot) => void;
   onPreflight: (slot: RouterSlot) => void;
   onLogs: (slot: RouterSlot) => void;
+  onCopy?: (value: string, label: string) => void;
 }
 
 const SlotList: React.FC<SlotListProps> = ({
@@ -34,6 +35,7 @@ const SlotList: React.FC<SlotListProps> = ({
   onEdit,
   onPreflight,
   onLogs,
+  onCopy,
 }) => {
   if (slots.length === 0) {
     return (
@@ -52,23 +54,24 @@ const SlotList: React.FC<SlotListProps> = ({
         </div>
       )}
       {slots.map((slot) => (
-        <SlotCard
-          key={slot.slot_id}
-          slot={slot}
-          actionLoading={actionLoading}
-          logsOpen={logsOpenBySlot[slot.slot_id]}
-          logs={logsBySlot[slot.slot_id]}
-          logsError={logsErrorBySlot[slot.slot_id]}
-          preflightResult={preflightBySlot[slot.slot_id]}
-          preflightError={preflightErrorBySlot[slot.slot_id]}
-          onLaunch={onLaunch}
-          onStop={onStop}
-          onRestart={onRestart}
-          onEdit={onEdit}
-          onPreflight={onPreflight}
-          onLogs={onLogs}
-        />
-      ))}
+         <SlotCard
+           key={slot.slot_id}
+           slot={slot}
+           actionLoading={actionLoading}
+           logsOpen={logsOpenBySlot[slot.slot_id]}
+           logs={logsBySlot[slot.slot_id]}
+           logsError={logsErrorBySlot[slot.slot_id]}
+           preflightResult={preflightBySlot[slot.slot_id]}
+           preflightError={preflightErrorBySlot[slot.slot_id]}
+           onLaunch={onLaunch}
+           onStop={onStop}
+           onRestart={onRestart}
+           onEdit={onEdit}
+           onPreflight={onPreflight}
+           onLogs={onLogs}
+           onCopy={onCopy}
+         />
+       ))}
     </div>
   );
 };
