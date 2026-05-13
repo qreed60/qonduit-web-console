@@ -382,6 +382,21 @@ export async function fetchDirectModels(): Promise<NormalizedModel[]> {
 }
 
 /**
+ * Fetch OpenAI-compatible models from an explicit base URL, such as a router
+ * slot's openai_base. The base may include or omit /v1.
+ */
+export async function fetchOpenAiModelsFromBase(baseUrl: string, provider: 'Gateway' | 'Direct' = 'Direct'): Promise<NormalizedModel[]> {
+  const cleanBase = baseUrl.replace(/\/$/, '');
+  const url = cleanBase.endsWith('/v1') ? `${cleanBase}/models` : `${cleanBase}/v1/models`;
+  const raw = await parseJsonSafe<unknown>(
+    await fetch(url),
+    `${provider} ${url}`
+  );
+  const models = parseModelsResponse(raw, provider);
+  return models.map(m => ({ ...m, sourceUrl: url }));
+}
+
+/**
  * Fetch the list of GGUF models from the Flask router API.
  * Handles: { ok: true, models: ["a.gguf"], suggested_context: 32768 }
  *          { models: [{ name: "a.gguf", path: "/path" }] }
@@ -555,6 +570,7 @@ export async function fetchChatCompletions(
   ctxSize: number = 8192,
   ragSelection?: RagChatSelection,
   attachments?: ChatAttachmentPayload[],
+  endpointBase?: string,
 ): Promise<{ choices: Array<{ message: ChatMessage; finish_reason: string | null }> }> {
   const body: Record<string, unknown> = {
     model,
@@ -585,7 +601,10 @@ export async function fetchChatCompletions(
     body.attachments = attachments;
   }
 
-    const response = await fetch(apiPath('gateway', '/v1/chat/completions'), {
+    const chatUrl = endpointBase
+    ? `${endpointBase.replace(/\/$/, '')}/chat/completions`
+    : apiPath('gateway', '/v1/chat/completions');
+  const response = await fetch(chatUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -610,6 +629,7 @@ export async function* streamChatCompletions(
   ragSelection?: RagChatSelection,
   attachments?: ChatAttachmentPayload[],
   signal?: AbortSignal,
+  endpointBase?: string,
 ): AsyncGenerator<{ type: 'delta'; content: string } | { type: 'done' } | { type: 'error'; error: string }> {
   const body: Record<string, unknown> = {
     model,
@@ -631,7 +651,10 @@ export async function* streamChatCompletions(
     body.attachments = attachments;
   }
 
-  const response = await fetch(apiPath('gateway', '/v1/chat/completions'), {
+  const chatUrl = endpointBase
+    ? `${endpointBase.replace(/\/$/, '')}/chat/completions`
+    : apiPath('gateway', '/v1/chat/completions');
+  const response = await fetch(chatUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -645,11 +668,9 @@ export async function* streamChatCompletions(
 
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.includes('text/event-stream')) {
-    // Backend doesn't support streaming for this request (e.g., attachments not supported)
-    // Fall through to non-streaming parse — caller will handle the mismatch
-    await response.json();
-    yield { type: 'done' };
-    return;
+    // Backend doesn't support streaming for this request (e.g., attachments not supported).
+    // Throw before consuming the body so callers can retry with non-streaming.
+    throw new Error('Streaming is not supported by the selected endpoint');
   }
 
   const reader = response.body?.getReader();
