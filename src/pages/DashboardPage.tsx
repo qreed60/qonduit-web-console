@@ -370,21 +370,15 @@ const DashboardPage: React.FC = () => {
           </MobileCollapsibleCard>
  
         <MobileCollapsibleCard
-           title="Slot Router Summary"
-           icon={<Router className="w-5 h-5 text-accent-tertiary" />}
-           statusBadge={{ status: routerSummaryStatus, label: routerSlots.length > 0 ? `${runningSlots}/${routerSlots.length} running` : routerSlotsError ? 'Unavailable' : 'Loading' }}
-           summaryText={routerSlots.length > 0 ? `${readySlots} ready · ${activeEndpoints} active endpoints` : routerSlotsError || 'Waiting for slot router data'}
-           metrics={[
-             { label: 'Total Slots', value: String(routerSlots.length) },
-             { label: 'Running', value: String(runningSlots) },
-             { label: 'Ready', value: String(readySlots) },
-             { label: 'Endpoints', value: String(activeEndpoints) },
-           ]}
-           action={{ label: 'Open Router', onClick: () => navigate('/router'), variant: 'primary' }}
-           defaultExpanded={true}
-           defaultExpandedMobile={false}
-           localStorageKey="qonduit-dashboard-slot-router-expanded"
-         >
+            title="Slot Router Summary"
+            icon={<Router className="w-5 h-5 text-accent-tertiary" />}
+            statusBadge={{ status: routerSummaryStatus, label: routerSlots.length > 0 ? `${runningSlots}/${routerSlots.length} running` : routerSlotsError ? 'Unavailable' : 'Loading' }}
+            summaryText={routerSlots.length > 0 ? `${readySlots} ready · ${activeEndpoints} active endpoints` : routerSlotsError || 'Waiting for slot router data'}
+            action={{ label: 'Open Router', onClick: () => navigate('/router'), variant: 'primary' }}
+            defaultExpanded={true}
+            defaultExpandedMobile={false}
+            localStorageKey="qonduit-dashboard-slot-router-expanded"
+          >
            <div className="space-y-3">
              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-3">

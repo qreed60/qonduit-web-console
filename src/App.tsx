@@ -46,7 +46,7 @@ function AppContent() {
       <div className="flex h-screen bg-bg-primary text-text-primary transition-colors duration-300 overflow-x-hidden" style={{ overflowX: 'hidden' }}>
         <Sidebar currentPage={currentPage} onChangePage={handleChangePage} />
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden lg:ml-0" style={{ paddingLeft: 'env(safe-area-inset-left)', paddingRight: 'env(safe-area-inset-right)' }}>
-          <main className="flex-1 overflow-y-auto bg-bg-primary overflow-x-hidden">
+          <main className="flex-1 overflow-y-auto bg-bg-primary overflow-x-hidden pt-14 pl-10 lg:pt-0 lg:pl-0">
            <Routes>
              <Route path="/" element={<DashboardPage />} />
              <Route path="/dashboard" element={<DashboardPage />} />
