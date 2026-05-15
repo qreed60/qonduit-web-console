@@ -38,6 +38,7 @@ interface SlotConfigFormProps {
   gpus: GpuInfo[];
   modelError?: string | null;
   gpuError?: string | null;
+  effectiveGpuDevices?: string;
 }
 
 function firstString(...values: unknown[]): string {
@@ -59,6 +60,10 @@ function stringifyExtraArgs(value: unknown): string {
   if (Array.isArray(value)) return value.map((item) => safeDisplayValue(item)).join('\n');
   if (typeof value === 'string') return value;
   return '';
+}
+
+function formatUsableGpuIndices(gpus: GpuInfo[]): string {
+  return gpus.map((g) => String(g.index)).join(',');
 }
 
 function stringifyGpuDevices(value: unknown): string {
@@ -149,7 +154,7 @@ export function buildSlotPreflightRequest(draft: SlotFormDraft): RouterPreflight
 const fieldClass = 'w-full bg-bg-secondary/60 border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary disabled:opacity-60 disabled:cursor-not-allowed';
 const labelClass = 'block text-xs font-medium text-text-secondary mb-1.5';
 
-const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, models, gpus, modelError, gpuError }) => {
+const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, models, gpus, modelError, gpuError, effectiveGpuDevices }) => {
 
   const modelNames = useMemo(() => {
     const names = models.map((model) => model.name).filter(Boolean);
@@ -318,10 +323,22 @@ const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, 
             })}
           </div>
           {gpus.length === 0 && <p className="text-xs text-text-tertiary">{gpuError || 'GPU status has not loaded yet.'}</p>}
-        </div>
-      </div>
-
-      <CollapsibleDetail title="Advanced" defaultOpen={false}>
+         </div>
+       </div>
+ 
+       {/* Effective GPU info display */}
+       {(effectiveGpuDevices || usableGpus.length > 0) && (
+         <div className="flex flex-wrap gap-3 text-xs text-text-tertiary">
+           <span>
+             Requested GPUs: <span className="text-text-primary font-mono">{draft.gpu_devices}</span>
+           </span>
+           <span>
+             Effective GPUs: <span className="text-text-primary font-mono">{effectiveGpuDevices ?? formatUsableGpuIndices(usableGpus)}</span>
+           </span>
+         </div>
+       )}
+ 
+       <CollapsibleDetail title="Advanced" defaultOpen={false}>
          <div className="space-y-4">
           <label className="flex items-center gap-3 text-sm text-text-primary">
             <input

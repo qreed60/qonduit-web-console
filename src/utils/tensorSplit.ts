@@ -26,33 +26,12 @@ export function generateWeightedSplit(
     .sort((a, b) => b.memory_free_mib - a.memory_free_mib); // highest VRAM first
 
   if (usable.length === 0) return '';
-
-  const totalFree = usable.reduce((sum, gpu) => sum + gpu.memory_free_mib, 0);
-  if (totalFree === 0) return Array(usable.length).fill('1').join(',');
-
-  // Round to integers, ensuring minimum of 1
-  const rawWeights = usable.map(
-    (gpu) => Math.max(1, Math.round((gpu.memory_free_mib / totalFree) * usable.length)),
-  );
-
-  // Adjust to ensure sum matches number of GPUs (for llama.cpp compatibility)
-  const weightSum = rawWeights.reduce((s, v) => s + v, 0);
-  const adjusted = rawWeights.map(
-    (w) => Math.max(1, Math.round((w / weightSum) * usable.length)),
-  );
-
-  // Final adjustment: ensure exact count
-   let diff = usable.length - adjusted.reduce((s, v) => s + v, 0);
-   if (diff > 0) {
-     adjusted[0] += diff;
-   } else if (diff < 0) {
-     let i = 0;
-     while (diff < 0) {
-       adjusted[i] = Math.max(1, adjusted[i] - 1);
-       i = (i + 1) % adjusted.length;
-       diff++;
-     }
-   }
-
-  return adjusted.join(',');
+ 
+   // NEW: round(memory_free_mib / 102.4), minimum 1
+   // The divisor 102.4 produces values that approximate per-layer GPU memory allocation in llama.cpp
+   const weights = usable.map(
+     (gpu) => Math.max(1, Math.round(gpu.memory_free_mib / 102.4)),
+   );
+ 
+   return weights.join(',');
 }

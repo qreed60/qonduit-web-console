@@ -274,6 +274,19 @@ export interface RouterPreflightResponse {
   warnings?: string[];
   errors?: string[];
   request?: RouterPreflightRequest;
+  // Tensor split fields from backend
+  requested_tensor_split?: string | null;
+  tensor_split?: string | null;
+  tensor_split_valid?: boolean | null;
+  tensor_split_entry_count?: number | null;
+  effective_gpu_count?: number | null;
+  effective_gpu_devices?: string | number[] | null;
+  launch_args_preview?: string | null;
+  suggested_tensor_splits?: {
+    even?: string | null;
+    free_vram_weighted_raw?: string | null;
+    free_vram_weighted_normalized?: string | null;
+  } | null;
   [key: string]: unknown;
 }
 

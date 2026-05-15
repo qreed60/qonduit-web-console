@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
-import { GpuInfo, NormalizedModel } from '../types';
-import SlotConfigForm, { buildSlotPreflightRequest, createDefaultSlotDraft, TENSOR_SPLIT_MODE_LABELS, SlotFormDraft } from './SlotConfigForm';
+import { GpuInfo, NormalizedModel, RouterPreflightResponse } from '../types';
+import SlotConfigForm, { buildSlotPreflightRequest, createDefaultSlotDraft, SlotFormDraft } from './SlotConfigForm';
+import PreflightResultDrawer from './PreflightResultDrawer';
 
 interface AddSlotDialogProps {
   open: boolean;
@@ -12,6 +13,7 @@ interface AddSlotDialogProps {
   preflightLoading?: boolean;
   preflightResult?: string | null;
   preflightError?: string | null;
+  effectiveGpuDevices?: string;
   onPreflight: (slotId: string, draft: ReturnType<typeof buildSlotPreflightRequest>) => void;
   onClose: () => void;
 }
@@ -33,6 +35,7 @@ const AddSlotDialog: React.FC<AddSlotDialogProps> = ({
   preflightLoading = false,
   preflightResult,
   preflightError,
+  effectiveGpuDevices,
   onPreflight,
   onClose,
 }) => {
@@ -66,39 +69,25 @@ const AddSlotDialog: React.FC<AddSlotDialogProps> = ({
         {/* Scrollable Body */}
         <div className="overflow-y-auto max-h-[calc(95vh-145px)] sm:max-h-[calc(90vh-145px)] px-5 py-4">
           <SlotConfigForm
-            mode="add"
-            draft={draft}
-            onChange={setDraft}
-            models={models}
-            gpus={gpus}
-            modelError={modelError}
-            gpuError={gpuError}
-          />
-
-          {(preflightResult || preflightError) && (
-            <div className={`mt-4 rounded-lg border p-3 text-xs ${
-              preflightError 
-                ? 'bg-status-error/5 border-status-error/20 text-status-error' 
-                : 'bg-status-success/5 border-status-success/20 text-text-secondary'
-            }`}>
-              <p className="font-semibold mb-2">Draft preflight result</p>
-              
-              {/* Request summary — what frontend sent */}
-              <div className="space-y-1 mb-2">
-                <p><span className="text-text-tertiary">Mode:</span> {TENSOR_SPLIT_MODE_LABELS[draft.tensor_split_mode]}</p>
-                {isExplicitSplit && (
-                  <p><span className="text-text-tertiary">Requested tensor_split:</span> <span className="font-mono">{draft.tensor_split}</span></p>
-                )}
-                {!isExplicitSplit && (
-                  <p><span className="text-text-tertiary">Requested tensor_split:</span> <span className="italic text-text-tertiary">(not sent — llama.cpp default)</span></p>
-                )}
-                <p><span className="text-text-tertiary">Effective GPUs:</span> {draft.gpu_devices}</p>
-              </div>
-              
-              {/* Backend response */}
-              <pre className="whitespace-pre-wrap break-words font-mono text-[11px] bg-bg-secondary/40 p-2 rounded">{preflightError || preflightResult}</pre>
-            </div>
-          )}
+             mode="add"
+             draft={draft}
+             onChange={setDraft}
+             models={models}
+             gpus={gpus}
+             modelError={modelError}
+             gpuError={gpuError}
+             effectiveGpuDevices={effectiveGpuDevices}
+           />
+ 
+           {preflightResult && (
+             <PreflightResultDrawer
+               result={JSON.parse(preflightResult) as RouterPreflightResponse}
+               error={preflightError}
+               requestedTensorSplit={isExplicitSplit ? draft.tensor_split : ''}
+               tensorSplitMode={draft.tensor_split_mode}
+               effectiveGpuDevices={effectiveGpuDevices}
+             />
+           )}
         </div>
 
         {/* Sticky Footer */}
