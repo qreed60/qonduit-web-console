@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, X } from 'lucide-react';
+import { Loader2, Save, X } from 'lucide-react';
 import { GpuInfo, NormalizedModel, RouterPreflightResponse, RouterSlot } from '../types';
 import SlotConfigForm, { buildSlotPreflightRequest, createSlotDraftFromSlot, SlotFormDraft } from './SlotConfigForm';
 import PreflightResultDrawer from './PreflightResultDrawer';
@@ -16,6 +16,8 @@ interface EditSlotDialogProps {
   preflightError?: string | null;
   effectiveGpuDevices?: string;
   onPreflight: (slotId: string, draft: ReturnType<typeof buildSlotPreflightRequest>) => void;
+  onSave?: (draft: SlotFormDraft) => void;
+  onSaveLoading?: boolean;
   onClose: () => void;
 }
 
@@ -39,9 +41,11 @@ const EditSlotDialog: React.FC<EditSlotDialogProps> = ({
   preflightError,
   effectiveGpuDevices,
   onPreflight,
+  onSave,
+  onSaveLoading = false,
   onClose,
 }) => {
-  const initialDraft = useMemo(() => slot ? createSlotDraftFromSlot(slot) : null, [slot]);
+  const initialDraft = useMemo(() => slot ? createSlotDraftFromSlot(slot, gpus) : null, [slot, gpus]);
   const [draft, setDraft] = useState<SlotFormDraft | null>(initialDraft);
 
   useEffect(() => {
@@ -94,24 +98,35 @@ const EditSlotDialog: React.FC<EditSlotDialogProps> = ({
         </div>
 
         {/* Sticky Footer */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-border-subtle px-5 py-4 bg-bg-card flex-shrink-0">
-          <p className={`text-xs ${validationError ? 'text-status-error' : 'text-text-tertiary'}`}>
-            {validationError || 'Save support depends on router backend update endpoints; use Preflight Draft before applying changes.'}
-          </p>
-          <div className="flex gap-2 justify-end">
-            <button onClick={onClose} className="px-4 py-2.5 rounded-lg text-sm font-medium border border-border-primary text-text-secondary hover:bg-bg-tertiary transition-colors min-h-[44px]">
-              Close
-            </button>
-            <button
-              disabled={Boolean(validationError) || preflightLoading}
-              onClick={() => onPreflight(draft.slot_id, buildSlotPreflightRequest(draft))}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border border-accent-primary/30 text-accent-primary bg-accent-primary/10 hover:bg-accent-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
-            >
-              {preflightLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-              Preflight Draft
-            </button>
-          </div>
-        </div>
+         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-border-subtle px-5 py-4 bg-bg-card flex-shrink-0">
+           <p className={`text-xs ${validationError ? 'text-status-error' : 'text-text-tertiary'}`}>
+             {validationError || 'Preflight validates the draft; Save Changes persists the slot config.'}
+           </p>
+           <div className="flex gap-2 justify-end">
+             <button onClick={onClose} className="px-4 py-2.5 rounded-lg text-sm font-medium border border-border-primary text-text-secondary hover:bg-bg-tertiary transition-colors min-h-[44px]">
+               Close
+             </button>
+             <button
+               disabled={Boolean(validationError) || preflightLoading || !onSave}
+               onClick={() => onPreflight(draft.slot_id, buildSlotPreflightRequest(draft))}
+               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border border-accent-primary/30 text-accent-primary bg-accent-primary/10 hover:bg-accent-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
+             >
+               {preflightLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+               Preflight Draft
+             </button>
+             {onSave && (
+               <button
+                 disabled={Boolean(validationError) || onSaveLoading}
+                 onClick={() => onSave(draft)}
+                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-accent-primary text-bg-card hover:bg-accent-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
+               >
+                 {onSaveLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                 {!onSaveLoading && <Save className="w-4 h-4" />}
+                 Save Changes
+               </button>
+             )}
+           </div>
+         </div>
       </div>
     </div>
   );

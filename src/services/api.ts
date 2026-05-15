@@ -439,6 +439,41 @@ export async function fetchRouterSlots(): Promise<RouterSlotsResponse> {
 }
 
 /**
+ * Create a new router slot via POST /api/v1/qonduit-router/slots.
+ */
+export async function createRouterSlot(
+  request: RouterPreflightRequest,
+): Promise<RouterPreflightResponse> {
+  const url = apiPath('router', '/api/v1/qonduit-router/slots');
+  return parseJsonSafe<RouterPreflightResponse>(
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }),
+    'Router /api/v1/qonduit-router/slots (create)'
+  );
+}
+
+/**
+ * Update an existing router slot via PUT /api/v1/qonduit-router/slots/{slot_id}.
+ */
+export async function updateRouterSlot(
+  slotId: string,
+  request: RouterPreflightRequest,
+): Promise<RouterPreflightResponse> {
+  const url = apiPath('router', `/api/v1/qonduit-router/slots/${encodeURIComponent(slotId)}`);
+  return parseJsonSafe<RouterPreflightResponse>(
+    await fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...request, slot_id: request.slot_id ?? slotId }),
+    }),
+    `Router /api/v1/qonduit-router/slots/${slotId} (update)`
+  );
+}
+
+/**
  * Fetch OpenAI-compatible endpoints for router slots from
  * GET /api/v1/qonduit-router/endpoints.
  */

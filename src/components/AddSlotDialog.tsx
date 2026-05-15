@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, X } from 'lucide-react';
+import { Loader2, Plus, X } from 'lucide-react';
 import { GpuInfo, NormalizedModel, RouterPreflightResponse } from '../types';
 import SlotConfigForm, { buildSlotPreflightRequest, createDefaultSlotDraft, SlotFormDraft } from './SlotConfigForm';
 import PreflightResultDrawer from './PreflightResultDrawer';
@@ -15,6 +15,8 @@ interface AddSlotDialogProps {
   preflightError?: string | null;
   effectiveGpuDevices?: string;
   onPreflight: (slotId: string, draft: ReturnType<typeof buildSlotPreflightRequest>) => void;
+  onCreate?: (draft: SlotFormDraft) => void;
+  onCreateLoading?: boolean;
   onClose: () => void;
 }
 
@@ -37,6 +39,8 @@ const AddSlotDialog: React.FC<AddSlotDialogProps> = ({
   preflightError,
   effectiveGpuDevices,
   onPreflight,
+  onCreate,
+  onCreateLoading = false,
   onClose,
 }) => {
   const [draft, setDraft] = useState<SlotFormDraft>(() => createDefaultSlotDraft());
@@ -91,24 +95,35 @@ const AddSlotDialog: React.FC<AddSlotDialogProps> = ({
         </div>
 
         {/* Sticky Footer */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-border-subtle px-5 py-4 bg-bg-card flex-shrink-0">
-          <p className={`text-xs ${validationError ? 'text-status-error' : 'text-text-tertiary'}`}>
-            {validationError || 'Use Preflight Draft to validate model, GPU, context, and host-port availability before saving.'}
-          </p>
-          <div className="flex gap-2 justify-end">
-            <button onClick={onClose} className="px-4 py-2.5 rounded-lg text-sm font-medium border border-border-primary text-text-secondary hover:bg-bg-tertiary transition-colors min-h-[44px]">
-              Close
-            </button>
-            <button
-              disabled={Boolean(validationError) || preflightLoading}
-              onClick={() => onPreflight(draft.slot_id, buildSlotPreflightRequest(draft))}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border border-accent-primary/30 text-accent-primary bg-accent-primary/10 hover:bg-accent-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
-            >
-              {preflightLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-              Preflight Draft
-            </button>
-          </div>
-        </div>
+         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-border-subtle px-5 py-4 bg-bg-card flex-shrink-0">
+           <p className={`text-xs ${validationError ? 'text-status-error' : 'text-text-tertiary'}`}>
+             {validationError || 'Use Preflight Draft to validate model, GPU, context, and host-port availability before saving.'}
+           </p>
+           <div className="flex gap-2 justify-end">
+             <button onClick={onClose} className="px-4 py-2.5 rounded-lg text-sm font-medium border border-border-primary text-text-secondary hover:bg-bg-tertiary transition-colors min-h-[44px]">
+               Close
+             </button>
+             <button
+               disabled={Boolean(validationError) || preflightLoading || !onCreate}
+               onClick={() => onPreflight(draft.slot_id, buildSlotPreflightRequest(draft))}
+               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border border-accent-primary/30 text-accent-primary bg-accent-primary/10 hover:bg-accent-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
+             >
+               {preflightLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+               Preflight Draft
+             </button>
+             {onCreate && (
+               <button
+                 disabled={Boolean(validationError) || onCreateLoading}
+                 onClick={() => onCreate(draft)}
+                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-accent-primary text-bg-card hover:bg-accent-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
+               >
+                 {onCreateLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                 {!onCreateLoading && <Plus className="w-4 h-4" />}
+                 Create Slot
+               </button>
+             )}
+           </div>
+         </div>
       </div>
     </div>
   );

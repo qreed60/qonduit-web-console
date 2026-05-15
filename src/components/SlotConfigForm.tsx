@@ -4,6 +4,29 @@ import { formatGpuLabel, isExcludedDisplayGpu, safeDisplayValue } from '../utils
 import { generateEvenSplit, generateWeightedSplit } from '../utils/tensorSplit';
 import CollapsibleDetail from './CollapsibleDetail';
 
+/**
+ * Infer the tensor split mode from a saved tensor_split value and GPU data.
+ * - Auto: no tensor_split
+ * - Even: matches the generated even split for the given GPU count
+ * - Weighted: matches the generated weighted split for the given GPUs
+ * - Custom: anything else
+ */
+export function inferTensorSplitMode(
+  savedTensorSplit: string,
+  gpuIndices: Set<string>,
+  gpus: GpuInfo[],
+): 'auto' | 'even' | 'weighted' | 'custom' {
+  if (!savedTensorSplit || !savedTensorSplit.trim()) return 'auto';
+
+  const evenSplit = generateEvenSplit(gpuIndices);
+  if (savedTensorSplit.trim() === evenSplit) return 'even';
+
+  const weightedSplit = generateWeightedSplit(gpus, gpuIndices);
+  if (weightedSplit && savedTensorSplit.trim() === weightedSplit) return 'weighted';
+
+  return 'custom';
+}
+
 export const CONTEXT_PRESETS = [8192, 16384, 32768, 65536, 131072, 262144];
 
 export interface SlotFormDraft {
@@ -108,18 +131,30 @@ export function createDefaultSlotDraft(): SlotFormDraft {
   };
 }
 
-export function createSlotDraftFromSlot(slot: RouterSlot): SlotFormDraft {
+export function createSlotDraftFromSlot(slot: RouterSlot, gpus: GpuInfo[] = []): SlotFormDraft {
   const context = normalizePresetContext(firstNumber(slot.context_size, slot.n_ctx));
   const tensorSplit = firstString(slot.tensor_split);
+
+  // Determine GPU indices for mode inference
+  const gpuDeviceStr = stringifyGpuDevices(slot.gpu_devices ?? slot.effective_gpu_devices);
+  const gpuIndices = new Set(
+    gpuDeviceStr === 'all'
+      ? gpus.filter((g) => !isExcludedDisplayGpu(g)).map((g) => String(g.index))
+      : gpuDeviceStr.split(',').map((v) => v.trim()).filter(Boolean)
+  );
+
+  // Infer mode from saved tensor_split value
+  const tensorSplitMode = inferTensorSplitMode(tensorSplit, gpuIndices, gpus);
+
   return {
     slot_id: safeDisplayValue(slot.slot_id, ''),
     model: firstString(slot.model, slot.model_path),
     context_size: context.value,
     custom_context_size: context.custom,
     use_custom_context: context.useCustom,
-    gpu_devices: stringifyGpuDevices(slot.gpu_devices ?? slot.effective_gpu_devices),
+    gpu_devices: gpuDeviceStr,
     embeddings: slot.embeddings === true,
-    tensor_split_mode: tensorSplit ? 'custom' : 'auto',
+    tensor_split_mode: tensorSplitMode,
     tensor_split: tensorSplit,
     host_port: firstNumber(slot.host_port, slot.port),
     container_name: firstString(slot.container_name),
