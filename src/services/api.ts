@@ -479,7 +479,6 @@ export async function updateRouterSlot(
 ): Promise<RouterPreflightResponse> {
   const url = apiPath('router', `/api/v1/qonduit-router/slots/${encodeURIComponent(slotId)}`);
   const body = JSON.stringify(request);
-  console.debug(`PATCH /api/v1/qonduit-router/slots/${slotId} request`, request);
   return parseJsonSafe<RouterPreflightResponse>(
     await fetch(url, {
       method: 'PATCH',

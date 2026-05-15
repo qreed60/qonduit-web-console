@@ -175,6 +175,14 @@ const RouterPage: React.FC = () => {
 
   const refreshAfterAction = async () => {
     hasEverLoadedRef.current = true;
+
+    // If a polling refresh is already in flight, wait for it to finish first.
+    // Then issue a fresh read so post-save state comes from GET /slots rather
+    // than from a pre-save poll response that happened to complete late.
+    for (let attempt = 0; attempt < 50 && inFlightRef.current; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
     await fetchData();
   };
 
@@ -296,8 +304,8 @@ const RouterPage: React.FC = () => {
         (typeof request.tensor_split === 'string' ? request.tensor_split : '') ?? '',
       );
       showToast(`Slot "${draft.slot_id}" updated`, result.ok ? 'success' : 'info');
-      setEditingSlot(null);
       await refreshAfterAction();
+      setEditingSlot(null);
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to update slot', 'error');
     } finally {

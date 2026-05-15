@@ -85,6 +85,34 @@ function stringifyExtraArgs(value: unknown): string {
   return '';
 }
 
+function stringifyTensorSplit(value: unknown): string {
+  if (value === undefined || value === null || value === '') return '';
+  if (typeof value === 'string') return value.trim();
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === 'number' || typeof item === 'string') return String(item).trim();
+        return '';
+      })
+      .filter(Boolean)
+      .join(',');
+  }
+  return '';
+}
+
+function readSlotTensorSplit(slot: RouterSlot): string {
+  const nestedConfig = slot.config && typeof slot.config === 'object' && !Array.isArray(slot.config)
+    ? slot.config as Record<string, unknown>
+    : null;
+
+  return stringifyTensorSplit(
+    slot.tensor_split
+      ?? slot.tensorSplit
+      ?? nestedConfig?.tensor_split
+      ?? nestedConfig?.tensorSplit,
+  );
+}
+
 function formatUsableGpuIndices(gpus: GpuInfo[]): string {
   return gpus.map((g) => String(g.index)).join(',');
 }
@@ -137,7 +165,7 @@ export function createSlotDraftFromSlot(
   savedRecord?: TensorSplitModeRecord,
 ): SlotFormDraft {
   const context = normalizePresetContext(firstNumber(slot.context_size, slot.n_ctx));
-  const tensorSplit = firstString(slot.tensor_split);
+  const tensorSplit = readSlotTensorSplit(slot);
 
   // Determine GPU indices for mode inference
   const gpuDeviceStr = stringifyGpuDevices(slot.gpu_devices ?? slot.effective_gpu_devices);
