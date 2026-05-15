@@ -13,7 +13,7 @@ import {
 } from '../services/api';
 import { ENDPOINTS } from '../config/endpoints';
 import { GpuInfo, NormalizedModel, RouterEndpoint, RouterPreflightRequest, RouterPreflightResponse, RouterSlot } from '../types';
-import { buildSlotPreflightRequest, SlotFormDraft } from '../components/SlotConfigForm';
+import { buildSlotPreflightRequest, buildSlotUpdateRequest, SlotFormDraft } from '../components/SlotConfigForm';
 import { saveTensorSplitRecord } from '../utils/tensorSplit';
 import { formatGpuLabel, getGpuStatusSummaryFields, isExcludedDisplayGpu } from '../utils/routerDisplay';
 import Toast from '../components/Toast';
@@ -175,6 +175,14 @@ const RouterPage: React.FC = () => {
 
   const refreshAfterAction = async () => {
     hasEverLoadedRef.current = true;
+
+    // If a polling refresh is already in flight, wait for it to finish first.
+    // Then issue a fresh read so post-save state comes from GET /slots rather
+    // than from a pre-save poll response that happened to complete late.
+    for (let attempt = 0; attempt < 50 && inFlightRef.current; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
     await fetchData();
   };
 
@@ -263,47 +271,48 @@ const RouterPage: React.FC = () => {
    };
  
    const handleCreateSlot = async (draft: SlotFormDraft) => {
-      setCreateLoading(true);
-      try {
-        const request = buildSlotPreflightRequest(draft);
-         const result = await createRouterSlot(request);
-         showToast(`Slot "${draft.slot_id}" created`, result.ok ? 'success' : 'info');
-         // Persist tensor split mode record only after successful create
-         saveTensorSplitRecord(
-           draft.slot_id,
-           draft.tensor_split_mode,
-           (typeof request.tensor_split === 'string' ? request.tensor_split : '') ?? '',
-         );
-        setAddDialogOpen(false);
-        await refreshAfterAction();
-      } catch (err) {
-        showToast(err instanceof Error ? err.message : 'Failed to create slot', 'error');
-      } finally {
-        setCreateLoading(false);
-      }
-    };
- 
-   const handleSaveSlot = async (draft: SlotFormDraft) => {
-       if (!editingSlot) return;
-       setSaveLoading(true);
-       try {
-         const request = buildSlotPreflightRequest(draft);
-                  const result = await updateRouterSlot(editingSlot.slot_id, request);
-                  // Persist tensor split mode record only after successful save
-                  saveTensorSplitRecord(
-                    editingSlot.slot_id,
-                    draft.tensor_split_mode,
-                    (typeof request.tensor_split === 'string' ? request.tensor_split : '') ?? '',
-                  );
-         showToast(`Slot "${draft.slot_id}" updated`, result.ok ? 'success' : 'info');
-         setEditingSlot(null);
-         await refreshAfterAction();
-       } catch (err) {
-         showToast(err instanceof Error ? err.message : 'Failed to update slot', 'error');
-       } finally {
-         setSaveLoading(false);
-       }
-     };
+    setCreateLoading(true);
+    try {
+      const request = buildSlotPreflightRequest(draft);
+      const result = await createRouterSlot(request);
+      showToast(`Slot "${draft.slot_id}" created`, result.ok ? 'success' : 'info');
+      // Persist tensor split mode record only after successful create
+      saveTensorSplitRecord(
+        draft.slot_id,
+        draft.tensor_split_mode,
+        (typeof request.tensor_split === 'string' ? request.tensor_split : '') ?? '',
+      );
+      setAddDialogOpen(false);
+      await refreshAfterAction();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to create slot', 'error');
+    } finally {
+      setCreateLoading(false);
+    }
+  };
+
+  const handleSaveSlot = async (draft: SlotFormDraft) => {
+    if (!editingSlot) return;
+    setSaveLoading(true);
+    try {
+      const request = buildSlotUpdateRequest(draft);
+      const result = await updateRouterSlot(editingSlot.slot_id, request);
+      // Persist tensor split mode record only after successful save
+      saveTensorSplitRecord(
+        editingSlot.slot_id,
+        draft.tensor_split_mode,
+        (typeof request.tensor_split === 'string' ? request.tensor_split : '') ?? '',
+      );
+      showToast(`Slot "${draft.slot_id}" updated`, result.ok ? 'success' : 'info');
+      await refreshAfterAction();
+      setEditingSlot(null);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update slot', 'error');
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
 
   const runningSlots = slots.filter((slot) => slot.running === true || slot.status === 'running').length;
   const readySlots = slots.filter((slot) => slot.ready === true || slot.running === true || slot.status === 'running').length;

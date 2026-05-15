@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { GpuInfo, NormalizedModel, RouterPreflightRequest, RouterSlot } from '../types';
+import { GpuInfo, NormalizedModel, RouterPreflightRequest, RouterSlot, RouterSlotUpdateRequest } from '../types';
 import { formatGpuLabel, isExcludedDisplayGpu, safeDisplayValue } from '../utils/routerDisplay';
 import { generateEvenSplit, generateWeightedSplit, TensorSplitModeRecord } from '../utils/tensorSplit';
 import CollapsibleDetail from './CollapsibleDetail';
@@ -85,6 +85,34 @@ function stringifyExtraArgs(value: unknown): string {
   return '';
 }
 
+function stringifyTensorSplit(value: unknown): string {
+  if (value === undefined || value === null || value === '') return '';
+  if (typeof value === 'string') return value.trim();
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === 'number' || typeof item === 'string') return String(item).trim();
+        return '';
+      })
+      .filter(Boolean)
+      .join(',');
+  }
+  return '';
+}
+
+function readSlotTensorSplit(slot: RouterSlot): string {
+  const nestedConfig = slot.config && typeof slot.config === 'object' && !Array.isArray(slot.config)
+    ? slot.config as Record<string, unknown>
+    : null;
+
+  return stringifyTensorSplit(
+    slot.tensor_split
+      ?? slot.tensorSplit
+      ?? nestedConfig?.tensor_split
+      ?? nestedConfig?.tensorSplit,
+  );
+}
+
 function formatUsableGpuIndices(gpus: GpuInfo[]): string {
   return gpus.map((g) => String(g.index)).join(',');
 }
@@ -137,7 +165,7 @@ export function createSlotDraftFromSlot(
   savedRecord?: TensorSplitModeRecord,
 ): SlotFormDraft {
   const context = normalizePresetContext(firstNumber(slot.context_size, slot.n_ctx));
-  const tensorSplit = firstString(slot.tensor_split);
+  const tensorSplit = readSlotTensorSplit(slot);
 
   // Determine GPU indices for mode inference
   const gpuDeviceStr = stringifyGpuDevices(slot.gpu_devices ?? slot.effective_gpu_devices);
@@ -172,6 +200,35 @@ export function createSlotDraftFromSlot(
     extra_args_text: stringifyExtraArgs(slot.extra_args),
     use_custom_model: false,
   };
+}
+
+
+export function buildSlotUpdateRequest(draft: SlotFormDraft): RouterSlotUpdateRequest {
+  const contextSize = draft.use_custom_context ? draft.custom_context_size : draft.context_size;
+  const extraArgs = draft.extra_args_text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const request: RouterSlotUpdateRequest = {};
+
+  const model = draft.model.trim();
+  if (model) request.model = model;
+  if (typeof contextSize === 'number') request.context_size = contextSize;
+  request.gpu_devices = draft.gpu_devices.trim() || 'all';
+  request.embeddings = draft.embeddings;
+  if (draft.tensor_split_mode === 'auto') {
+    request.tensor_split = null;
+  } else if (draft.tensor_split.trim()) {
+    request.tensor_split = draft.tensor_split.trim();
+  }
+  if (typeof draft.host_port === 'number') request.host_port = draft.host_port;
+  if (draft.allow_container_edit && draft.container_name.trim()) {
+    request.container_name = draft.container_name.trim();
+  }
+  request.extra_args = extraArgs;
+
+  return request;
 }
 
 export function buildSlotPreflightRequest(draft: SlotFormDraft): RouterPreflightRequest {
