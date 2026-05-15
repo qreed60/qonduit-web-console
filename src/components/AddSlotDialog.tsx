@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { GpuInfo, NormalizedModel } from '../types';
-import SlotConfigForm, { buildSlotPreflightRequest, createDefaultSlotDraft, SlotFormDraft } from './SlotConfigForm';
+import SlotConfigForm, { buildSlotPreflightRequest, createDefaultSlotDraft, TENSOR_SPLIT_MODE_LABELS, SlotFormDraft } from './SlotConfigForm';
 
 interface AddSlotDialogProps {
   open: boolean;
@@ -46,6 +46,8 @@ const AddSlotDialog: React.FC<AddSlotDialogProps> = ({
 
   const validationError = validateDraft(draft);
 
+  const isExplicitSplit = ['even', 'weighted', 'custom'].includes(draft.tensor_split_mode);
+
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:justify-center" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
@@ -74,9 +76,27 @@ const AddSlotDialog: React.FC<AddSlotDialogProps> = ({
           />
 
           {(preflightResult || preflightError) && (
-            <div className={`mt-4 rounded-lg border p-3 text-xs ${preflightError ? 'bg-status-error/5 border-status-error/20 text-status-error' : 'bg-status-success/5 border-status-success/20 text-text-secondary'}`}>
-              <p className="font-semibold mb-1">Draft preflight result</p>
-              <pre className="whitespace-pre-wrap break-words font-mono text-[11px]">{preflightError || preflightResult}</pre>
+            <div className={`mt-4 rounded-lg border p-3 text-xs ${
+              preflightError 
+                ? 'bg-status-error/5 border-status-error/20 text-status-error' 
+                : 'bg-status-success/5 border-status-success/20 text-text-secondary'
+            }`}>
+              <p className="font-semibold mb-2">Draft preflight result</p>
+              
+              {/* Request summary — what frontend sent */}
+              <div className="space-y-1 mb-2">
+                <p><span className="text-text-tertiary">Mode:</span> {TENSOR_SPLIT_MODE_LABELS[draft.tensor_split_mode]}</p>
+                {isExplicitSplit && (
+                  <p><span className="text-text-tertiary">Requested tensor_split:</span> <span className="font-mono">{draft.tensor_split}</span></p>
+                )}
+                {!isExplicitSplit && (
+                  <p><span className="text-text-tertiary">Requested tensor_split:</span> <span className="italic text-text-tertiary">(not sent — llama.cpp default)</span></p>
+                )}
+                <p><span className="text-text-tertiary">Effective GPUs:</span> {draft.gpu_devices}</p>
+              </div>
+              
+              {/* Backend response */}
+              <pre className="whitespace-pre-wrap break-words font-mono text-[11px] bg-bg-secondary/40 p-2 rounded">{preflightError || preflightResult}</pre>
             </div>
           )}
         </div>

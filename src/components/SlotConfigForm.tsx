@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { GpuInfo, NormalizedModel, RouterPreflightRequest, RouterSlot } from '../types';
 import { formatGpuLabel, isExcludedDisplayGpu, safeDisplayValue } from '../utils/routerDisplay';
+import { generateEvenSplit, generateWeightedSplit } from '../utils/tensorSplit';
 import CollapsibleDetail from './CollapsibleDetail';
 
 export const CONTEXT_PRESETS = [8192, 16384, 32768, 65536, 131072, 262144];
@@ -13,7 +14,7 @@ export interface SlotFormDraft {
   use_custom_context: boolean;
   gpu_devices: string;
   embeddings: boolean;
-  tensor_split_mode: 'auto' | 'custom';
+  tensor_split_mode: 'auto' | 'even' | 'weighted' | 'custom';
   tensor_split: string;
   host_port: number | '';
   container_name: string;
@@ -21,6 +22,13 @@ export interface SlotFormDraft {
   extra_args_text: string;
   use_custom_model: boolean;
 }
+
+export const TENSOR_SPLIT_MODE_LABELS: Record<SlotFormDraft['tensor_split_mode'], string> = {
+  auto: 'Auto / llama.cpp default',
+  even: 'Even split across selected GPUs',
+  weighted: 'Weighted by free VRAM',
+  custom: 'Custom tensor split',
+};
 
 interface SlotConfigFormProps {
   mode: 'add' | 'edit';
@@ -129,7 +137,9 @@ export function buildSlotPreflightRequest(draft: SlotFormDraft): RouterPreflight
     context_size: typeof contextSize === 'number' ? contextSize : undefined,
     gpu_devices: draft.gpu_devices.trim() || 'all',
     embeddings: draft.embeddings,
-    tensor_split: draft.tensor_split_mode === 'custom' ? draft.tensor_split.trim() : undefined,
+    tensor_split: ['even', 'weighted', 'custom'].includes(draft.tensor_split_mode) && draft.tensor_split.trim()
+      ? draft.tensor_split.trim()
+      : undefined,
     host_port: typeof draft.host_port === 'number' ? draft.host_port : undefined,
     container_name: draft.container_name.trim() || undefined,
     extra_args: extraArgs,
@@ -166,6 +176,12 @@ const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, 
   const hostPortInvalid = draft.host_port !== '' && (!Number.isInteger(draft.host_port) || draft.host_port <= 0);
   const customContextInvalid = draft.use_custom_context && (draft.custom_context_size === '' || !Number.isInteger(draft.custom_context_size) || draft.custom_context_size <= 0);
 
+  const tensorSplitValues = draft.tensor_split.trim().split(',').filter(Boolean);
+  const tensorSplitCountMismatch =
+    ['even', 'weighted', 'custom'].includes(draft.tensor_split_mode) &&
+    tensorSplitValues.length > 0 &&
+    tensorSplitValues.length !== selectedGpuSet.size;
+
   const update = (patch: Partial<SlotFormDraft>) => onChange({ ...draft, ...patch });
 
   const setIndividualGpu = (gpuIndex: number, checked: boolean) => {
@@ -173,6 +189,19 @@ const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, 
     if (checked) next.add(String(gpuIndex));
     else next.delete(String(gpuIndex));
     update({ gpu_devices: Array.from(next).sort((a, b) => Number(a) - Number(b)).join(',') });
+  };
+
+  const handleTensorSplitModeChange = (newMode: 'auto' | 'even' | 'weighted' | 'custom') => {
+    if (newMode === 'auto') {
+      update({ tensor_split_mode: 'auto', tensor_split: '' });
+    } else if (newMode === 'even') {
+      update({ tensor_split_mode: 'even', tensor_split: generateEvenSplit(selectedGpuSet) });
+    } else if (newMode === 'weighted') {
+      update({ tensor_split_mode: 'weighted', tensor_split: generateWeightedSplit(gpus, selectedGpuSet) });
+    } else {
+      // 'custom' — keep current tensor_split value (user edits manually)
+      update({ tensor_split_mode: 'custom' });
+    }
   };
 
   return (
@@ -326,21 +355,43 @@ const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, 
               <select
                 className={fieldClass}
                 value={draft.tensor_split_mode}
-                onChange={(event) => update({ tensor_split_mode: event.target.value as 'auto' | 'custom', tensor_split: event.target.value === 'auto' ? '' : draft.tensor_split })}
+                onChange={(event) => handleTensorSplitModeChange(event.target.value as 'auto' | 'even' | 'weighted' | 'custom')}
               >
-                <option value="auto">Auto</option>
-                <option value="custom">Custom</option>
+                <option value="auto">Auto / llama.cpp default</option>
+                <option value="even">Even split across selected GPUs</option>
+                <option value="weighted">Weighted by free VRAM</option>
+                <option value="custom">Custom tensor split</option>
               </select>
+              {draft.tensor_split_mode === 'auto' && (
+                <p className="text-[10px] text-text-tertiary mt-1">
+                  Lets llama.cpp choose distribution. This may not be even.
+                </p>
+              )}
+              {draft.tensor_split_mode === 'even' && (
+                <p className="text-[10px] text-text-tertiary mt-1">
+                  Distributes tensors evenly across {selectedGpuSet.size} selected GPU(s).
+                </p>
+              )}
+              {draft.tensor_split_mode === 'weighted' && (
+                <p className="text-[10px] text-text-tertiary mt-1">
+                  Distributes tensors proportional to free VRAM on selected GPUs.
+                </p>
+              )}
             </div>
-            {draft.tensor_split_mode === 'custom' && (
+            {['even', 'weighted', 'custom'].includes(draft.tensor_split_mode) && (
               <div>
                 <label className={labelClass}>Custom tensor split</label>
                 <input
-                  className={fieldClass}
+                  className={`${fieldClass} ${tensorSplitCountMismatch ? 'border-status-warning' : ''}`}
                   value={draft.tensor_split}
                   onChange={(event) => update({ tensor_split: event.target.value })}
                   placeholder="e.g. 1,1,1,1"
                 />
+                {tensorSplitCountMismatch && (
+                  <p className="text-[10px] text-status-warning mt-1">
+                    ⚠ Split has {tensorSplitValues.length} value(s) but {selectedGpuSet.size} GPU(s) selected.
+                  </p>
+                )}
               </div>
             )}
           </div>
