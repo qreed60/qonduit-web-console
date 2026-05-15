@@ -215,6 +215,8 @@ export interface RouterSlot {
   tensor_split?: string | number[];
   embeddings?: boolean;
   extra_args?: string | string[];
+  batch_size?: number;
+  ubatch_size?: number;
   last_error?: string | null;
   [key: string]: unknown;
 }
@@ -261,6 +263,8 @@ export interface RouterPreflightRequest {
   host_port?: number | string;
   container_name?: string;
   extra_args?: string | string[];
+  batch_size?: number;
+  ubatch_size?: number;
   [key: string]: unknown;
 }
 
@@ -276,6 +280,8 @@ export interface RouterSlotUpdateRequest {
   host_port?: number | string;
   container_name?: string;
   extra_args?: string | string[];
+  batch_size?: number;
+  ubatch_size?: number;
 }
 
 export interface RouterPreflightCheck {
@@ -309,6 +315,8 @@ export interface RouterPreflightResponse {
    } | null;
    effective_context_per_parallel_slot?: number | null;
    kv_cache_estimate?: KVCacheEstimate | null;
+   batch_size?: number;
+   ubatch_size?: number;
    [key: string]: unknown;
  }
  
@@ -329,26 +337,34 @@ export interface RouterPreflightResponse {
  }
  
  export interface RouterSlotOptions {
-   ok: boolean;
-   source: 'api' | 'fallback';
-   parallel: {
-     field: string;
-     default: number;
-     min: number;
-     max: number;
-     preferred_flag: string;
-     detected_flag: string;
-     fallback_flags: string[];
-     context_semantics?: string;
-   };
-   cache_types: {
-     allowed: string[];
-     default_k: string;
-     default_v: string;
-     cache_type_k_flag: string;
-     cache_type_v_flag: string;
-   };
- }
+    ok: boolean;
+    source: 'api' | 'fallback';
+    parallel: {
+      field: string;
+      default: number;
+      min: number;
+      max: number;
+      preferred_flag: string;
+      detected_flag: string;
+      fallback_flags: string[];
+      context_semantics?: string;
+    };
+    cache_types: {
+      allowed: string[];
+      default_k: string;
+      default_v: string;
+      cache_type_k_flag: string;
+      cache_type_v_flag: string;
+    };
+    batch?: {
+      batch_size_default: number;
+      ubatch_size_default: number;
+      batch_size_options: number[];
+      ubatch_size_options: number[];
+      batch_size_flag: string;
+      ubatch_size_flag: string;
+    };
+  }
 
 export interface RouterSlotActionResponse {
   ok: boolean;

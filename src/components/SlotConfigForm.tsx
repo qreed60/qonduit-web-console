@@ -47,6 +47,8 @@ export interface SlotFormDraft {
   parallel_slots: number;
   cache_type_k: string;
   cache_type_v: string;
+  batch_size: number;
+  ubatch_size: number;
 }
 
 export const TENSOR_SPLIT_MODE_LABELS: Record<SlotFormDraft['tensor_split_mode'], string> = {
@@ -163,6 +165,8 @@ export function createDefaultSlotDraft(): SlotFormDraft {
     parallel_slots: 1,
     cache_type_k: 'f16',
     cache_type_v: 'f16',
+    batch_size: 8192,
+    ubatch_size: 2048,
   };
 }
 
@@ -192,25 +196,27 @@ export function createSlotDraftFromSlot(
   }
 
   return {
-     slot_id: safeDisplayValue(slot.slot_id, ''),
-     model: firstString(slot.model, slot.model_path),
-     context_size: context.value,
-     custom_context_size: context.custom,
-     use_custom_context: context.useCustom,
-     gpu_devices: gpuDeviceStr,
-     embeddings: slot.embeddings === true,
-     tensor_split_mode: tensorSplitMode,
-     tensor_split: tensorSplit,
-     host_port: firstNumber(slot.host_port, slot.port),
-     container_name: firstString(slot.container_name),
-      allow_container_edit: false,
-      extra_args_text: stringifyExtraArgs(slot.extra_args),
-      use_custom_model: false,
-      parallel_slots: (() => { const v = firstNumber(slot.parallel_slots); return typeof v === 'number' ? v : 1; })(),
-      cache_type_k: (slot.cache_type_k as string) || 'f16',
-      cache_type_v: (slot.cache_type_v as string) || 'f16',
-    };
-  }
+      slot_id: safeDisplayValue(slot.slot_id, ''),
+      model: firstString(slot.model, slot.model_path),
+      context_size: context.value,
+      custom_context_size: context.custom,
+      use_custom_context: context.useCustom,
+      gpu_devices: gpuDeviceStr,
+      embeddings: slot.embeddings === true,
+      tensor_split_mode: tensorSplitMode,
+      tensor_split: tensorSplit,
+      host_port: firstNumber(slot.host_port, slot.port),
+      container_name: firstString(slot.container_name),
+       allow_container_edit: false,
+       extra_args_text: stringifyExtraArgs(slot.extra_args),
+       use_custom_model: false,
+       parallel_slots: (() => { const v = firstNumber(slot.parallel_slots); return typeof v === 'number' ? v : 1; })(),
+       cache_type_k: (slot.cache_type_k as string) || 'f16',
+       cache_type_v: (slot.cache_type_v as string) || 'f16',
+       batch_size: firstNumber(slot.batch_size) || 8192,
+        ubatch_size: firstNumber(slot.ubatch_size) || 2048,
+     };
+   }
 
 
 export function buildSlotUpdateRequest(draft: SlotFormDraft): RouterSlotUpdateRequest {
@@ -240,6 +246,8 @@ export function buildSlotUpdateRequest(draft: SlotFormDraft): RouterSlotUpdateRe
     request.container_name = draft.container_name.trim();
   }
   request.extra_args = extraArgs;
+  if (typeof draft.batch_size === 'number') request.batch_size = draft.batch_size;
+  if (typeof draft.ubatch_size === 'number') request.ubatch_size = draft.ubatch_size;
 
   return request;
 }
@@ -266,6 +274,8 @@ export function buildSlotPreflightRequest(draft: SlotFormDraft): RouterPreflight
     host_port: typeof draft.host_port === 'number' ? draft.host_port : undefined,
     container_name: draft.container_name.trim() || undefined,
     extra_args: extraArgs,
+    batch_size: typeof draft.batch_size === 'number' ? draft.batch_size : undefined,
+    ubatch_size: typeof draft.ubatch_size === 'number' ? draft.ubatch_size : undefined,
   };
 }
 
@@ -274,11 +284,12 @@ const labelClass = 'block text-xs font-medium text-text-secondary mb-1.5';
 
 const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, models, gpus, modelError, gpuError, effectiveGpuDevices, slotOptions }) => {
   const options = useMemo(() => slotOptions ?? {
-    ok: false,
-    source: 'fallback',
-    parallel: { field: 'parallel_slots', default: 1, min: 1, max: 16, preferred_flag: '--parallel', detected_flag: '--parallel', fallback_flags: ['-np'], context_semantics: '' },
-    cache_types: { allowed: ['f32', 'f16', 'bf16', 'q8_0', 'q4_0', 'q4_1', 'iq4_nl', 'q5_0', 'q5_1'], default_k: 'f16', default_v: 'f16', cache_type_k_flag: '--cache-type-k', cache_type_v_flag: '--cache-type-v' },
-  }, [slotOptions]);
+     ok: false,
+     source: 'fallback',
+     parallel: { field: 'parallel_slots', default: 1, min: 1, max: 16, preferred_flag: '--parallel', detected_flag: '--parallel', fallback_flags: ['-np'], context_semantics: '' },
+     cache_types: { allowed: ['f32', 'f16', 'bf16', 'q8_0', 'q4_0', 'q4_1', 'iq4_nl', 'q5_0', 'q5_1'], default_k: 'f16', default_v: 'f16', cache_type_k_flag: '--cache-type-k', cache_type_v_flag: '--cache-type-v' },
+     batch: { batch_size_default: 8192, ubatch_size_default: 2048, batch_size_options: [512, 1024, 2048, 4096, 8192], ubatch_size_options: [256, 512, 1024, 2048], batch_size_flag: '--batch-size', ubatch_size_flag: '--ubatch-size' },
+   }, [slotOptions]);
 
   const modelNames = useMemo(() => {
     const names = models.map((model) => model.name).filter(Boolean);
@@ -296,14 +307,18 @@ const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, 
   }, [models]);
 
   const usableGpus = gpus.filter((gpu) => !isExcludedDisplayGpu(gpu));
-  const selectedGpuSet = new Set(
-    draft.gpu_devices === 'all'
-      ? usableGpus.map((gpu) => String(gpu.index))
-      : draft.gpu_devices.split(',').map((value) => value.trim()).filter(Boolean)
-  );
-  const allUsableSelected = draft.gpu_devices === 'all';
-  const hostPortInvalid = draft.host_port !== '' && (!Number.isInteger(draft.host_port) || draft.host_port <= 0);
-  const customContextInvalid = draft.use_custom_context && (draft.custom_context_size === '' || !Number.isInteger(draft.custom_context_size) || draft.custom_context_size <= 0);
+   const selectedGpuSet = new Set(
+     draft.gpu_devices === 'all'
+       ? usableGpus.map((gpu) => String(gpu.index))
+       : draft.gpu_devices.split(',').map((value) => value.trim()).filter(Boolean)
+   );
+   const allUsableSelected = draft.gpu_devices === 'all';
+   const hostPortInvalid = draft.host_port !== '' && (!Number.isInteger(draft.host_port) || draft.host_port <= 0);
+   const customContextInvalid = draft.use_custom_context && (draft.custom_context_size === '' || !Number.isInteger(draft.custom_context_size) || draft.custom_context_size <= 0);
+   const ubatchExceedsBatch = draft.ubatch_size > draft.batch_size;
+ 
+   const batchSizeOptions = useMemo(() => options.batch?.batch_size_options ?? [512, 1024, 2048, 4096, 8192], [options.batch]);
+   const ubatchSizeOptions = useMemo(() => options.batch?.ubatch_size_options ?? [256, 512, 1024, 2048], [options.batch]);
 
   const tensorSplitValues = draft.tensor_split.trim().split(',').filter(Boolean);
   const tensorSplitCountMismatch =
@@ -567,9 +582,63 @@ const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, 
              <p className="text-[10px] text-text-tertiary mt-1">Each non-empty line is sent as one extra_args entry.</p>
             </div>
           </div>
-        </CollapsibleDetail>
+         </CollapsibleDetail>
  
-        {/* Parallel / KV Cache Section */}
+         {/* Batch / Prompt Processing Section */}
+         <CollapsibleDetail title="Batch / Prompt Processing" defaultOpen={false}>
+           <div className="space-y-4">
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+               {/* Batch size */}
+               <div>
+                 <label className={labelClass}>Batch size</label>
+                 <div className="flex items-center gap-2">
+                   <select
+                      className={fieldClass}
+                      value={draft.batch_size}
+                      onChange={(e) => update({ batch_size: Number(e.target.value) })}
+                    >
+                      {batchSizeOptions.map((v: number) => (
+                        <option key={v} value={v}>{v.toLocaleString()}</option>
+                      ))}
+                    </select>
+                   <span className="text-xs text-text-tertiary">tokens</span>
+                 </div>
+                 <p className="text-[10px] text-text-tertiary mt-1">
+                   Controls prompt processing batch size. Larger values can improve prompt ingestion speed but may increase VRAM pressure.
+                 </p>
+               </div>
+ 
+               {/* Micro-batch size */}
+               <div>
+                 <label className={labelClass}>Micro-batch size</label>
+                 <div className="flex items-center gap-2">
+                   <select
+                       className={fieldClass}
+                       value={draft.ubatch_size}
+                       onChange={(e) => update({ ubatch_size: Number(e.target.value) })}
+                     >
+                       {ubatchSizeOptions.map((v: number) => (
+                         <option key={v} value={v}>{v.toLocaleString()}</option>
+                       ))}
+                     </select>
+                   <span className="text-xs text-text-tertiary">tokens</span>
+                 </div>
+                 <p className="text-[10px] text-text-tertiary mt-1">
+                   Controls physical GPU micro-batches. Larger values improve throughput but increase VRAM pressure.
+                 </p>
+               </div>
+             </div>
+ 
+             {/* Validation warning */}
+             {ubatchExceedsBatch && (
+               <p className="text-[10px] text-status-warning">
+                 ⚠ Micro-batch size ({draft.ubatch_size.toLocaleString()}) exceeds batch size ({draft.batch_size.toLocaleString()}).
+               </p>
+             )}
+           </div>
+         </CollapsibleDetail>
+ 
+         {/* Parallel / KV Cache Section */}
         <CollapsibleDetail title="Parallel / KV Cache" defaultOpen={false}>
           <div className="space-y-4">
             {/* A. Parallel slots */}

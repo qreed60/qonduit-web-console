@@ -12,6 +12,8 @@ interface PreflightResultDrawerProps {
   parallelSlots?: number;
   cacheTypeK?: string;
   cacheTypeV?: string;
+  batchSize?: number;
+  ubatchSize?: number;
 }
 
 const TENSOR_SPLIT_MODE_LABELS: Record<PreflightResultDrawerProps['tensorSplitMode'], string> = {
@@ -30,6 +32,8 @@ const PreflightResultDrawer: React.FC<PreflightResultDrawerProps> = ({
   parallelSlots,
   cacheTypeK,
   cacheTypeV,
+  batchSize,
+  ubatchSize,
 }) => {
   if (!result && !error) return null;
 
@@ -144,7 +148,27 @@ const PreflightResultDrawer: React.FC<PreflightResultDrawerProps> = ({
         ) : null}
       </CollapsibleDetail>
 
-      {/* KV Cache Estimate */}
+      {/* Batch Configuration */}
+       {(batchSize || ubatchSize || result?.batch_size || result?.ubatch_size) && (
+         <CollapsibleDetail title="Batch Configuration" defaultOpen={false}>
+           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+             <div>
+               <span className="text-text-tertiary">Batch size:</span>
+               <span className="ml-2 font-mono text-text-primary">
+                 {batchSize ?? result?.batch_size ?? '\u2014'}
+               </span>
+             </div>
+             <div>
+               <span className="text-text-tertiary">Micro-batch size:</span>
+               <span className="ml-2 font-mono text-text-primary">
+                 {ubatchSize ?? result?.ubatch_size ?? '\u2014'}
+               </span>
+             </div>
+           </div>
+         </CollapsibleDetail>
+       )}
+ 
+       {/* KV Cache Estimate */}
       {(result?.kv_cache_estimate || cacheTypeK || cacheTypeV) && (
         <CollapsibleDetail title="KV Cache Estimate" defaultOpen={false}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
@@ -197,15 +221,18 @@ const PreflightResultDrawer: React.FC<PreflightResultDrawerProps> = ({
         <CollapsibleDetail title="Launch Args Preview" defaultOpen={false}>
           <pre className="whitespace-pre-wrap break-words font-mono text-[10px] bg-bg-secondary/40 p-2 rounded text-text-primary">
             {result.launch_args_preview.split('\n').map((line, i) => {
-              const isParallel = line.includes('--parallel') || line.includes('-np');
-              const isCacheK = line.includes('--cache-type-k');
-              const isCacheV = line.includes('--cache-type-v');
-              return (
-                <div key={i} className={isParallel || isCacheK || isCacheV ? 'text-accent-primary font-semibold' : ''}>
-                  {line}
-                </div>
-              );
-            })}
+               const isParallel = line.includes('--parallel') || line.includes('-np');
+               const isCacheK = line.includes('--cache-type-k');
+               const isCacheV = line.includes('--cache-type-v');
+               const isBatch = line.includes('--batch-size');
+               const isUbatch = line.includes('--ubatch-size');
+               const isHighlight = isParallel || isCacheK || isCacheV || isBatch || isUbatch;
+               return (
+                 <div key={i} className={isHighlight ? 'text-accent-primary font-semibold' : ''}>
+                   {line}
+                 </div>
+               );
+             })}
           </pre>
         </CollapsibleDetail>
       )}

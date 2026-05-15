@@ -961,6 +961,14 @@ export async function fetchRouterGpu(): Promise<GpuStatus> {
  */
 export async function fetchRouterSlotOptions(): Promise<RouterSlotOptions> {
   const url = apiPath('router', '/api/v1/qonduit-router/slot-options');
+  const batchFallback = {
+    batch_size_default: 8192,
+    ubatch_size_default: 2048,
+    batch_size_options: [512, 1024, 2048, 4096, 8192],
+    ubatch_size_options: [256, 512, 1024, 2048],
+    batch_size_flag: '--batch-size',
+    ubatch_size_flag: '--ubatch-size',
+  };
   try {
     const raw = await parseJsonSafe<RouterSlotOptions>(await fetch(url), 'Router /api/v1/qonduit-router/slot-options');
     return {
@@ -980,6 +988,7 @@ export async function fetchRouterSlotOptions(): Promise<RouterSlotOptions> {
         cache_type_k_flag: '--cache-type-k',
         cache_type_v_flag: '--cache-type-v',
       },
+      batch: raw.batch ?? batchFallback,
     };
   } catch {
     return {
@@ -999,6 +1008,7 @@ export async function fetchRouterSlotOptions(): Promise<RouterSlotOptions> {
         cache_type_k_flag: '--cache-type-k',
         cache_type_v_flag: '--cache-type-v',
       },
+      batch: batchFallback,
     };
   }
 }

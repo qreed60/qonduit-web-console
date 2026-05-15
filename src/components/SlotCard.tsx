@@ -169,8 +169,14 @@ const SlotCard: React.FC<SlotCardProps> = ({
            <FieldRow label="Context" value={contextSize} />
          ) : null}
          {(slot.cache_type_k || slot.cache_type_v) && (
-           <FieldRow label="KV Cache" value={`K=${slot.cache_type_k || 'f16'} · V=${slot.cache_type_v || 'f16'}`} />
-         )}
+            <FieldRow label="KV Cache" value={`K=${slot.cache_type_k || 'f16'} · V=${slot.cache_type_v || 'f16'}`} />
+          )}
+          {(typeof slot.batch_size === 'number' || typeof slot.ubatch_size === 'number') && (
+            <FieldRow
+              label="Batch"
+              value={`B: ${slot.batch_size?.toLocaleString() ?? '—'} / uB: ${slot.ubatch_size?.toLocaleString() ?? '—'}`}
+            />
+          )}
          <FieldRow label="Host Port" value={hostPort} />
          <FieldRow
            label="Container"

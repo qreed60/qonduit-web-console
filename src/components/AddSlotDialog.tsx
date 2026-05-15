@@ -87,17 +87,19 @@ const AddSlotDialog: React.FC<AddSlotDialogProps> = ({
             />
  
            {preflightResult && (
-              <PreflightResultDrawer
-                result={JSON.parse(preflightResult) as RouterPreflightResponse}
-                error={preflightError}
-                requestedTensorSplit={isExplicitSplit ? draft.tensor_split : ''}
-                tensorSplitMode={draft.tensor_split_mode}
-                effectiveGpuDevices={effectiveGpuDevices}
-                parallelSlots={draft.parallel_slots}
-                cacheTypeK={draft.cache_type_k}
-                cacheTypeV={draft.cache_type_v}
-              />
-            )}
+               <PreflightResultDrawer
+                 result={JSON.parse(preflightResult) as RouterPreflightResponse}
+                 error={preflightError}
+                 requestedTensorSplit={isExplicitSplit ? draft.tensor_split : ''}
+                 tensorSplitMode={draft.tensor_split_mode}
+                 effectiveGpuDevices={effectiveGpuDevices}
+                 parallelSlots={draft.parallel_slots}
+                 cacheTypeK={draft.cache_type_k}
+                 cacheTypeV={draft.cache_type_v}
+                 batchSize={draft.batch_size}
+                 ubatchSize={draft.ubatch_size}
+               />
+             )}
         </div>
 
         {/* Sticky Footer */}
