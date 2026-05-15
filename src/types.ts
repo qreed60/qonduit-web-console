@@ -207,6 +207,9 @@ export interface RouterSlot {
   port?: number | string;
   context_size?: number;
   n_ctx?: number;
+  parallel_slots?: number;
+  cache_type_k?: string;
+  cache_type_v?: string;
   gpu_devices?: string | number[] | GpuInfo[];
   effective_gpu_devices?: string | number[] | GpuInfo[];
   tensor_split?: string | number[];
@@ -249,6 +252,9 @@ export interface RouterPreflightRequest {
   model_path?: string;
   context_size?: number;
   n_ctx?: number;
+  parallel_slots?: number;
+  cache_type_k?: string;
+  cache_type_v?: string;
   gpu_devices?: string | number[] | GpuInfo[];
   tensor_split?: string | number[];
   embeddings?: boolean;
@@ -261,6 +267,9 @@ export interface RouterPreflightRequest {
 export interface RouterSlotUpdateRequest {
   model?: string;
   context_size?: number;
+  parallel_slots?: number;
+  cache_type_k?: string;
+  cache_type_v?: string;
   gpu_devices?: string | number[] | GpuInfo[];
   tensor_split?: string | number[] | null;
   embeddings?: boolean;
@@ -294,12 +303,52 @@ export interface RouterPreflightResponse {
   effective_gpu_devices?: string | number[] | null;
   launch_args_preview?: string | null;
   suggested_tensor_splits?: {
-    even?: string | null;
-    free_vram_weighted_raw?: string | null;
-    free_vram_weighted_normalized?: string | null;
-  } | null;
-  [key: string]: unknown;
-}
+     even?: string | null;
+     free_vram_weighted_raw?: string | null;
+     free_vram_weighted_normalized?: string | null;
+   } | null;
+   effective_context_per_parallel_slot?: number | null;
+   kv_cache_estimate?: KVCacheEstimate | null;
+   [key: string]: unknown;
+ }
+ 
+ export interface KVCacheEstimate {
+   ok: boolean;
+   estimate_confidence?: string;
+   context_size: number;
+   parallel_slots: number;
+   effective_context_per_parallel_slot: number;
+   cache_type_k: string;
+   cache_type_v: string;
+   baseline_cache_type_k: string;
+   baseline_cache_type_v: string;
+   estimated_kv_cache_mib: number;
+   estimated_kv_cache_f16_mib: number;
+   estimated_savings_vs_f16_mib: number;
+   estimated_savings_vs_f16_percent: number;
+ }
+ 
+ export interface RouterSlotOptions {
+   ok: boolean;
+   source: 'api' | 'fallback';
+   parallel: {
+     field: string;
+     default: number;
+     min: number;
+     max: number;
+     preferred_flag: string;
+     detected_flag: string;
+     fallback_flags: string[];
+     context_semantics?: string;
+   };
+   cache_types: {
+     allowed: string[];
+     default_k: string;
+     default_v: string;
+     cache_type_k_flag: string;
+     cache_type_v_flag: string;
+   };
+ }
 
 export interface RouterSlotActionResponse {
   ok: boolean;

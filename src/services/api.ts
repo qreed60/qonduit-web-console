@@ -1,4 +1,4 @@
-import { Settings, ProviderType, ChatMessage, NormalizedModel, GpuStatus, RouterStatus, RouterSlotsResponse, RouterEndpointsResponse, RouterPreflightRequest, RouterSlotUpdateRequest, RouterPreflightResponse, RouterSlotActionResponse, RouterSlotLogsResponse, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse, ChatAttachmentPayload } from '../types';
+import { Settings, ProviderType, ChatMessage, NormalizedModel, GpuStatus, RouterStatus, RouterSlotsResponse, RouterEndpointsResponse, RouterPreflightRequest, RouterSlotUpdateRequest, RouterPreflightResponse, RouterSlotActionResponse, RouterSlotLogsResponse, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse, ChatAttachmentPayload, RouterSlotOptions } from '../types';
 import { getMode, apiPath } from '../config/endpoints';
 
 // Re-export NormalizedModel for convenience
@@ -952,6 +952,55 @@ export async function fetchRouterGpu(): Promise<GpuStatus> {
     'Router /api/v1/qonduit-router/gpu'
   );
   return raw;
+}
+
+/**
+ * Fetch slot options (parallel slots range, KV cache type defaults) from
+ * GET /api/v1/qonduit-router/slot-options.
+ * Returns a fallback shape when the endpoint is unavailable (404, network, parse).
+ */
+export async function fetchRouterSlotOptions(): Promise<RouterSlotOptions> {
+  const url = apiPath('router', '/api/v1/qonduit-router/slot-options');
+  try {
+    const raw = await parseJsonSafe<RouterSlotOptions>(await fetch(url), 'Router /api/v1/qonduit-router/slot-options');
+    return {
+      ok: raw.ok ?? true,
+      source: 'api',
+      parallel: raw.parallel ?? {
+        field: 'parallel_slots',
+        default: 1, min: 1, max: 16,
+        preferred_flag: '--parallel',
+        detected_flag: '--parallel',
+        fallback_flags: ['-np'],
+        context_semantics: 'context_size is shared across parallel slots; effective_context_per_parallel_slot = floor(context_size / parallel_slots)',
+      },
+      cache_types: raw.cache_types ?? {
+        allowed: ['f32', 'f16', 'bf16', 'q8_0', 'q4_0', 'q4_1', 'iq4_nl', 'q5_0', 'q5_1'],
+        default_k: 'f16', default_v: 'f16',
+        cache_type_k_flag: '--cache-type-k',
+        cache_type_v_flag: '--cache-type-v',
+      },
+    };
+  } catch {
+    return {
+      ok: false,
+      source: 'fallback',
+      parallel: {
+        field: 'parallel_slots',
+        default: 1, min: 1, max: 16,
+        preferred_flag: '--parallel',
+        detected_flag: '--parallel',
+        fallback_flags: ['-np'],
+        context_semantics: 'context_size is shared across parallel slots; effective_context_per_parallel_slot = floor(context_size / parallel_slots)',
+      },
+      cache_types: {
+        allowed: ['f32', 'f16', 'bf16', 'q8_0', 'q4_0', 'q4_1', 'iq4_nl', 'q5_0', 'q5_1'],
+        default_k: 'f16', default_v: 'f16',
+        cache_type_k_flag: '--cache-type-k',
+        cache_type_v_flag: '--cache-type-v',
+      },
+    };
+  }
 }
 
 /**

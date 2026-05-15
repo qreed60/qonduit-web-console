@@ -148,28 +148,39 @@ const SlotCard: React.FC<SlotCardProps> = ({
       </div>
 
       {/* Info Fields */}
-      <div className="divide-y divide-border-subtle/50">
-        <FieldRow label="Model" value={model} monospace truncate copyable={!!onCopy} onCopy={undefined} />
-        <FieldRow
-          label="Endpoint"
-          value={openaiBase}
-          monospace
-          truncate
-          copyable={!!onCopy}
-          onCopy={handleCopyEndpoint}
-        />
-        <FieldRow label="GPU Devices" value={gpuDevices} monospace />
-        <FieldRow label="Context" value={contextSize} />
-        <FieldRow label="Host Port" value={hostPort} />
-        <FieldRow
-          label="Container"
-          value={containerName}
-          monospace
-          truncate
-          copyable={!!onCopy}
-          onCopy={handleCopyContainer}
-        />
-      </div>
+       <div className="divide-y divide-border-subtle/50">
+         <FieldRow label="Model" value={model} monospace truncate copyable={!!onCopy} onCopy={undefined} />
+         <FieldRow
+           label="Endpoint"
+           value={openaiBase}
+           monospace
+           truncate
+           copyable={!!onCopy}
+           onCopy={handleCopyEndpoint}
+         />
+         <FieldRow label="GPU Devices" value={gpuDevices} monospace />
+         {typeof slot.parallel_slots === 'number' && slot.parallel_slots > 1 ? (
+           <FieldRow label="Parallel" value={`${slot.parallel_slots} slot${slot.parallel_slots > 1 ? 's' : ''}`} />
+         ) : null}
+         {/* Effective context per slot when parallel > 1 */}
+         {typeof slot.context_size === 'number' && typeof slot.parallel_slots === 'number' && slot.parallel_slots > 1 ? (
+           <FieldRow label="Effective ctx" value={`${Math.floor(slot.context_size / slot.parallel_slots).toLocaleString()} per slot`} />
+         ) : typeof slot.context_size === 'number' ? (
+           <FieldRow label="Context" value={contextSize} />
+         ) : null}
+         {(slot.cache_type_k || slot.cache_type_v) && (
+           <FieldRow label="KV Cache" value={`K=${slot.cache_type_k || 'f16'} · V=${slot.cache_type_v || 'f16'}`} />
+         )}
+         <FieldRow label="Host Port" value={hostPort} />
+         <FieldRow
+           label="Container"
+           value={containerName}
+           monospace
+           truncate
+           copyable={!!onCopy}
+           onCopy={handleCopyContainer}
+         />
+       </div>
 
       {/* Error */}
       {slot.last_error && (

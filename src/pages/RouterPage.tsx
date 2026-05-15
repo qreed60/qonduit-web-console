@@ -6,6 +6,7 @@ import {
   fetchRouterModels,
   fetchRouterSlotLogs,
   fetchRouterSlots,
+  fetchRouterSlotOptions,
   getSettings,
   preflightRouterSlot,
   runRouterSlotAction,
@@ -64,10 +65,14 @@ const RouterPage: React.FC = () => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [editingSlot, setEditingSlot] = useState<RouterSlot | null>(null);
-  const [dialogPreflightLoading, setDialogPreflightLoading] = useState(false);
-   const [dialogPreflightResult, setDialogPreflightResult] = useState<string | null>(null);
-   const [dialogPreflightError, setDialogPreflightError] = useState<string | null>(null);
+   const [editingSlot, setEditingSlot] = useState<RouterSlot | null>(null);
+   const [dialogPreflightLoading, setDialogPreflightLoading] = useState(false);
+    const [dialogPreflightResult, setDialogPreflightResult] = useState<string | null>(null);
+    const [dialogPreflightError, setDialogPreflightError] = useState<string | null>(null);
+ 
+    // Slot options (parallel slots / KV cache)
+    const [slotOptions, setSlotOptions] = useState<import('../types').RouterSlotOptions | null>(null);
+    const slotOptionsFetchedRef = useRef(false);
  
    // Derive effective GPU devices string for dialog display
     const dialogEffectiveGpus = useMemo(() => {
@@ -130,31 +135,42 @@ const RouterPage: React.FC = () => {
       }
 
       try {
-        const gpu = await fetchRouterGpu();
-        if (gpu.ok) {
-          setVramData(getGpuStatusSummaryFields(gpu));
-          setGpus(gpu.gpus || []);
-          setGpuRows((gpu.gpus || []).map((g: GpuInfo) => {
-            const gpuMemory = getGpuStatusSummaryFields(g);
-            return {
-              index: g.index,
-              label: formatGpuLabel(g),
-              name: g.name || 'Unknown GPU',
-              total: gpuMemory.total,
-              used: gpuMemory.used,
-              free: gpuMemory.free,
-              isDisplay: isExcludedDisplayGpu(g),
-            };
-          }));
-          setVramError(null);
-        } else {
-          setVramError('GPU endpoint returned ok:false — showing last known GPU data');
-        }
-      } catch (err) {
-        setVramError(err instanceof Error ? err.message : 'GPU refresh failed — showing last known GPU data');
-      }
-
-      setLastUpdated(Date.now());
+         const gpu = await fetchRouterGpu();
+         if (gpu.ok) {
+           setVramData(getGpuStatusSummaryFields(gpu));
+           setGpus(gpu.gpus || []);
+           setGpuRows((gpu.gpus || []).map((g: GpuInfo) => {
+             const gpuMemory = getGpuStatusSummaryFields(g);
+             return {
+               index: g.index,
+               label: formatGpuLabel(g),
+               name: g.name || 'Unknown GPU',
+               total: gpuMemory.total,
+               used: gpuMemory.used,
+               free: gpuMemory.free,
+               isDisplay: isExcludedDisplayGpu(g),
+             };
+           }));
+           setVramError(null);
+         } else {
+           setVramError('GPU endpoint returned ok:false — showing last known GPU data');
+         }
+       } catch (err) {
+         setVramError(err instanceof Error ? err.message : 'GPU refresh failed — showing last known GPU data');
+       }
+ 
+       // Stale-while-revalidate: fetch slot-options once, don't block other fetches
+       if (!slotOptionsFetchedRef.current) {
+         slotOptionsFetchedRef.current = true;
+         try {
+           const options = await fetchRouterSlotOptions();
+           setSlotOptions(options);
+         } catch {
+           // Fallback is returned by fetchRouterSlotOptions — no error needed
+         }
+       }
+ 
+       setLastUpdated(Date.now());
     } finally {
       setRefreshing(false);
       inFlightRef.current = false;
@@ -444,37 +460,39 @@ const RouterPage: React.FC = () => {
       </div>
 
       <AddSlotDialog
-             open={addDialogOpen}
-             models={routerModels}
-             gpus={gpus}
-             modelError={modelsError}
-             gpuError={vramError}
-             preflightLoading={dialogPreflightLoading}
-             preflightResult={dialogPreflightResult}
-             preflightError={dialogPreflightError}
-             effectiveGpuDevices={dialogEffectiveGpus}
-             onPreflight={handleDialogPreflight}
-             onCreate={handleCreateSlot}
-             onCreateLoading={createLoading}
-             onClose={() => setAddDialogOpen(false)}
-           />
-    
-           <EditSlotDialog
-             open={Boolean(editingSlot)}
-             slot={editingSlot}
-             models={routerModels}
-             gpus={gpus}
-             modelError={modelsError}
-             gpuError={vramError}
-             preflightLoading={dialogPreflightLoading}
-             preflightResult={dialogPreflightResult}
-             preflightError={dialogPreflightError}
-             effectiveGpuDevices={dialogEffectiveGpus}
-             onPreflight={handleDialogPreflight}
-             onSave={handleSaveSlot}
-             onSaveLoading={saveLoading}
-             onClose={() => setEditingSlot(null)}
-           />
+               open={addDialogOpen}
+               models={routerModels}
+               gpus={gpus}
+               modelError={modelsError}
+               gpuError={vramError}
+               preflightLoading={dialogPreflightLoading}
+               preflightResult={dialogPreflightResult}
+               preflightError={dialogPreflightError}
+               effectiveGpuDevices={dialogEffectiveGpus}
+               slotOptions={slotOptions}
+               onPreflight={handleDialogPreflight}
+               onCreate={handleCreateSlot}
+               onCreateLoading={createLoading}
+               onClose={() => setAddDialogOpen(false)}
+             />
+  
+             <EditSlotDialog
+               open={Boolean(editingSlot)}
+               slot={editingSlot}
+               models={routerModels}
+               gpus={gpus}
+               modelError={modelsError}
+               gpuError={vramError}
+               preflightLoading={dialogPreflightLoading}
+               preflightResult={dialogPreflightResult}
+               preflightError={dialogPreflightError}
+               effectiveGpuDevices={dialogEffectiveGpus}
+               slotOptions={slotOptions}
+               onPreflight={handleDialogPreflight}
+               onSave={handleSaveSlot}
+               onSaveLoading={saveLoading}
+               onClose={() => setEditingSlot(null)}
+             />
 
       {toastMessage && (
         <Toast message={toastMessage} type={toastType} onClose={() => setToastMessage(null)} />

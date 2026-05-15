@@ -9,6 +9,9 @@ interface PreflightResultDrawerProps {
   requestedTensorSplit: string;
   tensorSplitMode: 'auto' | 'even' | 'weighted' | 'custom';
   effectiveGpuDevices?: string;
+  parallelSlots?: number;
+  cacheTypeK?: string;
+  cacheTypeV?: string;
 }
 
 const TENSOR_SPLIT_MODE_LABELS: Record<PreflightResultDrawerProps['tensorSplitMode'], string> = {
@@ -24,6 +27,9 @@ const PreflightResultDrawer: React.FC<PreflightResultDrawerProps> = ({
   requestedTensorSplit,
   tensorSplitMode,
   effectiveGpuDevices,
+  parallelSlots,
+  cacheTypeK,
+  cacheTypeV,
 }) => {
   if (!result && !error) return null;
 
@@ -113,11 +119,93 @@ const PreflightResultDrawer: React.FC<PreflightResultDrawerProps> = ({
         </div>
       </CollapsibleDetail>
 
+      {/* Parallel Configuration */}
+      <CollapsibleDetail title="Parallel Configuration" defaultOpen={false}>
+        {result?.effective_context_per_parallel_slot != null && result.effective_context_per_parallel_slot > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+            {parallelSlots !== undefined && (
+              <div>
+                <span className="text-text-tertiary">Parallel slots:</span>
+                <span className="ml-2 font-mono text-text-primary">{parallelSlots}</span>
+              </div>
+            )}
+            <div>
+              <span className="text-text-tertiary">Effective context/slot:</span>
+              <span className="ml-2 font-mono text-text-primary">{result.effective_context_per_parallel_slot.toLocaleString()} tokens</span>
+            </div>
+            <div className="sm:col-span-2 text-[10px] text-text-tertiary italic">
+              Context is shared across parallel slots
+            </div>
+          </div>
+        ) : parallelSlots !== undefined && parallelSlots > 1 ? (
+          <div className="text-[11px] text-text-tertiary">
+            Parallel: {parallelSlots} slots (backend will compute effective context)
+          </div>
+        ) : null}
+      </CollapsibleDetail>
+
+      {/* KV Cache Estimate */}
+      {(result?.kv_cache_estimate || cacheTypeK || cacheTypeV) && (
+        <CollapsibleDetail title="KV Cache Estimate" defaultOpen={false}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+            {(cacheTypeK || cacheTypeV) && (
+              <>
+                <div>
+                  <span className="text-text-tertiary">Requested K:</span>
+                  <span className="ml-2 font-mono text-text-primary">{cacheTypeK || '\u2014'}</span>
+                </div>
+                <div>
+                  <span className="text-text-tertiary">Requested V:</span>
+                  <span className="ml-2 font-mono text-text-primary">{cacheTypeV || '\u2014'}</span>
+                </div>
+              </>
+            )}
+            {result?.kv_cache_estimate && (
+              <>
+                <div>
+                  <span className="text-text-tertiary">Cache type K:</span>
+                  <span className="ml-2 font-mono text-text-primary">{result.kv_cache_estimate.cache_type_k}</span>
+                </div>
+                <div>
+                  <span className="text-text-tertiary">Cache type V:</span>
+                  <span className="ml-2 font-mono text-text-primary">{result.kv_cache_estimate.cache_type_v}</span>
+                </div>
+                <div>
+                  <span className="text-text-tertiary">Estimated cache:</span>
+                  <span className="ml-2 font-mono text-text-primary">{result.kv_cache_estimate.estimated_kv_cache_mib} MiB</span>
+                </div>
+                <div>
+                  <span className="text-text-tertiary">Baseline (f16):</span>
+                  <span className="ml-2 font-mono text-text-primary">{result.kv_cache_estimate.estimated_kv_cache_f16_mib} MiB</span>
+                </div>
+                <div>
+                  <span className="text-text-tertiary">Savings:</span>
+                  <span className="ml-2 font-mono text-text-primary">{result.kv_cache_estimate.estimated_savings_vs_f16_mib} MiB ({result.kv_cache_estimate.estimated_savings_vs_f16_percent}%)</span>
+                </div>
+                <div>
+                  <span className="text-text-tertiary">Confidence:</span>
+                  <span className="ml-2 font-mono text-text-primary">{result.kv_cache_estimate.estimate_confidence || 'unknown'}</span>
+                </div>
+              </>
+            )}
+          </div>
+        </CollapsibleDetail>
+      )}
+
       {/* Launch Args Preview */}
       {result?.launch_args_preview && (
         <CollapsibleDetail title="Launch Args Preview" defaultOpen={false}>
           <pre className="whitespace-pre-wrap break-words font-mono text-[10px] bg-bg-secondary/40 p-2 rounded text-text-primary">
-            {result.launch_args_preview}
+            {result.launch_args_preview.split('\n').map((line, i) => {
+              const isParallel = line.includes('--parallel') || line.includes('-np');
+              const isCacheK = line.includes('--cache-type-k');
+              const isCacheV = line.includes('--cache-type-v');
+              return (
+                <div key={i} className={isParallel || isCacheK || isCacheV ? 'text-accent-primary font-semibold' : ''}>
+                  {line}
+                </div>
+              );
+            })}
           </pre>
         </CollapsibleDetail>
       )}

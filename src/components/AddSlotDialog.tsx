@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Loader2, Plus, X } from 'lucide-react';
-import { GpuInfo, NormalizedModel, RouterPreflightResponse } from '../types';
+import { GpuInfo, NormalizedModel, RouterPreflightResponse, RouterSlotOptions } from '../types';
 import SlotConfigForm, { buildSlotPreflightRequest, createDefaultSlotDraft, SlotFormDraft } from './SlotConfigForm';
 import PreflightResultDrawer from './PreflightResultDrawer';
 
@@ -14,6 +14,7 @@ interface AddSlotDialogProps {
   preflightResult?: string | null;
   preflightError?: string | null;
   effectiveGpuDevices?: string;
+  slotOptions?: RouterSlotOptions | null;
   onPreflight: (slotId: string, draft: ReturnType<typeof buildSlotPreflightRequest>) => void;
   onCreate?: (draft: SlotFormDraft) => void;
   onCreateLoading?: boolean;
@@ -38,6 +39,7 @@ const AddSlotDialog: React.FC<AddSlotDialogProps> = ({
   preflightResult,
   preflightError,
   effectiveGpuDevices,
+  slotOptions,
   onPreflight,
   onCreate,
   onCreateLoading = false,
@@ -73,25 +75,29 @@ const AddSlotDialog: React.FC<AddSlotDialogProps> = ({
         {/* Scrollable Body */}
         <div className="overflow-y-auto max-h-[calc(95vh-145px)] sm:max-h-[calc(90vh-145px)] px-5 py-4">
           <SlotConfigForm
-             mode="add"
-             draft={draft}
-             onChange={setDraft}
-             models={models}
-             gpus={gpus}
-             modelError={modelError}
-             gpuError={gpuError}
-             effectiveGpuDevices={effectiveGpuDevices}
-           />
+              mode="add"
+              draft={draft}
+              onChange={setDraft}
+              models={models}
+              gpus={gpus}
+              modelError={modelError}
+              gpuError={gpuError}
+              effectiveGpuDevices={effectiveGpuDevices}
+              slotOptions={slotOptions}
+            />
  
            {preflightResult && (
-             <PreflightResultDrawer
-               result={JSON.parse(preflightResult) as RouterPreflightResponse}
-               error={preflightError}
-               requestedTensorSplit={isExplicitSplit ? draft.tensor_split : ''}
-               tensorSplitMode={draft.tensor_split_mode}
-               effectiveGpuDevices={effectiveGpuDevices}
-             />
-           )}
+              <PreflightResultDrawer
+                result={JSON.parse(preflightResult) as RouterPreflightResponse}
+                error={preflightError}
+                requestedTensorSplit={isExplicitSplit ? draft.tensor_split : ''}
+                tensorSplitMode={draft.tensor_split_mode}
+                effectiveGpuDevices={effectiveGpuDevices}
+                parallelSlots={draft.parallel_slots}
+                cacheTypeK={draft.cache_type_k}
+                cacheTypeV={draft.cache_type_v}
+              />
+            )}
         </div>
 
         {/* Sticky Footer */}

@@ -403,20 +403,32 @@ const DashboardPage: React.FC = () => {
                  </div>
                </div>
                {openHandsStatus && (
-                 <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-3">
-                   <span className="text-[10px] text-text-tertiary uppercase tracking-wider">OpenHands</span>
-                   <div className="flex items-center gap-2 mt-1.5">
-                     {openHandsStatus === 'Ready' ? (
-                       <div className="w-2 h-2 rounded-full bg-status-success" />
-                     ) : openHandsStatus === 'Running' ? (
-                       <div className="w-2 h-2 rounded-full bg-status-warning" />
-                     ) : (
-                       <div className="w-2 h-2 rounded-full bg-status-error" />
-                     )}
-                     <p className="text-sm text-text-primary">{openHandsStatus}</p>
-                   </div>
-                 </div>
-               )}
+                    <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-3">
+                      <span className="text-[10px] text-text-tertiary uppercase tracking-wider">OpenHands</span>
+                      <div className="flex items-center gap-2 mt-1.5">
+                        {openHandsStatus === 'Ready' ? (
+                          <div className="w-2 h-2 rounded-full bg-status-success" />
+                        ) : openHandsStatus === 'Running' ? (
+                          <div className="w-2 h-2 rounded-full bg-status-warning" />
+                        ) : (
+                          <div className="w-2 h-2 rounded-full bg-status-error" />
+                        )}
+                        <p className="text-sm text-text-primary">{openHandsStatus}</p>
+                      </div>
+                      {openHandsSlot && ((typeof openHandsSlot.parallel_slots === 'number' && openHandsSlot.parallel_slots > 1) ||
+                         openHandsSlot.cache_type_k !== 'f16' ||
+                         openHandsSlot.cache_type_v !== 'f16') ? (
+                          <div className="mt-2 rounded-lg border border-border-subtle bg-bg-secondary/40 p-2">
+                            <p className="text-[10px] text-text-tertiary">
+                              {typeof openHandsSlot.parallel_slots === 'number' && openHandsSlot.parallel_slots > 1
+                                ? `parallel ${openHandsSlot.parallel_slots} · `
+                                : ''}
+                              KV {openHandsSlot.cache_type_k || 'f16'}/{openHandsSlot.cache_type_v || 'f16'}
+                            </p>
+                          </div>
+                        ) : null}
+                    </div>
+                  )}
                <div className="rounded-lg border border-border-subtle bg-bg-secondary/40 p-3">
                  <span className="text-[10px] text-text-tertiary uppercase tracking-wider">GPU Memory</span>
                  <p className="text-sm text-text-primary mt-1.5">

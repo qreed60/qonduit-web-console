@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { GpuInfo, NormalizedModel, RouterPreflightRequest, RouterSlot, RouterSlotUpdateRequest } from '../types';
+import { GpuInfo, NormalizedModel, RouterPreflightRequest, RouterSlot, RouterSlotUpdateRequest, RouterSlotOptions } from '../types';
 import { formatGpuLabel, isExcludedDisplayGpu, safeDisplayValue } from '../utils/routerDisplay';
 import { generateEvenSplit, generateWeightedSplit, TensorSplitModeRecord } from '../utils/tensorSplit';
 import CollapsibleDetail from './CollapsibleDetail';
@@ -44,6 +44,9 @@ export interface SlotFormDraft {
   allow_container_edit: boolean;
   extra_args_text: string;
   use_custom_model: boolean;
+  parallel_slots: number;
+  cache_type_k: string;
+  cache_type_v: string;
 }
 
 export const TENSOR_SPLIT_MODE_LABELS: Record<SlotFormDraft['tensor_split_mode'], string> = {
@@ -62,6 +65,7 @@ interface SlotConfigFormProps {
   modelError?: string | null;
   gpuError?: string | null;
   effectiveGpuDevices?: string;
+  slotOptions?: RouterSlotOptions | null;
 }
 
 function firstString(...values: unknown[]): string {
@@ -156,6 +160,9 @@ export function createDefaultSlotDraft(): SlotFormDraft {
     allow_container_edit: false,
     extra_args_text: '',
     use_custom_model: false,
+    parallel_slots: 1,
+    cache_type_k: 'f16',
+    cache_type_v: 'f16',
   };
 }
 
@@ -185,22 +192,25 @@ export function createSlotDraftFromSlot(
   }
 
   return {
-    slot_id: safeDisplayValue(slot.slot_id, ''),
-    model: firstString(slot.model, slot.model_path),
-    context_size: context.value,
-    custom_context_size: context.custom,
-    use_custom_context: context.useCustom,
-    gpu_devices: gpuDeviceStr,
-    embeddings: slot.embeddings === true,
-    tensor_split_mode: tensorSplitMode,
-    tensor_split: tensorSplit,
-    host_port: firstNumber(slot.host_port, slot.port),
-    container_name: firstString(slot.container_name),
-    allow_container_edit: false,
-    extra_args_text: stringifyExtraArgs(slot.extra_args),
-    use_custom_model: false,
-  };
-}
+     slot_id: safeDisplayValue(slot.slot_id, ''),
+     model: firstString(slot.model, slot.model_path),
+     context_size: context.value,
+     custom_context_size: context.custom,
+     use_custom_context: context.useCustom,
+     gpu_devices: gpuDeviceStr,
+     embeddings: slot.embeddings === true,
+     tensor_split_mode: tensorSplitMode,
+     tensor_split: tensorSplit,
+     host_port: firstNumber(slot.host_port, slot.port),
+     container_name: firstString(slot.container_name),
+      allow_container_edit: false,
+      extra_args_text: stringifyExtraArgs(slot.extra_args),
+      use_custom_model: false,
+      parallel_slots: (() => { const v = firstNumber(slot.parallel_slots); return typeof v === 'number' ? v : 1; })(),
+      cache_type_k: (slot.cache_type_k as string) || 'f16',
+      cache_type_v: (slot.cache_type_v as string) || 'f16',
+    };
+  }
 
 
 export function buildSlotUpdateRequest(draft: SlotFormDraft): RouterSlotUpdateRequest {
@@ -215,6 +225,9 @@ export function buildSlotUpdateRequest(draft: SlotFormDraft): RouterSlotUpdateRe
   const model = draft.model.trim();
   if (model) request.model = model;
   if (typeof contextSize === 'number') request.context_size = contextSize;
+  if (typeof draft.parallel_slots === 'number' && draft.parallel_slots >= 1) request.parallel_slots = draft.parallel_slots;
+  if (draft.cache_type_k) request.cache_type_k = draft.cache_type_k;
+  if (draft.cache_type_v) request.cache_type_v = draft.cache_type_v;
   request.gpu_devices = draft.gpu_devices.trim() || 'all';
   request.embeddings = draft.embeddings;
   if (draft.tensor_split_mode === 'auto') {
@@ -242,6 +255,9 @@ export function buildSlotPreflightRequest(draft: SlotFormDraft): RouterPreflight
     slot_id: draft.slot_id.trim(),
     model: draft.model.trim(),
     context_size: typeof contextSize === 'number' ? contextSize : undefined,
+    parallel_slots: typeof draft.parallel_slots === 'number' ? draft.parallel_slots : 1,
+    cache_type_k: draft.cache_type_k || 'f16',
+    cache_type_v: draft.cache_type_v || 'f16',
     gpu_devices: draft.gpu_devices.trim() || 'all',
     embeddings: draft.embeddings,
     tensor_split: ['even', 'weighted', 'custom'].includes(draft.tensor_split_mode) && draft.tensor_split.trim()
@@ -256,7 +272,13 @@ export function buildSlotPreflightRequest(draft: SlotFormDraft): RouterPreflight
 const fieldClass = 'w-full bg-bg-secondary/60 border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary disabled:opacity-60 disabled:cursor-not-allowed';
 const labelClass = 'block text-xs font-medium text-text-secondary mb-1.5';
 
-const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, models, gpus, modelError, gpuError, effectiveGpuDevices }) => {
+const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, models, gpus, modelError, gpuError, effectiveGpuDevices, slotOptions }) => {
+  const options = useMemo(() => slotOptions ?? {
+    ok: false,
+    source: 'fallback',
+    parallel: { field: 'parallel_slots', default: 1, min: 1, max: 16, preferred_flag: '--parallel', detected_flag: '--parallel', fallback_flags: ['-np'], context_semantics: '' },
+    cache_types: { allowed: ['f32', 'f16', 'bf16', 'q8_0', 'q4_0', 'q4_1', 'iq4_nl', 'q5_0', 'q5_1'], default_k: 'f16', default_v: 'f16', cache_type_k_flag: '--cache-type-k', cache_type_v_flag: '--cache-type-v' },
+  }, [slotOptions]);
 
   const modelNames = useMemo(() => {
     const names = models.map((model) => model.name).filter(Boolean);
@@ -535,19 +557,121 @@ const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, 
           </div>
 
           <div>
-            <label className={labelClass}>Extra args</label>
-            <textarea
-              className={`${fieldClass} min-h-24 font-mono`}
-              value={draft.extra_args_text}
-              onChange={(event) => update({ extra_args_text: event.target.value })}
-              placeholder={'--arg-one\n--arg-two value'}
-            />
-            <p className="text-[10px] text-text-tertiary mt-1">Each non-empty line is sent as one extra_args entry.</p>
-           </div>
-         </div>
-       </CollapsibleDetail>
-    </div>
-  );
-};
+             <label className={labelClass}>Extra args</label>
+             <textarea
+               className={`${fieldClass} min-h-24 font-mono`}
+               value={draft.extra_args_text}
+               onChange={(event) => update({ extra_args_text: event.target.value })}
+               placeholder={'--arg-one\n--arg-two value'}
+             />
+             <p className="text-[10px] text-text-tertiary mt-1">Each non-empty line is sent as one extra_args entry.</p>
+            </div>
+          </div>
+        </CollapsibleDetail>
+ 
+        {/* Parallel / KV Cache Section */}
+        <CollapsibleDetail title="Parallel / KV Cache" defaultOpen={false}>
+          <div className="space-y-4">
+            {/* A. Parallel slots */}
+            <div>
+              <label className={labelClass}>Parallel slots</label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-border-primary bg-bg-secondary text-text-primary hover:bg-bg-tertiary"
+                  onClick={() => update({ parallel_slots: Math.max(options.parallel.min, draft.parallel_slots - 1) })}
+                >−</button>
+                <input
+                  type="number"
+                  min={options.parallel.min}
+                  max={options.parallel.max}
+                  className={`${fieldClass} w-20 text-center`}
+                  value={draft.parallel_slots}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (Number.isInteger(v) && v >= options.parallel.min && v <= options.parallel.max) {
+                      update({ parallel_slots: v });
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-border-primary bg-bg-secondary text-text-primary hover:bg-bg-tertiary"
+                  onClick={() => update({ parallel_slots: Math.min(options.parallel.max, draft.parallel_slots + 1) })}
+                >+</button>
+              </div>
+              <p className="text-[10px] text-text-tertiary mt-1">
+                Parallel slots allow concurrent llama.cpp processing slots. Context is shared across slots.
+              </p>
+              {/* Derived effective context */}
+              {typeof draft.context_size === 'number' && draft.context_size > 0 && draft.parallel_slots > 0 && (
+                <div className="mt-2 text-xs text-text-secondary bg-bg-secondary/40 rounded-lg p-2 space-y-1">
+                  <div>Context: {draft.context_size.toLocaleString()} total</div>
+                  <div>Parallel slots: {draft.parallel_slots}</div>
+                  <div>Effective per slot: {Math.floor(draft.context_size / draft.parallel_slots).toLocaleString()} tokens</div>
+                </div>
+              )}
+            </div>
+ 
+            {/* B & C. Cache type K and V side by side */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>Cache type K</label>
+                <select
+                  className={fieldClass}
+                  value={draft.cache_type_k}
+                  onChange={(e) => update({ cache_type_k: e.target.value })}
+                >
+                  {options.cache_types.allowed.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Cache type V</label>
+                <select
+                  className={fieldClass}
+                  value={draft.cache_type_v}
+                  onChange={(e) => update({ cache_type_v: e.target.value })}
+                >
+                  {options.cache_types.allowed.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+ 
+            {/* D. Presets */}
+            <div>
+              <label className={labelClass}>Quick presets</label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border-primary bg-bg-secondary text-text-primary hover:bg-bg-tertiary"
+                  onClick={() => update({ cache_type_k: 'f16', cache_type_v: 'f16' })}
+                >
+                  Safe default (f16/f16)
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border-primary bg-bg-secondary text-text-primary hover:bg-bg-tertiary"
+                  onClick={() => update({ cache_type_k: 'q8_0', cache_type_v: 'q8_0' })}
+                >
+                  Balanced memory (q8_0/q8_0)
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border-primary bg-bg-secondary text-text-primary hover:bg-bg-tertiary"
+                  onClick={() => update({ cache_type_k: 'q4_0', cache_type_v: 'q4_0' })}
+                >
+                  Aggressive memory (q4_0/q4_0)
+                </button>
+              </div>
+            </div>
+          </div>
+        </CollapsibleDetail>
+     </div>
+   );
+ };
 
 export default SlotConfigForm;

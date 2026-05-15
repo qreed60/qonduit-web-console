@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, Save, X } from 'lucide-react';
-import { GpuInfo, NormalizedModel, RouterPreflightResponse, RouterSlot } from '../types';
+import { GpuInfo, NormalizedModel, RouterPreflightResponse, RouterSlot, RouterSlotOptions } from '../types';
 import SlotConfigForm, { buildSlotPreflightRequest, createSlotDraftFromSlot, SlotFormDraft } from './SlotConfigForm';
 import { getSavedTensorSplitRecord } from '../utils/tensorSplit';
 import PreflightResultDrawer from './PreflightResultDrawer';
@@ -16,6 +16,7 @@ interface EditSlotDialogProps {
   preflightResult?: string | null;
   preflightError?: string | null;
   effectiveGpuDevices?: string;
+  slotOptions?: RouterSlotOptions | null;
   onPreflight: (slotId: string, draft: ReturnType<typeof buildSlotPreflightRequest>) => void;
   onSave?: (draft: SlotFormDraft) => void;
   onSaveLoading?: boolean;
@@ -41,6 +42,7 @@ const EditSlotDialog: React.FC<EditSlotDialogProps> = ({
   preflightResult,
   preflightError,
   effectiveGpuDevices,
+  slotOptions,
   onPreflight,
   onSave,
   onSaveLoading = false,
@@ -105,25 +107,29 @@ const EditSlotDialog: React.FC<EditSlotDialogProps> = ({
         {/* Scrollable Body */}
         <div className="overflow-y-auto max-h-[calc(95vh-145px)] sm:max-h-[calc(90vh-145px)] px-5 py-4">
           <SlotConfigForm
-             mode="edit"
-             draft={draft}
-             onChange={setDraft}
-             models={models}
-             gpus={gpus}
-             modelError={modelError}
-             gpuError={gpuError}
-             effectiveGpuDevices={effectiveGpuDevices}
-           />
+               mode="edit"
+               draft={draft}
+               onChange={setDraft}
+               models={models}
+               gpus={gpus}
+               modelError={modelError}
+               gpuError={gpuError}
+               effectiveGpuDevices={effectiveGpuDevices}
+               slotOptions={slotOptions}
+             />
  
            {preflightResult && (
-             <PreflightResultDrawer
-               result={JSON.parse(preflightResult) as RouterPreflightResponse}
-               error={preflightError}
-               requestedTensorSplit={isExplicitSplit ? draft.tensor_split : ''}
-               tensorSplitMode={draft.tensor_split_mode}
-               effectiveGpuDevices={effectiveGpuDevices}
-             />
-           )}
+               <PreflightResultDrawer
+                 result={JSON.parse(preflightResult) as RouterPreflightResponse}
+                 error={preflightError}
+                 requestedTensorSplit={isExplicitSplit ? draft.tensor_split : ''}
+                 tensorSplitMode={draft.tensor_split_mode}
+                 effectiveGpuDevices={effectiveGpuDevices}
+                 parallelSlots={draft.parallel_slots}
+                 cacheTypeK={draft.cache_type_k}
+                 cacheTypeV={draft.cache_type_v}
+               />
+             )}
         </div>
 
         {/* Sticky Footer */}
