@@ -217,7 +217,9 @@ export function buildSlotUpdateRequest(draft: SlotFormDraft): RouterSlotUpdateRe
   if (typeof contextSize === 'number') request.context_size = contextSize;
   request.gpu_devices = draft.gpu_devices.trim() || 'all';
   request.embeddings = draft.embeddings;
-  if (['even', 'weighted', 'custom'].includes(draft.tensor_split_mode) && draft.tensor_split.trim()) {
+  if (draft.tensor_split_mode === 'auto') {
+    request.tensor_split = null;
+  } else if (draft.tensor_split.trim()) {
     request.tensor_split = draft.tensor_split.trim();
   }
   if (typeof draft.host_port === 'number') request.host_port = draft.host_port;

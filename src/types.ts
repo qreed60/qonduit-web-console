@@ -262,7 +262,7 @@ export interface RouterSlotUpdateRequest {
   model?: string;
   context_size?: number;
   gpu_devices?: string | number[] | GpuInfo[];
-  tensor_split?: string | number[];
+  tensor_split?: string | number[] | null;
   embeddings?: boolean;
   host_port?: number | string;
   container_name?: string;
