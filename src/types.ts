@@ -258,6 +258,17 @@ export interface RouterPreflightRequest {
   [key: string]: unknown;
 }
 
+export interface RouterSlotUpdateRequest {
+  model?: string;
+  context_size?: number;
+  gpu_devices?: string | number[] | GpuInfo[];
+  tensor_split?: string | number[];
+  embeddings?: boolean;
+  host_port?: number | string;
+  container_name?: string;
+  extra_args?: string | string[];
+}
+
 export interface RouterPreflightCheck {
   name: string;
   ok: boolean;
