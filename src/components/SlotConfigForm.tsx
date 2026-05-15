@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { GpuInfo, NormalizedModel, RouterPreflightRequest, RouterSlot } from '../types';
+import { GpuInfo, NormalizedModel, RouterPreflightRequest, RouterSlot, RouterSlotUpdateRequest } from '../types';
 import { formatGpuLabel, isExcludedDisplayGpu, safeDisplayValue } from '../utils/routerDisplay';
 import { generateEvenSplit, generateWeightedSplit, TensorSplitModeRecord } from '../utils/tensorSplit';
 import CollapsibleDetail from './CollapsibleDetail';
@@ -172,6 +172,33 @@ export function createSlotDraftFromSlot(
     extra_args_text: stringifyExtraArgs(slot.extra_args),
     use_custom_model: false,
   };
+}
+
+
+export function buildSlotUpdateRequest(draft: SlotFormDraft): RouterSlotUpdateRequest {
+  const contextSize = draft.use_custom_context ? draft.custom_context_size : draft.context_size;
+  const extraArgs = draft.extra_args_text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const request: RouterSlotUpdateRequest = {};
+
+  const model = draft.model.trim();
+  if (model) request.model = model;
+  if (typeof contextSize === 'number') request.context_size = contextSize;
+  request.gpu_devices = draft.gpu_devices.trim() || 'all';
+  request.embeddings = draft.embeddings;
+  if (['even', 'weighted', 'custom'].includes(draft.tensor_split_mode) && draft.tensor_split.trim()) {
+    request.tensor_split = draft.tensor_split.trim();
+  }
+  if (typeof draft.host_port === 'number') request.host_port = draft.host_port;
+  if (draft.allow_container_edit && draft.container_name.trim()) {
+    request.container_name = draft.container_name.trim();
+  }
+  request.extra_args = extraArgs;
+
+  return request;
 }
 
 export function buildSlotPreflightRequest(draft: SlotFormDraft): RouterPreflightRequest {

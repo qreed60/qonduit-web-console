@@ -1,8 +1,8 @@
-import { Settings, ProviderType, ChatMessage, NormalizedModel, GpuStatus, RouterStatus, RouterSlotsResponse, RouterEndpointsResponse, RouterPreflightRequest, RouterPreflightResponse, RouterSlotActionResponse, RouterSlotLogsResponse, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse, ChatAttachmentPayload } from '../types';
+import { Settings, ProviderType, ChatMessage, NormalizedModel, GpuStatus, RouterStatus, RouterSlotsResponse, RouterEndpointsResponse, RouterPreflightRequest, RouterSlotUpdateRequest, RouterPreflightResponse, RouterSlotActionResponse, RouterSlotLogsResponse, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse, ChatAttachmentPayload } from '../types';
 import { getMode, apiPath } from '../config/endpoints';
 
 // Re-export NormalizedModel for convenience
-export type { NormalizedModel, GpuStatus, RouterStatus, RouterSlotsResponse, RouterEndpointsResponse, RouterPreflightRequest, RouterPreflightResponse, RouterSlotActionResponse, RouterSlotLogsResponse, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse };
+export type { NormalizedModel, GpuStatus, RouterStatus, RouterSlotsResponse, RouterEndpointsResponse, RouterPreflightRequest, RouterSlotUpdateRequest, RouterPreflightResponse, RouterSlotActionResponse, RouterSlotLogsResponse, HfSearchResponse, HfSearchResult, HfRepoFilesResponse, HfRepoFile, HfDownloadDryRunResponse, HfDownloadStartResponse, HfDownloadJob, HfDownloadJobsResponse, LocalModelDeleteResponse, ModelTrashEntry, ModelTrashResponse, ModelRestoreResponse, ModelTrashPermanentDeleteResponse };
 
 // ── Model metadata helpers ──────────────────────────────────────────────────
 
@@ -116,10 +116,22 @@ async function parseJsonSafe<T>(response: Response, context: string): Promise<T>
   if (!response.ok) {
     const url = response.url;
     const contentType = response.headers.get('content-type') || '';
+    const body = await response.text().catch(() => '[unable to read body]');
+    const preview = body.length > 500 ? body.substring(0, 500) + '...' : body;
+
+    if (contentType.includes('application/json')) {
+      try {
+        const parsed = JSON.parse(body) as unknown;
+        throw new Error(
+          `${context} failed (HTTP ${response.status}). ` +
+          `URL: ${url}\nResponse JSON: ${JSON.stringify(parsed, null, 2)}`
+        );
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('Response JSON:')) throw error;
+      }
+    }
 
     if (contentType.includes('text/html')) {
-      const body = await response.text().catch(() => '[unable to read body]');
-      const preview = body.length > 200 ? body.substring(0, 200) + '...' : body;
       throw new Error(
         `${context} returned HTML instead of JSON (HTTP ${response.status}). ` +
         `This usually means the endpoint URL is wrong or a proxy is intercepting. ` +
@@ -127,7 +139,10 @@ async function parseJsonSafe<T>(response: Response, context: string): Promise<T>
       );
     }
 
-    throw new Error(`${context} failed (HTTP ${response.status}): ${response.statusText}`);
+    throw new Error(
+      `${context} failed (HTTP ${response.status}): ${response.statusText}. ` +
+      `URL: ${url}\nResponse preview: ${preview || '[empty body]'}`
+    );
   }
 
   const contentType = response.headers.get('content-type') || '';
@@ -460,14 +475,16 @@ export async function createRouterSlot(
  */
 export async function updateRouterSlot(
   slotId: string,
-  request: RouterPreflightRequest,
+  request: RouterSlotUpdateRequest,
 ): Promise<RouterPreflightResponse> {
   const url = apiPath('router', `/api/v1/qonduit-router/slots/${encodeURIComponent(slotId)}`);
+  const body = JSON.stringify(request);
+  console.debug(`PATCH /api/v1/qonduit-router/slots/${slotId} request`, request);
   return parseJsonSafe<RouterPreflightResponse>(
     await fetch(url, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...request, slot_id: request.slot_id ?? slotId }),
+      body,
     }),
     `Router /api/v1/qonduit-router/slots/${slotId} (update)`
   );

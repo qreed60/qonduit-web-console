@@ -73,7 +73,7 @@ export function generateWeightedSplit(
 ): string {
   const usable = gpus
     .filter((gpu) => !isExcludedDisplayGpu(gpu) && selectedGpuSet.has(String(gpu.index)))
-    .sort((a, b) => b.memory_free_mib - a.memory_free_mib); // highest VRAM first
+    .sort((a, b) => a.index - b.index); // llama.cpp tensor_split values follow selected GPU order
 
   if (usable.length === 0) return '';
  
