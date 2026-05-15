@@ -456,7 +456,7 @@ export async function createRouterSlot(
 }
 
 /**
- * Update an existing router slot via PUT /api/v1/qonduit-router/slots/{slot_id}.
+ * Update an existing router slot via PATCH /api/v1/qonduit-router/slots/{slot_id}.
  */
 export async function updateRouterSlot(
   slotId: string,
@@ -465,7 +465,7 @@ export async function updateRouterSlot(
   const url = apiPath('router', `/api/v1/qonduit-router/slots/${encodeURIComponent(slotId)}`);
   return parseJsonSafe<RouterPreflightResponse>(
     await fetch(url, {
-      method: 'PUT',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...request, slot_id: request.slot_id ?? slotId }),
     }),

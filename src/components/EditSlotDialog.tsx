@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, Save, X } from 'lucide-react';
 import { GpuInfo, NormalizedModel, RouterPreflightResponse, RouterSlot } from '../types';
 import SlotConfigForm, { buildSlotPreflightRequest, createSlotDraftFromSlot, SlotFormDraft } from './SlotConfigForm';
+import { getSavedTensorSplitRecord } from '../utils/tensorSplit';
 import PreflightResultDrawer from './PreflightResultDrawer';
 
 interface EditSlotDialogProps {
@@ -45,14 +46,42 @@ const EditSlotDialog: React.FC<EditSlotDialogProps> = ({
   onSaveLoading = false,
   onClose,
 }) => {
-  const initialDraft = useMemo(() => slot ? createSlotDraftFromSlot(slot, gpus) : null, [slot, gpus]);
-  const [draft, setDraft] = useState<SlotFormDraft | null>(initialDraft);
-
-  useEffect(() => {
-    setDraft(initialDraft);
-  }, [initialDraft]);
-
-  if (!open || !slot || !draft) return null;
+  // Keep latest gpus in a ref so createSlotDraftFromSlot always has current GPU data
+   // but GPU polling changes don't trigger a draft reset.
+   const latestGpusRef = useRef<GpuInfo[]>(gpus);
+   useEffect(() => {
+     latestGpusRef.current = gpus;
+   }, [gpus]);
+ 
+   // Track which slot_id was last initialized — prevents re-init on same slot
+   const lastInitializedSlotIdRef = useRef<string | null>(null);
+ 
+   const [draft, setDraft] = useState<SlotFormDraft | null>(null);
+ 
+   // Reset draft only when dialog opens for a new slot (open + slot_id changes).
+   // GPU polling, preflight results, and user edits do NOT trigger a reset.
+   useEffect(() => {
+     if (!open || !slot) {
+       lastInitializedSlotIdRef.current = null;
+       setDraft(null);
+       return;
+     }
+ 
+     if (lastInitializedSlotIdRef.current !== slot.slot_id) {
+       // Check localStorage for saved tensor split mode record
+       const savedRecord = getSavedTensorSplitRecord(slot.slot_id);
+       setDraft(
+         createSlotDraftFromSlot(
+           slot,
+           latestGpusRef.current,
+           savedRecord ?? undefined,
+         ),
+       );
+       lastInitializedSlotIdRef.current = slot.slot_id;
+     }
+   }, [open, slot?.slot_id]);
+ 
+   if (!open || !slot || !draft) return null;
 
   const validationError = validateDraft(draft);
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { GpuInfo, NormalizedModel, RouterPreflightRequest, RouterSlot } from '../types';
 import { formatGpuLabel, isExcludedDisplayGpu, safeDisplayValue } from '../utils/routerDisplay';
-import { generateEvenSplit, generateWeightedSplit } from '../utils/tensorSplit';
+import { generateEvenSplit, generateWeightedSplit, TensorSplitModeRecord } from '../utils/tensorSplit';
 import CollapsibleDetail from './CollapsibleDetail';
 
 /**
@@ -131,7 +131,11 @@ export function createDefaultSlotDraft(): SlotFormDraft {
   };
 }
 
-export function createSlotDraftFromSlot(slot: RouterSlot, gpus: GpuInfo[] = []): SlotFormDraft {
+export function createSlotDraftFromSlot(
+  slot: RouterSlot,
+  gpus: GpuInfo[] = [],
+  savedRecord?: TensorSplitModeRecord,
+): SlotFormDraft {
   const context = normalizePresetContext(firstNumber(slot.context_size, slot.n_ctx));
   const tensorSplit = firstString(slot.tensor_split);
 
@@ -144,7 +148,13 @@ export function createSlotDraftFromSlot(slot: RouterSlot, gpus: GpuInfo[] = []):
   );
 
   // Infer mode from saved tensor_split value
-  const tensorSplitMode = inferTensorSplitMode(tensorSplit, gpuIndices, gpus);
+  let tensorSplitMode = inferTensorSplitMode(tensorSplit, gpuIndices, gpus);
+
+  // If a saved record exists AND its tensor_split matches the saved slot's tensor_split,
+  // use the saved mode. This preserves Weighted mode across reopen even if free VRAM changes.
+  if (savedRecord && savedRecord.tensor_split === tensorSplit && savedRecord.mode !== 'auto') {
+    tensorSplitMode = savedRecord.mode;
+  }
 
   return {
     slot_id: safeDisplayValue(slot.slot_id, ''),
