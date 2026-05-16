@@ -103,6 +103,7 @@ export async function fetchToolAvailability(): Promise<ToolAvailabilityResult> {
   const endpoints = [
     `${baseUrl}/v1/tools`,
     `${baseUrl}/v1/tools/status`,
+    `${baseUrl}/v1/gateway/settings/tools`,
   ];
 
   for (const url of endpoints) {
