@@ -87,9 +87,12 @@ const RagPage: React.FC = () => {
   const [chunksLoading, setChunksLoading] = useState(false);
 
   // Search
-  const [searchResults, setSearchResults] = useState<RagSearchResponseNew | null>(null);
-  const [searchError, setSearchError] = useState<RagEndpointError | null>(null);
-  const [searchLoading, setSearchLoading] = useState(false);
+   const [searchResults, setSearchResults] = useState<RagSearchResponseNew | null>(null);
+   const [searchError, setSearchError] = useState<RagEndpointError | null>(null);
+   const [searchLoading, setSearchLoading] = useState(false);
+   const [searchQuery, setSearchQuery] = useState('');
+   const [searchLimit, setSearchLimit] = useState(4);
+   const [searchCollection, setSearchCollection] = useState<string | undefined>(undefined);
 
   // Selection
    const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -618,76 +621,72 @@ const RagPage: React.FC = () => {
   
             {/* Projects Overview */}
                       <MobileCollapsibleCard
-                        title="Projects"
-                        icon={<Database className="w-5 h-5 text-accent-primary" />}
-                        statusBadge={
-                          registryProjectsFetched && registryProjects.length > 0
-                            ? { status: 'online' as const, label: `${registryProjects.length} project${registryProjects.length > 1 ? 's' : ''}` }
-                            : { status: 'unknown' as const, label: 'None' }
-                        }
-                        summaryText={
-                          selectedProjectId
-                            ? `Selected: ${selectedRegistryProject?.display_name || selectedProjectId}`
-                            : registryProjectsFetched && registryProjects.length > 0
-                              ? 'Tap a project to select'
-                              : 'No projects'
-                        }
-                        action={{
-                                      label: 'New Project',
-                                      onClick: () => setCreateProjectOpen(true),
-                                      variant: 'primary',
-                                    }}
-                        metrics={registryProjects.length > 0 ? [
-                          { label: 'Qdrant Backed', value: `${qdrantBackedCount}/${totalProjects}` },
-                          { label: 'Discovered', value: `${discoveredCount}` },
-                          { label: 'Total Points', value: totalPoints.toLocaleString() },
-                        ] : undefined}
-                        defaultExpanded={true}
-                        defaultExpandedMobile={false}
-                        localStorageKey="rag-projects"
-                      >
-                        {registryProjectsError ? (
-                          <div className="flex items-center gap-2 text-xs text-status-error">
-                            <span>Unable to fetch projects: {registryProjectsError.message}</span>
-                            <span className="text-[10px] font-mono opacity-70">({gatewayUrl}/v1/rag/projects)</span>
-                          </div>
-                        ) : registryProjectsLoading ? (
-                          <div className="flex items-center gap-2 text-xs text-text-tertiary py-4">
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Loading registry projects...</span>
-                          </div>
-                        ) : registryProjectsFetched && registryProjects.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center py-8 text-center">
-                            <Database className="w-10 h-10 text-text-tertiary/30 mb-3" />
-                            <p className="text-sm text-text-secondary">No registry projects found</p>
-                            <p className="text-xs text-text-tertiary mt-1">
-                              Create your first project or discover existing Qdrant collections.
-                            </p>
-                            <button
-                              onClick={() => setCreateProjectOpen(true)}
-                              className="mt-4 px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 transition-all duration-200 flex items-center gap-1.5"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              Create Project
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                            {registryProjects.map(project => (
-                              <RagRegistryProjectCard
-                                key={project.project_id}
-                                project={project}
-                                isSelected={selectedProjectId === project.project_id}
-                                onSelect={handleSelectProject}
-                                onEdit={handleEditProject}
-                                onDelete={handleDeleteProjectClick}
-                                onRefresh={handleRefreshProject}
-                                refreshing={refreshing}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </MobileCollapsibleCard>
+                         title="Projects"
+                         icon={<Database className="w-5 h-5 text-accent-primary" />}
+                         statusBadge={
+                           registryProjectsFetched && registryProjects.length > 0
+                             ? { status: 'online' as const, label: `${registryProjects.length} project${registryProjects.length > 1 ? 's' : ''}` }
+                             : { status: 'unknown' as const, label: 'None' }
+                         }
+                         summaryText={
+                           selectedProjectId
+                             ? `Selected: ${selectedRegistryProject?.display_name || selectedProjectId}`
+                             : registryProjectsFetched && registryProjects.length > 0
+                               ? 'Tap a project to select'
+                               : 'No projects'
+                         }
+                         metrics={registryProjects.length > 0 ? [
+                           { label: 'Qdrant Backed', value: `${qdrantBackedCount}/${totalProjects}` },
+                           { label: 'Discovered', value: `${discoveredCount}` },
+                           { label: 'Total Points', value: totalPoints.toLocaleString() },
+                         ] : undefined}
+                         defaultExpanded={true}
+                         defaultExpandedMobile={false}
+                         localStorageKey="rag-projects"
+                       >
+                         {/* New Project button — only visible when expanded */}
+                         <button
+                           onClick={() => setCreateProjectOpen(true)}
+                           className="w-full min-h-[44px] flex items-center justify-center gap-2 rounded-lg font-medium text-sm bg-gradient-to-r from-accent-primary to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 mb-3"
+                         >
+                           <Plus className="w-4 h-4" />
+                           New Project
+                         </button>
+                         {registryProjectsError ? (
+                           <div className="flex items-center gap-2 text-xs text-status-error">
+                             <span>Unable to fetch projects: {registryProjectsError.message}</span>
+                             <span className="text-[10px] font-mono opacity-70">({gatewayUrl}/v1/rag/projects)</span>
+                           </div>
+                         ) : registryProjectsLoading ? (
+                           <div className="flex items-center gap-2 text-xs text-text-tertiary py-4">
+                             <Loader2 className="w-4 h-4 animate-spin" />
+                             <span>Loading registry projects...</span>
+                           </div>
+                         ) : registryProjectsFetched && registryProjects.length === 0 ? (
+                           <div className="flex flex-col items-center justify-center py-8 text-center">
+                             <Database className="w-10 h-10 text-text-tertiary/30 mb-3" />
+                             <p className="text-sm text-text-secondary">No registry projects found</p>
+                             <p className="text-xs text-text-tertiary mt-1">
+                               Create your first project or discover existing Qdrant collections.
+                             </p>
+                           </div>
+                         ) : (
+                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                             {registryProjects.map(project => (
+                               <RagRegistryProjectCard
+                                 key={project.project_id}
+                                 project={project}
+                                 isSelected={selectedProjectId === project.project_id}
+                                 onSelect={handleSelectProject}
+                                 onEdit={handleEditProject}
+                                 onDelete={handleDeleteProjectClick}
+                                 onRefresh={handleRefreshProject}
+                                 refreshing={refreshing}
+                               />
+                             ))}
+                           </div>
+                         )}
+                       </MobileCollapsibleCard>
   
             {/* Detail area: Project detail + Collections + Documents + Search */}
              {selectedProjectId && (
@@ -785,56 +784,61 @@ const RagPage: React.FC = () => {
   
                                      {/* Documents Card */}
                                      <MobileCollapsibleCard
-                                       title="Documents"
-                                       icon={<FileText className="w-5 h-5 text-accent-tertiary" />}
-                                       statusBadge={
-                                         documents.length > 0 ? { status: 'online', label: `${documents.length} doc${documents.length > 1 ? 's' : ''}` } :
-                                         { status: 'unknown', label: 'None' }
-                                       }
-                                       summaryText={
-                                         documents.length > 0 ? `${documents.length} documents` : 'No documents'
-                                       }
-                                       defaultExpanded={false}
-                                       defaultExpandedMobile={false}
-                                       localStorageKey="rag-documents"
-                                     >
-                                       <RagDocumentsCard
-                                         documents={documents}
-                                         documentsError={documentsError}
-                                         projectId={selectedProjectId}
-                                         selectedDocumentId={selectedDocumentId}
-                                         onSelectDocument={handleSelectDocument}
-                                         loading={false}
-                                         onRefresh={() => fetchDocuments(selectedProjectId)}
-                                         refreshing={refreshing}
-                                         onSourceView={handleViewSource}
-                                         onChunksView={handleChunksView}
-                                         onReingest={handleReingest}
-                                         onDelete={handleDelete}
-                                       />
-                                     </MobileCollapsibleCard>
+                                        title="Documents"
+                                        icon={<FileText className="w-5 h-5 text-accent-tertiary" />}
+                                        statusBadge={
+                                          documents.length > 0 ? { status: 'online', label: `${documents.length} doc${documents.length > 1 ? 's' : ''}` } :
+                                          { status: 'unknown', label: 'None' }
+                                        }
+                                        summaryText={
+                                          documents.length > 0 ? `${documents.length} documents` : 'No documents'
+                                        }
+                                        defaultExpanded={false}
+                                        defaultExpandedMobile={false}
+                                        localStorageKey="rag-documents"
+                                      >
+                                        <RagDocumentsCard
+                                          documents={documents}
+                                          documentsError={documentsError}
+                                          projectId={selectedProjectId}
+                                          selectedDocumentId={selectedDocumentId}
+                                          onSelectDocument={handleSelectDocument}
+                                          loading={false}
+                                          onRefresh={() => fetchDocuments(selectedProjectId)}
+                                          refreshing={refreshing}
+                                          onSourceView={handleViewSource}
+                                          onChunksView={handleChunksView}
+                                          onReingest={handleReingest}
+                                          onDelete={handleDelete}
+                                        />
+                                        <RagDiagnosticSearchCard
+                                          projectId={selectedProjectId}
+                                          availableCollections={availableCollections}
+                                          searchResults={searchResults}
+                                          searchError={searchError}
+                                          searchLoading={searchLoading}
+                                          onSearch={handleSearch}
+                                          query={searchQuery}
+                                          limit={searchLimit}
+                                          collection={searchCollection}
+                                          onQueryChange={setSearchQuery}
+                                          onLimitChange={setSearchLimit}
+                                          onCollectionChange={setSearchCollection}
+                                        />
+                                      </MobileCollapsibleCard>
   
                   {/* Chunk Viewer */}
-                  {selectedDocumentId && selectedDocument && (
-                    <RagChunkViewer
-                      chunks={chunks}
-                      chunksError={chunksError}
-                      chunksLoading={chunksLoading}
-                      documentName={selectedDocument.document_name}
-                    />
-                  )}
-  
-                  <RagDiagnosticSearchCard
-                    projectId={selectedProjectId}
-                    availableCollections={availableCollections}
-                    searchResults={searchResults}
-                    searchError={searchError}
-                    searchLoading={searchLoading}
-                    onSearch={handleSearch}
-                  />
-                </div>
-              </div>
-            )}
+                   {selectedDocumentId && selectedDocument && (
+                     <RagChunkViewer
+                       chunks={chunks}
+                       chunksError={chunksError}
+                       chunksLoading={chunksLoading}
+                       documentName={selectedDocument.document_name}
+                     />
+                   )}
+                 </div>
+               </div>
+             )}
   
             {/* No project selected message */}
              {!selectedProjectId && (

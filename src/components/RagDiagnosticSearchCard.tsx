@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Search, Loader2, FileText, Database } from 'lucide-react';
 import { RagSearchResponseNew, RagEndpointError } from '../types';
 import RawJsonPanel from './RawJsonPanel';
@@ -11,6 +11,13 @@ interface RagDiagnosticSearchCardProps {
   searchError: RagEndpointError | null;
   searchLoading: boolean;
   onSearch: (query: string, limit: number, collection?: string | null) => void;
+  // Controlled props for search form state
+  query: string;
+  limit: number;
+  collection: string | undefined;
+  onQueryChange: (value: string) => void;
+  onLimitChange: (value: number) => void;
+  onCollectionChange: (value: string | undefined) => void;
 }
 
 const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
@@ -20,11 +27,13 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
   searchError,
   searchLoading,
   onSearch,
+  query,
+  limit,
+  collection,
+  onQueryChange,
+  onLimitChange,
+  onCollectionChange,
 }) => {
-  const [query, setQuery] = useState('');
-  const [limit, setLimit] = useState(4);
-  const [collection, setCollection] = useState<string | undefined>(undefined);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
@@ -37,12 +46,12 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
   };
 
   return (
-      <div className="bg-bg-card rounded-xl border border-border-primary p-4 sm:p-5 shadow-card">
-        <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2 mb-1">
+      <div className="bg-bg-card rounded-xl border border-border-primary p-4 sm:p-5 shadow-card mt-4">
+        <div className="flex items-center gap-2 mb-1">
           <Search className="w-4 h-4 text-accent-primary" />
-          Search
-        </h3>
-        <p className="text-[10px] sm:text-xs text-text-tertiary mb-3">
+          <h3 className="text-sm font-semibold text-text-primary">Search</h3>
+        </div>
+        <p className="text-xs text-text-tertiary mb-3">
           Project: <span className="font-mono">{projectId}</span> · Uses POST /v1/rag/projects/{projectId}/search — explicit user-triggered only
         </p>
   
@@ -51,15 +60,15 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
           <input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => onQueryChange(e.target.value)}
             placeholder="Search query..."
-            className="w-full px-3 py-2.5 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 transition-all duration-200 min-h-[44px]"
+            className="w-full px-3 py-2.5 bg-bg-secondary border border-border-primary rounded-lg text-sm text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary/50 focus:ring-1 focus:ring-accent-primary/50 transition-all duration-200 min-h-[44px]"
           />
           <div className="flex gap-2">
             <select
               value={limit}
-              onChange={(e) => setLimit(Number(e.target.value))}
-              className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 transition-all duration-200 min-h-[44px]"
+              onChange={(e) => onLimitChange(Number(e.target.value))}
+              className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border-primary rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent-primary/50 transition-all duration-200 min-h-[44px]"
             >
               {[2, 4, 8, 12, 20].map(n => (
                 <option key={n} value={n}>{n} results</option>
@@ -67,8 +76,8 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
             </select>
             <select
               value={collection || ''}
-              onChange={(e) => setCollection(e.target.value || undefined)}
-              className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border-primary rounded-lg text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 transition-all duration-200 min-h-[44px]"
+              onChange={(e) => onCollectionChange(e.target.value || undefined)}
+              className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border-primary rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent-primary/50 transition-all duration-200 min-h-[44px]"
             >
               <option value="">All collections</option>
               {availableCollections.map(c => (
@@ -79,7 +88,7 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
           <button
             type="submit"
             disabled={searchLoading || !query.trim()}
-            className="w-full px-4 py-3 rounded-lg text-xs font-medium bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 transition-all duration-200 disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-1.5 min-h-[44px]"
+            className="w-full px-4 py-3 rounded-lg text-sm font-medium bg-gradient-to-r from-accent-primary to-accent-tertiary hover:from-accent-primary-hover hover:to-accent-tertiary text-white shadow-lg shadow-accent-primary/20 transition-all duration-200 disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-1.5 min-h-[44px]"
           >
             {searchLoading ? (
               <>
@@ -99,7 +108,7 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
       {searchResults && searchResults.results.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-text-tertiary">
+            <span className="text-xs text-text-tertiary">
               {searchResults.results.length} result{searchResults.results.length !== 1 ? 's' : ''} for "{searchResults.query}"
               {searchResults.limit > 0 && (
                 <span className="ml-1">· limit: {searchResults.limit}</span>
@@ -114,19 +123,19 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
             >
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-text-tertiary">#{idx + 1}</span>
-                  <span className="text-[10px] font-mono text-text-secondary truncate max-w-[150px]" title={result.id}>
+                  <span className="text-xs font-mono text-text-tertiary">#{idx + 1}</span>
+                  <span className="text-xs font-mono text-text-secondary truncate max-w-[150px]" title={result.id}>
                     {result.id}
                   </span>
                 </div>
-                <span className="text-[10px] font-mono text-accent-primary">
+                <span className="text-xs font-mono text-accent-primary">
                   score: {result.score.toFixed(4)}
                 </span>
               </div>
 
               {/* Text preview */}
               {result.text && (
-                <p className="text-xs text-text-primary mt-1 leading-relaxed">
+                <p className="text-sm text-text-primary mt-1 leading-relaxed">
                   {truncateText(result.text)}
                 </p>
               )}
@@ -137,7 +146,7 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
                   {result.document_name && (
                     <div className="flex items-center gap-1">
                       <FileText className="w-3 h-3 text-text-tertiary" />
-                      <span className="text-[10px] font-mono text-text-tertiary truncate max-w-[150px]" title={result.document_name}>
+                      <span className="text-xs font-mono text-text-tertiary truncate max-w-[150px]" title={result.document_name}>
                         {result.document_name}
                       </span>
                     </div>
@@ -145,13 +154,13 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
                   {result.file_path && (
                     <div className="flex items-center gap-1">
                       <Database className="w-3 h-3 text-text-tertiary" />
-                      <span className="text-[10px] font-mono text-text-tertiary truncate max-w-[150px]" title={result.file_path}>
+                      <span className="text-xs font-mono text-text-tertiary truncate max-w-[150px]" title={result.file_path}>
                         {result.file_path}
                       </span>
                     </div>
                   )}
                   {result.chunk_index !== undefined && (
-                    <span className="text-[10px] font-mono text-text-tertiary">
+                    <span className="text-xs font-mono text-text-tertiary">
                       chunk: {result.chunk_index}
                     </span>
                   )}
@@ -164,7 +173,7 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
                   {Object.entries(result.payload).slice(0, 4).map(([key, value]) => (
                     <span
                       key={key}
-                      className="px-1.5 py-0.5 rounded text-[9px] bg-bg-tertiary text-text-tertiary font-mono"
+                      className="px-1.5 py-0.5 rounded text-xs bg-bg-tertiary text-text-tertiary font-mono"
                       title={`${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`}
                     >
                       {key}={typeof value === 'string' ? value : JSON.stringify(value).substring(0, 30)}
@@ -183,7 +192,7 @@ const RagDiagnosticSearchCard: React.FC<RagDiagnosticSearchCardProps> = ({
       {searchResults && searchResults.results.length === 0 && !searchLoading && (
         <div className="text-center py-6 text-text-tertiary">
           <Search className="w-8 h-8 mx-auto mb-2 opacity-30" />
-          <p className="text-xs">No results found</p>
+          <p className="text-sm">No results found</p>
         </div>
       )}
 

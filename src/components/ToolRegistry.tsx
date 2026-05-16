@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Database,
   FileText,
@@ -15,7 +15,8 @@ import {
   ToolSettings,
   TOOL_REGISTRY,
 } from '../types';
-import { loadToolSettings, saveToolSettings } from '../services/toolApi';
+import { loadToolSettings, saveToolSettings, fetchToolAvailability, ToolAvailabilityResult } from '../services/toolApi';
+import StatusBadge from './StatusBadge';
 
 const categoryConfig: Record<ToolCategory, { label: string; icon: React.ReactNode; color: string }> = {
   rag: { label: 'RAG', icon: <Database className="w-3.5 h-3.5" />, color: 'text-accent-primary' },
@@ -39,6 +40,12 @@ const ToolRegistry: React.FC<ToolRegistryProps> = ({
   onSettingsChange,
 }) => {
   const [settings, setSettings] = React.useState<ToolSettings>(loadToolSettings);
+  const [toolAvailability, setToolAvailability] = useState<ToolAvailabilityResult | null>(null);
+  const [loadingTools, setLoadingTools] = useState(true);
+
+  useEffect(() => {
+    fetchToolAvailability().then(setToolAvailability).finally(() => setLoadingTools(false));
+  }, []);
 
   const handleToggle = (toolName: string) => {
     const newSettings = {
@@ -60,19 +67,38 @@ const ToolRegistry: React.FC<ToolRegistryProps> = ({
   const tools = Object.values(TOOL_REGISTRY);
 
   const groupedTools = Object.keys(categoryConfig).map((cat) => ({
-    category: cat as ToolCategory,
-    tools: tools.filter(t => t.category === cat as ToolCategory),
-  })).filter(g => g.tools.length > 0);
-
-  if (compact) {
-    return (
-      <div className="space-y-2">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-semibold text-text-primary">Available Tools</h3>
-          <span className="text-[10px] sm:text-xs text-text-tertiary">
-            Backend not connected
-          </span>
-        </div>
+     category: cat as ToolCategory,
+     tools: tools.filter(t => t.category === cat as ToolCategory),
+   })).filter(g => g.tools.length > 0);
+ 
+   const getToolStatusBadge = (): { status: 'online' | 'offline' | 'loading' | 'unknown'; label: string } | null => {
+     if (loadingTools) return { status: 'loading', label: 'Checking...' };
+     if (!toolAvailability) return { status: 'unknown', label: 'Unknown' };
+ 
+     if (!toolAvailability.backendOk) {
+       return { status: 'offline', label: 'Backend not connected' };
+     }
+     if (!toolAvailability.toolsEndpointOk) {
+       return { status: 'unknown', label: 'Tools endpoint unavailable' };
+     }
+     if (!toolAvailability.toolsEnabled) {
+       return { status: 'unknown', label: 'Tools disabled' };
+     }
+     if (toolAvailability.toolsCount === 0) {
+       return { status: 'unknown', label: 'No tools registered' };
+     }
+     return { status: 'online', label: `${toolAvailability.toolsCount} tools` };
+   };
+ 
+   const toolStatus = getToolStatusBadge();
+ 
+   if (compact) {
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-text-primary">Available Tools</h3>
+            {toolStatus && <StatusBadge status={toolStatus.status} label={toolStatus.label} />}
+          </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {tools.map(tool => {
             const isEnabled = settings.global[tool.name] !== false;
@@ -114,13 +140,11 @@ const ToolRegistry: React.FC<ToolRegistryProps> = ({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-text-primary">Tool Registry</h3>
-        <span className="text-[10px] sm:text-xs text-text-tertiary">
-          Backend not connected
-        </span>
-      </div>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-text-primary">Tool Registry</h3>
+          {toolStatus && <StatusBadge status={toolStatus.status} label={toolStatus.label} />}
+        </div>
 
       {groupedTools.map(({ category, tools: groupTools }) => {
         const cfg = categoryConfig[category];
@@ -201,11 +225,25 @@ const ToolRegistry: React.FC<ToolRegistryProps> = ({
         </div>
       </div>
 
-      <div className="pt-2">
-        <p className="text-[10px] sm:text-xs text-text-tertiary">
-          ℹ Tool support depends on backend capability. Configure in Settings → Gateway Settings.
-        </p>
-      </div>
+      {toolAvailability && !toolAvailability.backendOk && (
+         <div className="pt-1">
+           <p className="text-[10px] text-text-tertiary">
+             Last tried: {toolAvailability.endpoint}
+           </p>
+         </div>
+       )}
+       {toolAvailability && toolAvailability.backendOk && !toolAvailability.toolsEndpointOk && (
+         <div className="pt-1">
+           <p className="text-[10px] text-text-tertiary">
+             Endpoint: {toolAvailability.endpoint} (HTTP {toolAvailability.httpStatus || 'error'})
+           </p>
+         </div>
+       )}
+       <div className="pt-2">
+         <p className="text-[10px] sm:text-xs text-text-tertiary">
+           ℹ Tool support depends on backend capability. Configure in Settings → Gateway Settings.
+         </p>
+       </div>
     </div>
   );
 };
