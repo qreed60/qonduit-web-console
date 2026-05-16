@@ -92,7 +92,7 @@ const EditSlotDialog: React.FC<EditSlotDialogProps> = ({
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:justify-center" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full sm:max-w-5xl sm:max-h-[90vh] max-h-[95vh] h-full sm:h-auto overflow-hidden rounded-t-xl sm:rounded-xl border border-border-primary bg-bg-card shadow-2xl">
+      <div className="relative z-10 w-full sm:max-w-5xl sm:max-h-[90vh] max-h-[95vh] h-[95vh] sm:h-auto overflow-hidden rounded-t-xl sm:rounded-xl border border-border-primary bg-bg-card shadow-2xl">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-border-subtle px-5 py-4 flex-shrink-0">
           <div>
@@ -105,7 +105,7 @@ const EditSlotDialog: React.FC<EditSlotDialogProps> = ({
         </div>
 
         {/* Scrollable Body */}
-        <div className="overflow-y-auto max-h-[calc(95vh-145px)] sm:max-h-[calc(90vh-145px)] px-5 py-4">
+        <div className="overflow-y-auto max-h-[calc(95vh-145px)] sm:max-h-[calc(90vh-145px)] px-4 sm:px-5 py-3 sm:py-4">
           <SlotConfigForm
                mode="edit"
                draft={draft}
@@ -135,7 +135,7 @@ const EditSlotDialog: React.FC<EditSlotDialogProps> = ({
         </div>
 
         {/* Sticky Footer */}
-         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-border-subtle px-5 py-4 bg-bg-card flex-shrink-0">
+         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-border-subtle px-4 sm:px-5 py-4 bg-bg-card flex-shrink-0">
            <p className={`text-xs ${validationError ? 'text-status-error' : 'text-text-tertiary'}`}>
              {validationError || 'Preflight validates the draft; Save Changes persists the slot config.'}
            </p>

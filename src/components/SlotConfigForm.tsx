@@ -279,8 +279,8 @@ export function buildSlotPreflightRequest(draft: SlotFormDraft): RouterPreflight
   };
 }
 
-const fieldClass = 'w-full bg-bg-secondary/60 border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary disabled:opacity-60 disabled:cursor-not-allowed';
-const labelClass = 'block text-xs font-medium text-text-secondary mb-1.5';
+const fieldClass = 'w-full bg-bg-secondary/60 border border-border-primary rounded-lg px-3 py-3 text-base text-text-primary focus:outline-none focus:border-accent-primary disabled:opacity-60 disabled:cursor-not-allowed min-h-[44px]';
+const labelClass = 'block text-sm font-medium text-text-secondary mb-1.5';
 
 const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, models, gpus, modelError, gpuError, effectiveGpuDevices, slotOptions }) => {
   const options = useMemo(() => slotOptions ?? {
@@ -445,14 +445,14 @@ const SlotConfigForm: React.FC<SlotConfigFormProps> = ({ mode, draft, onChange, 
               const excluded = isExcludedDisplayGpu(gpu);
               const gpuId = String(gpu.index);
               return (
-                <label key={gpu.index} className={`flex items-start gap-3 rounded-lg border px-3 py-2 text-xs ${excluded ? 'border-status-warning/20 bg-status-warning/5 text-text-tertiary' : 'border-border-subtle bg-bg-card text-text-primary'}`}>
-                  <input
-                    type="checkbox"
-                    checked={!excluded && selectedGpuSet.has(gpuId)}
-                    disabled={excluded || allUsableSelected}
-                    onChange={(event) => setIndividualGpu(gpu.index, event.target.checked)}
-                    className="mt-0.5 h-4 w-4 accent-accent-primary disabled:opacity-50"
-                  />
+                <label key={gpu.index} className={`flex items-start gap-3 rounded-lg border px-3 py-3 text-sm ${excluded ? 'border-status-warning/20 bg-status-warning/5 text-text-tertiary' : 'border-border-subtle bg-bg-card text-text-primary'}`}>
+                   <input
+                     type="checkbox"
+                     checked={!excluded && selectedGpuSet.has(gpuId)}
+                     disabled={excluded || allUsableSelected}
+                     onChange={(event) => setIndividualGpu(gpu.index, event.target.checked)}
+                     className="mt-0.5 h-5 w-5 accent-accent-primary disabled:opacity-50"
+                   />
                   <span className="min-w-0">
                     <span className="block font-mono truncate">{formatGpuLabel(gpu)}</span>
                     {excluded && <span className="text-[10px] text-status-warning">Disabled: display / not used for inference</span>}

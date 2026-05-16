@@ -72,57 +72,63 @@ const SlotCard: React.FC<SlotCardProps> = ({
   };
 
   // Primary actions always visible
-  const primaryActions: ActionButton[] = [
-    {
-      label: 'Launch',
-      icon: <Play className="w-3.5 h-3.5" />,
-      onClick: () => onLaunch(slot),
-      variant: 'success',
-      loading: loading && actionLoading?.endsWith(':launch'),
-    },
-    {
-      label: 'Stop',
-      icon: <Square className="w-3.5 h-3.5" />,
-      onClick: () => onStop(slot),
-      variant: 'error',
-      loading: loading && actionLoading?.endsWith(':stop'),
-    },
-  ];
-
-  // Secondary actions
-  const secondaryActions: ActionButton[] = [
-    {
-      label: 'Restart',
-      icon: <RotateCcw className="w-3.5 h-3.5" />,
-      onClick: () => onRestart(slot),
-      variant: 'warning',
-      loading: loading && actionLoading?.endsWith(':restart'),
-    },
-    {
-      label: 'Edit',
-      icon: <Edit3 className="w-3.5 h-3.5" />,
-      onClick: () => onEdit(slot),
-      variant: 'secondary',
-      loading: loading,
-    },
-    {
-      label: 'Preflight',
-      icon: null,
-      onClick: () => onPreflight(slot),
-      variant: 'primary',
-      loading: loading && actionLoading?.endsWith(':preflight'),
-    },
-    {
-      label: 'Logs',
-      icon: null,
-      onClick: () => onLogs(slot),
-      variant: 'secondary',
-      loading: loading && actionLoading?.endsWith(':logs'),
-    },
-  ];
+   const primaryActions: ActionButton[] = [
+     {
+       label: 'Launch',
+       icon: <Play className="w-3.5 h-3.5" />,
+       onClick: () => onLaunch(slot),
+       variant: 'success',
+       loading: loading && actionLoading?.endsWith(':launch'),
+       disabled: running, // DISABLED when running
+     },
+     {
+       label: 'Stop',
+       icon: <Square className="w-3.5 h-3.5" />,
+       onClick: () => onStop(slot),
+       variant: 'error',
+       loading: loading && actionLoading?.endsWith(':stop'),
+       disabled: !running, // DISABLED when not running
+     },
+   ];
+ 
+   // Secondary actions
+   const secondaryActions: ActionButton[] = [
+     {
+       label: 'Restart',
+       icon: <RotateCcw className="w-3.5 h-3.5" />,
+       onClick: () => onRestart(slot),
+       variant: 'warning',
+       loading: loading && actionLoading?.endsWith(':restart'),
+       disabled: !running, // DISABLED when not running
+     },
+     {
+       label: 'Edit',
+       icon: <Edit3 className="w-3.5 h-3.5" />,
+       onClick: () => onEdit(slot),
+       variant: 'secondary',
+       loading: loading,
+       // Edit is always enabled
+     },
+     {
+       label: 'Preflight',
+       icon: null,
+       onClick: () => onPreflight(slot),
+       variant: 'primary',
+       loading: loading && actionLoading?.endsWith(':preflight'),
+       // Preflight is always enabled
+     },
+     {
+       label: 'Logs',
+       icon: null,
+       onClick: () => onLogs(slot),
+       variant: 'secondary',
+       loading: loading && actionLoading?.endsWith(':logs'),
+       disabled: !running, // DISABLED when not running
+     },
+   ];
 
   return (
-    <div className="bg-bg-secondary/40 rounded-xl border border-border-subtle p-4 space-y-3">
+    <div className="bg-bg-secondary/40 rounded-xl border border-border-subtle p-4 space-y-2">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
         <div className="min-w-0">
@@ -148,7 +154,8 @@ const SlotCard: React.FC<SlotCardProps> = ({
       </div>
 
       {/* Info Fields */}
-       <div className="divide-y divide-border-subtle/50">
+        <div className="overflow-x-auto">
+          <div className="divide-y divide-border-subtle/30 min-w-[300px]">
          <FieldRow label="Model" value={model} monospace truncate copyable={!!onCopy} onCopy={undefined} />
          <FieldRow
            label="Endpoint"
@@ -179,16 +186,17 @@ const SlotCard: React.FC<SlotCardProps> = ({
           )}
          <FieldRow label="Host Port" value={hostPort} />
          <FieldRow
-           label="Container"
-           value={containerName}
-           monospace
-           truncate
-           copyable={!!onCopy}
-           onCopy={handleCopyContainer}
-         />
-       </div>
-
-      {/* Error */}
+            label="Container"
+            value={containerName}
+            monospace
+            truncate
+            copyable={!!onCopy}
+            onCopy={handleCopyContainer}
+          />
+          </div>
+        </div>
+ 
+       {/* Error */}
       {slot.last_error && (
         <div className="text-xs text-status-error bg-status-error/5 border border-status-error/20 rounded-lg p-2">
           {safeDisplayValue(slot.last_error)}

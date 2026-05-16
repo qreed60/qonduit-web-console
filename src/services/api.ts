@@ -552,26 +552,65 @@ export async function runRouterSlotAction(
 
 export async function fetchRouterSlotLogs(slotId: string): Promise<RouterSlotLogsResponse> {
   const url = apiPath('router', `/api/v1/qonduit-router/slots/${encodeURIComponent(slotId)}/logs`);
-  const raw = await parseJsonSafe<unknown>(
-    await fetch(url),
-    `Router /api/v1/qonduit-router/slots/${slotId}/logs`
-  );
+  const response = await fetch(url);
 
-  if (Array.isArray(raw)) {
-    return { ok: true, slot_id: slotId, logs: raw.map((line) => String(line)) };
+  // Handle 4xx/5xx errors with context
+   if (!response.ok) {
+     const urlStr = response.url;
+     const status = response.status;
+ 
+     // Try to read error body for context
+     let errorDetail = '';
+     try {
+       const bodyText = await response.text();
+       if (bodyText && bodyText.length < 1000) {
+         errorDetail = ` Response: ${bodyText}`;
+       }
+     } catch {
+       // Ignore body read failures
+     }
+ 
+     throw new Error(
+       `Logs request failed (HTTP ${status}) for slot "${slotId}". ` +
+       `URL: ${urlStr}${errorDetail}`
+     );
+   }
+
+  const contentType = response.headers.get('content-type') || '';
+
+  // Handle text/plain responses (common for logs endpoints)
+  if (contentType.includes('text/plain') || contentType.includes('text/')) {
+    const textBody = await response.text();
+    const logs = textBody
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+    return { ok: true, slot_id: slotId, logs };
   }
 
-  if (raw && typeof raw === 'object') {
-    const obj = raw as Record<string, unknown>;
-    const logs = Array.isArray(obj.logs)
-      ? obj.logs.map((line) => typeof line === 'string' ? line : JSON.stringify(line))
-      : typeof obj.text === 'string'
-        ? obj.text.split('\n')
-        : [];
-    return { ...obj, ok: typeof obj.ok === 'boolean' ? obj.ok : undefined, slot_id: typeof obj.slot_id === 'string' ? obj.slot_id : slotId, logs };
+  // Handle JSON responses (existing behavior)
+  if (contentType.includes('application/json')) {
+    const raw = await response.json();
+
+    if (Array.isArray(raw)) {
+      return { ok: true, slot_id: slotId, logs: raw.map((line) => String(line)) };
+    }
+
+    if (raw && typeof raw === 'object') {
+      const obj = raw as Record<string, unknown>;
+      const logs = Array.isArray(obj.logs)
+        ? obj.logs.map((line) => typeof line === 'string' ? line : JSON.stringify(line))
+        : typeof obj.text === 'string'
+          ? obj.text.split('\n').filter(l => l.trim())
+          : [];
+      return { ...obj, ok: typeof obj.ok === 'boolean' ? obj.ok : undefined, slot_id: typeof obj.slot_id === 'string' ? obj.slot_id : slotId, logs };
+    }
   }
 
-  return { ok: false, slot_id: slotId, logs: [] };
+  // Fallback: treat as text
+  const textBody = await response.text();
+  const logs = textBody.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+  return { ok: true, slot_id: slotId, logs };
 }
 
 // ── Unified provider model fetcher ──────────────────────────────────────────

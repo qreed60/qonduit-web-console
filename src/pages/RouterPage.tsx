@@ -383,12 +383,10 @@ const RouterPage: React.FC = () => {
           statusBadge={{ status: slotStatus, label: slots.length > 0 ? `${runningSlots}/${slots.length} running` : 'No slots' }}
           summaryText={slots.length > 0 ? `${readySlots} ready · ${slots.length} total` : 'No slot data loaded'}
           metrics={slots.length > 0 ? [
-            { label: 'Total', value: String(slots.length) },
-            { label: 'Running', value: String(runningSlots) },
-            { label: 'Ready', value: String(readySlots) },
-          ] : undefined}
-          defaultExpanded={true}
-          defaultExpandedMobile={true}
+             { label: 'Running', value: `${runningSlots}/${slots.length}` },
+           ] : undefined}
+           defaultExpanded={true}
+           defaultExpandedMobile={false}
           localStorageKey="qonduit-router-slots"
           action={{ label: 'Add Slot', onClick: handleAddSlot, variant: 'primary' }}
         >
