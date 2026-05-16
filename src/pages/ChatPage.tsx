@@ -364,126 +364,126 @@ const ChatPage: React.FC = () => {
   return (
     <div className="flex flex-col h-full bg-bg-primary">
       {/* Header */}
-       <div className="flex flex-col items-start gap-3 px-4 py-4 sm:px-6 sm:py-3 border-b border-border-primary bg-bg-card">
-         {/* Title row */}
-         <div className="flex items-center gap-2 w-full sm:w-auto">
-           <MessageSquare className="w-5 h-5 text-accent-primary flex-shrink-0" />
-           <h2 className="text-base sm:text-lg font-semibold text-text-primary">Chat</h2>
-           {!selectedModel && !modelLoading && (
-             <span className="text-xs text-status-warning flex items-center gap-1">
-               <AlertCircle className="w-3 h-3" />
-               No models
-             </span>
-           )}
-         </div>
+        <div className="flex flex-col items-start gap-2 px-4 py-3 sm:px-6 sm:py-2 border-b border-border-primary bg-bg-card">
+          {/* Title row */}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <MessageSquare className="w-5 h-5 text-accent-primary flex-shrink-0" />
+            <h2 className="text-base sm:text-lg font-semibold text-text-primary">Chat</h2>
+            {!selectedModel && !modelLoading && (
+              <span className="text-xs text-status-warning flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                No models
+              </span>
+            )}
+          </div>
  
-         {/* Controls row 1: Provider + Model */}
-         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
-           <div className="flex items-center gap-2 w-full sm:w-auto">
-             <Globe className="w-4 h-4 text-text-tertiary flex-shrink-0" />
-             <select
-               value={currentProvider}
-               onChange={(e) => setCurrentProvider(e.target.value as ProviderType)}
-               disabled={modelLoading || loading}
-               className="flex-1 sm:flex-initial px-4 py-3 bg-bg-secondary border border-border-primary rounded-lg text-sm font-medium text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]"
-             >
-               <option value="Direct">Direct</option>
-               <option value="Gateway">Gateway</option>
-             </select>
-           </div>
-           <div className="flex items-center gap-2 w-full sm:w-auto">
-             {modelLoading ? (
-               <Loader2 className="w-5 h-5 text-text-tertiary animate-spin flex-shrink-0" />
-             ) : (
-               <select
-                 value={selectedModel}
-                 onChange={(e) => setSelectedModel(e.target.value)}
-                 disabled={loading}
-                 className="flex-1 sm:flex-initial px-4 py-3 bg-bg-secondary border border-border-primary rounded-lg text-sm font-medium text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed truncate min-h-[48px]"
-               >
-                 {models.length === 0 ? (
-                   <option value="">No models</option>
-                 ) : (
-                   models.map((m) => (
-                     <option key={m.id} value={m.id}>
-                       {m.id}
-                     </option>
-                   ))
-                 )}
-               </select>
-             )}
-             <button
-               onClick={() => loadModels(currentProvider)}
-               disabled={loading}
-               className="p-3 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-h-[48px] min-w-[48px] flex items-center justify-center"
-               title="Refresh models"
-             >
-               <RefreshCw className={`w-5 h-5 ${modelLoading ? 'animate-spin' : ''}`} />
-             </button>
-           </div>
-         </div>
+          {/* Controls row 1: Provider + Model */}
+          <div className="flex items-center gap-2 w-full flex-wrap">
+            <div className="flex items-center gap-2 min-w-0">
+              <Globe className="w-4 h-4 text-text-tertiary flex-shrink-0" />
+              <select
+                value={currentProvider}
+                onChange={(e) => setCurrentProvider(e.target.value as ProviderType)}
+                disabled={modelLoading || loading}
+                className="flex-1 min-w-0 px-3 py-2 bg-bg-secondary border border-border-primary rounded-lg text-sm font-medium text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="Direct">Direct</option>
+                <option value="Gateway">Gateway</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2 min-w-0">
+              {modelLoading ? (
+                <Loader2 className="w-5 h-5 text-text-tertiary animate-spin flex-shrink-0" />
+              ) : (
+                <select
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  disabled={loading}
+                  className="flex-1 min-w-0 px-3 py-2 bg-bg-secondary border border-border-primary rounded-lg text-sm font-medium text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed truncate"
+                >
+                  {models.length === 0 ? (
+                    <option value="">No models</option>
+                  ) : (
+                    models.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.id}
+                      </option>
+                    ))
+                  )}
+                </select>
+              )}
+              <button
+                onClick={() => loadModels(currentProvider)}
+                disabled={loading}
+                className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 flex-shrink-0"
+                title="Refresh models"
+              >
+                <RefreshCw className={`w-5 h-5 ${modelLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+          </div>
  
-         {/* Controls row 2: Endpoint mode + Slot selector */}
-         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
-           <select
-             value={endpointMode}
-             onChange={(e) => setEndpointMode(e.target.value as ChatEndpointMode)}
-             disabled={loading || isStreaming}
-             className="flex-1 sm:flex-initial px-4 py-3 bg-bg-secondary border border-border-primary rounded-lg text-sm font-medium text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]"
-           >
-             <option value="gateway">Gateway/default</option>
-             <option value="direct-slot">Direct router slot</option>
-             <option value="gateway-slot" disabled={!gatewaySlotRoutingSupported}>Gateway-routed slot (backend support needed)</option>
-           </select>
-           {endpointMode === 'direct-slot' && (
-             <select
-               value={selectedSlotId}
-               onChange={(e) => setSelectedSlotId(e.target.value)}
-               disabled={loading || isStreaming || slotEndpointsLoading || slotEndpoints.length === 0}
-               className="flex-1 sm:flex-initial px-4 py-3 bg-bg-secondary border border-border-primary rounded-lg text-sm font-medium text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]"
-             >
-               {slotEndpoints.length === 0 ? (
-                 <option value="">No slots</option>
-               ) : (
-                 slotEndpoints.map((endpoint) => (
-                   <option key={endpoint.slot_id} value={endpoint.slot_id}>
-                     {safeDisplayValue(endpoint.name || endpoint.slot_id)} — {endpoint.ready || endpoint.running ? 'ready' : safeDisplayValue(endpoint.status || 'unavailable')}
-                   </option>
-                 ))
-               )}
-             </select>
-           )}
-           <button
-             onClick={() => { loadModels(currentProvider); loadSlotEndpoints(); }}
-             disabled={loading || isStreaming || modelLoading || slotEndpointsLoading}
-             className="p-3 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 min-h-[48px] min-w-[48px] flex items-center justify-center"
-             title="Refresh models and slot endpoints"
-           >
-             <RefreshCw className={`w-5 h-5 ${modelLoading || slotEndpointsLoading ? 'animate-spin' : ''}`} />
-           </button>
-         </div>
+          {/* Controls row 2: Endpoint mode + Slot selector */}
+          <div className="flex items-center gap-2 w-full flex-wrap">
+            <select
+              value={endpointMode}
+              onChange={(e) => setEndpointMode(e.target.value as ChatEndpointMode)}
+              disabled={loading || isStreaming}
+              className="flex-1 min-w-0 px-3 py-2 bg-bg-secondary border border-border-primary rounded-lg text-sm font-medium text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <option value="gateway">Gateway/default</option>
+              <option value="direct-slot">Direct router slot</option>
+              <option value="gateway-slot" disabled={!gatewaySlotRoutingSupported}>Gateway-routed slot (backend support needed)</option>
+            </select>
+            {endpointMode === 'direct-slot' && (
+              <select
+                value={selectedSlotId}
+                onChange={(e) => setSelectedSlotId(e.target.value)}
+                disabled={loading || isStreaming || slotEndpointsLoading || slotEndpoints.length === 0}
+                className="flex-1 min-w-0 px-3 py-2 bg-bg-secondary border border-border-primary rounded-lg text-sm font-medium text-text-primary focus:outline-none focus:border-accent-primary/50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {slotEndpoints.length === 0 ? (
+                  <option value="">No slots</option>
+                ) : (
+                  slotEndpoints.map((endpoint) => (
+                    <option key={endpoint.slot_id} value={endpoint.slot_id}>
+                      {safeDisplayValue(endpoint.name || endpoint.slot_id)} — {endpoint.ready || endpoint.running ? 'ready' : safeDisplayValue(endpoint.status || 'unavailable')}
+                    </option>
+                  ))
+                )}
+              </select>
+            )}
+            <button
+              onClick={() => { loadModels(currentProvider); loadSlotEndpoints(); }}
+              disabled={loading || isStreaming || modelLoading || slotEndpointsLoading}
+              className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-all duration-200 disabled:opacity-50 flex-shrink-0"
+              title="Refresh models and slot endpoints"
+            >
+              <RefreshCw className={`w-5 h-5 ${modelLoading || slotEndpointsLoading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
  
-         {/* Controls row 3: RAG + Settings */}
-         <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
-           {endpointMode === 'gateway' && currentProvider === 'Gateway' && (
-             <div className="flex items-center gap-2 w-full sm:w-auto">
-               <RagContextSelector
-                 appliedRag={appliedRag}
-                 onApply={(newRag) => {
-                   setAppliedRag(newRag);
-                 }}
-               />
-             </div>
-           )}
-           <button
-             onClick={() => setShowSettings(!showSettings)}
-             className={`p-3 rounded-lg transition-all duration-200 min-h-[48px] min-w-[48px] flex items-center justify-center ${showSettings ? 'text-accent-primary bg-accent-primary/10' : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'}`}
-             title="Chat settings"
-           >
-             <Settings2 className="w-5 h-5" />
-           </button>
-         </div>
-       </div>
+          {/* Controls row 3: RAG + Settings */}
+          <div className="flex items-center gap-2 w-full justify-between">
+            {endpointMode === 'gateway' && currentProvider === 'Gateway' && (
+              <div className="flex items-center gap-2">
+                <RagContextSelector
+                  appliedRag={appliedRag}
+                  onApply={(newRag) => {
+                    setAppliedRag(newRag);
+                  }}
+                />
+              </div>
+            )}
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className={`p-2 rounded-lg transition-all duration-200 flex-shrink-0 ${showSettings ? 'text-accent-primary bg-accent-primary/10' : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary'}`}
+              title="Chat settings"
+            >
+              <Settings2 className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
 
       {/* Settings Panel */}
       {showSettings && (

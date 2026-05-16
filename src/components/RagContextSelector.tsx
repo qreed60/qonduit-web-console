@@ -12,6 +12,7 @@ import {
   RagProjectDetail,
 } from '../types';
 import { buildRagCollectionOptions } from '../utils/ragCollectionOptions';
+import { friendlyLabel } from '../utils/ragNormalization';
 import { Database, RefreshCw, Loader2, X, Sparkles } from 'lucide-react';
 
 const RAG_SELECTION_KEY = 'qonduit-rag-chat-selection';
@@ -281,10 +282,10 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ appliedRag, onA
               className="w-full px-3 py-2.5 bg-bg-secondary border border-border-primary rounded-lg text-sm text-text-primary focus:outline-none focus:border-accent-primary/50 min-h-[44px]"
             >
               {projects.map(project => (
-                <option key={project.project_id} value={project.project_id}>
-                  {project.project_id} ({formatNumber(project.points_count)} pts{project.exists ? '' : ' · not found'})
-                </option>
-              ))}
+                 <option key={project.project_id} value={project.project_id}>
+                   {friendlyLabel(project.project_id)} ({formatNumber(project.points_count)} pts{project.exists ? '' : ' · not found'})
+                 </option>
+               ))}
             </select>
           )}
           {projects.length > 0 && (
@@ -326,11 +327,11 @@ const RagContextSelector: React.FC<RagContextSelectorProps> = ({ appliedRag, onA
               >
                 <option value="">— Select collection —</option>
                 {collectionOptions.map((col) => (
-                  <option key={col.name} value={col.name}>
-                    {col.name}
-                    {col.point_count !== undefined ? ` (${formatNumber(col.point_count)} pts)` : ''}
-                  </option>
-                ))}
+                   <option key={col.name} value={col.name}>
+                     {col.displayLabel}
+                     {col.point_count !== undefined ? ` (${formatNumber(col.point_count)} pts)` : ''}
+                   </option>
+                 ))}
                 {/* Ensure the currently selected value is always visible */}
                 {draftCollection && !knownCollectionNames.has(draftCollection) && (
                   <option value={draftCollection} disabled>

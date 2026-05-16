@@ -9,6 +9,7 @@ import {
   RagUpdateCollectionRequest,
 } from '../types';
 import { safeFetchJsonWithPreview, makeRagEndpointError } from './fetchHelpers';
+import { normalizeRagProject, friendlyLabel } from '../utils/ragNormalization';
 
 // ── Project CRUD ─────────────────────────────────────────────────────────────
 
@@ -212,20 +213,29 @@ function normalizeRegistryProject(raw: unknown): RagRegistryProject {
     };
   }
   const o = raw as Record<string, unknown>;
+
+  // Use shared normalizer for exists resolution
+  const normalized = normalizeRagProject(raw);
+
+  const displayName =
+    typeof o.display_name === 'string' && o.display_name
+      ? o.display_name
+      : friendlyLabel(typeof o.project_id === 'string' ? o.project_id : 'unknown');
+
   return {
-    project_id: typeof o.project_id === 'string' ? o.project_id : 'unknown',
-    display_name: typeof o.display_name === 'string' && o.display_name ? o.display_name : (typeof o.project_id === 'string' ? o.project_id : 'Unknown'),
-    description: typeof o.description === 'string' ? o.description : null,
-    qdrant_collection: typeof o.qdrant_collection === 'string' ? o.qdrant_collection : '',
-    default_collection: typeof o.default_collection === 'string' ? o.default_collection : 'default',
-    created_at: typeof o.created_at === 'string' ? o.created_at : null,
-    updated_at: typeof o.updated_at === 'string' ? o.updated_at : null,
-    collections_count: typeof o.collections_count === 'number' ? o.collections_count : 0,
-    exists_in_qdrant: o.exists_in_qdrant === true,
-    points_count: typeof o.points_count === 'number' ? o.points_count : 0,
-    discovered: o.discovered === true,
-    error: typeof o.error === 'string' ? o.error : null,
-  };
+     project_id: normalized.project_id,
+     display_name: displayName,
+     description: typeof o.description === 'string' ? o.description : null,
+     qdrant_collection: normalized.qdrant_collection,
+     default_collection: typeof o.default_collection === 'string' ? o.default_collection : 'default',
+     created_at: typeof o.created_at === 'string' ? o.created_at : null,
+     updated_at: typeof o.updated_at === 'string' ? o.updated_at : null,
+     collections_count: typeof o.collections_count === 'number' ? o.collections_count : 0,
+     exists_in_qdrant: normalized.exists_in_qdrant ?? false,
+     points_count: normalized.points_count,
+     discovered: normalized.discovered ?? false,
+     error: normalized.error ?? null,
+   };
 }
 
 function normalizeLogicalCollection(raw: unknown): RagLogicalCollection {

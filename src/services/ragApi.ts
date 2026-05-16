@@ -34,6 +34,7 @@ import {
   RagDocumentSourceResponse,
 } from '../types';
 import { safeFetchJsonWithPreview } from './fetchHelpers';
+import { normalizeRagProject } from '../utils/ragNormalization';
 
 // ── Known RAG projects ──────────────────────────────────────────────────────
 
@@ -439,12 +440,8 @@ export async function getRagHealth(): Promise<RagHealthResponse> {
 /** GET /v1/rag/projects */
 export async function getRagProjects(): Promise<RagProjectsListResponse> {
   const url = apiPath('gateway', '/v1/rag/projects');
-  console.log('[RAG API] getRagProjects URL:', url);
   const { data } = await safeFetchJsonWithPreview(url, undefined, 'Gateway /v1/rag/projects');
-  console.log('[RAG API] getRagProjects raw data keys:', Object.keys(data as Record<string, unknown> || {}));
-  const result = normalizeRagProjectsList(data);
-  console.log('[RAG API] getRagProjects normalized:', result);
-  return result;
+  return normalizeRagProjectsList(data);
 }
 
 /** GET /v1/rag/projects/{project_id} */
@@ -555,15 +552,15 @@ function normalizeRagProjectsList(raw: unknown): RagProjectsListResponse {
   if (Array.isArray(obj.projects)) {
     for (const item of obj.projects) {
       if (item && typeof item === 'object') {
-        const o = item as Record<string, unknown>;
+        const normalized = normalizeRagProject(item);
         projects.push({
-          project_id: typeof o.project_id === 'string' ? o.project_id : 'unknown',
-          qdrant_collection: typeof o.qdrant_collection === 'string' ? o.qdrant_collection : '',
-          exists: o.exists === true,
-          points_count: typeof o.points_count === 'number' ? o.points_count : 0,
-          vectors_count: typeof o.vectors_count === 'number' ? o.vectors_count : 0,
-          status: typeof o.status === 'string' ? o.status : undefined,
-          error: typeof o.error === 'string' ? o.error : null,
+          project_id: normalized.project_id,
+          qdrant_collection: normalized.qdrant_collection,
+          exists: normalized.exists,
+          points_count: normalized.points_count,
+          vectors_count: normalized.vectors_count,
+          status: normalized.status,
+          error: normalized.error,
         });
       }
     }

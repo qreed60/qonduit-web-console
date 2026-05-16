@@ -1,8 +1,10 @@
 import { RagProjectDetail, RagCollectionsResponse, RagCollectionInfo } from '../types';
+import { friendlyLabel } from './ragNormalization';
 
 export interface RagCollectionOption {
   name: string;
   label: string;
+  displayLabel: string;
   source: 'logical' | 'detail' | 'both';
   point_count?: number;
   document_count?: number;
@@ -56,23 +58,25 @@ export function buildRagCollectionOptions(
     seen.add(name);
 
     const detail = detailMap.get(name);
-     if (detail) {
-       result.push({
-         name,
-         label: name,
-         source: 'both',
-         point_count: detail.point_count,
-         counts_are_estimated: detail.counts_are_estimated,
-         raw: detail as unknown as Record<string, unknown>,
-        });
-      } else {
+      if (detail) {
         result.push({
           name,
           label: name,
-          source: 'logical',
-          raw: { projectDetail },
-        });
-      }
+          displayLabel: friendlyLabel(name),
+          source: 'both',
+          point_count: detail.point_count,
+          counts_are_estimated: detail.counts_are_estimated,
+          raw: detail as unknown as Record<string, unknown>,
+         });
+       } else {
+         result.push({
+           name,
+           label: name,
+           displayLabel: friendlyLabel(name),
+           source: 'logical',
+           raw: { projectDetail },
+         });
+       }
   }
 
   // Phase 2: extra names from collections response
@@ -81,13 +85,14 @@ export function buildRagCollectionOptions(
     seen.add(name);
 
     result.push({
-       name,
-       label: name,
-       source: 'detail',
-       point_count: detail.point_count,
-       counts_are_estimated: detail.counts_are_estimated,
-       raw: detail as unknown as Record<string, unknown>,
-      });
+        name,
+        label: name,
+        displayLabel: friendlyLabel(name),
+        source: 'detail',
+        point_count: detail.point_count,
+        counts_are_estimated: detail.counts_are_estimated,
+        raw: detail as unknown as Record<string, unknown>,
+       });
   }
 
   return result;
