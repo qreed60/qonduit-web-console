@@ -3,6 +3,20 @@ import { CheckCircle2, XCircle } from 'lucide-react';
 import { RouterPreflightResponse } from '../types';
 import CollapsibleDetail from './CollapsibleDetail';
 
+/**
+ * Normalize launch_args_preview to a string[] regardless of backend format.
+ * Handles both string (older backends) and string[] (newer backends) inputs.
+ */
+function normalizeLaunchArgsPreview(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map(String).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value.trim() ? value.trim().split(/\s+/) : [];
+  }
+  return [];
+}
+
 interface PreflightResultDrawerProps {
   result: RouterPreflightResponse | null;
   error: string | null | undefined;
@@ -217,25 +231,29 @@ const PreflightResultDrawer: React.FC<PreflightResultDrawerProps> = ({
       )}
 
       {/* Launch Args Preview */}
-      {result?.launch_args_preview && (
-        <CollapsibleDetail title="Launch Args Preview" defaultOpen={false}>
-          <pre className="whitespace-pre-wrap break-words font-mono text-[10px] bg-bg-secondary/40 p-2 rounded text-text-primary">
-            {result.launch_args_preview.split('\n').map((line, i) => {
-               const isParallel = line.includes('--parallel') || line.includes('-np');
-               const isCacheK = line.includes('--cache-type-k');
-               const isCacheV = line.includes('--cache-type-v');
-               const isBatch = line.includes('--batch-size');
-               const isUbatch = line.includes('--ubatch-size');
-               const isHighlight = isParallel || isCacheK || isCacheV || isBatch || isUbatch;
-               return (
-                 <div key={i} className={isHighlight ? 'text-accent-primary font-semibold' : ''}>
-                   {line}
-                 </div>
-               );
-             })}
-          </pre>
-        </CollapsibleDetail>
-      )}
+       {result?.launch_args_preview && (
+         <CollapsibleDetail title="Launch Args Preview" defaultOpen={false}>
+           <pre className="whitespace-pre-wrap break-words font-mono text-[10px] bg-bg-secondary/40 p-2 rounded text-text-primary">
+             {normalizeLaunchArgsPreview(result.launch_args_preview).length > 0 ? (
+               normalizeLaunchArgsPreview(result.launch_args_preview).map((token, i) => {
+                 const isParallel = token.includes('--parallel') || token.includes('-np');
+                 const isCacheK = token.includes('--cache-type-k');
+                 const isCacheV = token.includes('--cache-type-v');
+                 const isBatch = token.includes('--batch-size');
+                 const isUbatch = token.includes('--ubatch-size');
+                 const isHighlight = isParallel || isCacheK || isCacheV || isBatch || isUbatch;
+                 return (
+                   <div key={i} className={isHighlight ? 'text-accent-primary font-semibold' : ''}>
+                     {token}
+                   </div>
+                 );
+               })
+             ) : (
+               <span className="text-text-tertiary">(none)</span>
+             )}
+           </pre>
+         </CollapsibleDetail>
+       )}
 
       {/* Backend Suggestions */}
       {result?.suggested_tensor_splits && (

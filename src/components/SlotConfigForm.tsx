@@ -232,8 +232,11 @@ export function buildSlotUpdateRequest(draft: SlotFormDraft): RouterSlotUpdateRe
   if (model) request.model = model;
   if (typeof contextSize === 'number') request.context_size = contextSize;
   if (typeof draft.parallel_slots === 'number' && draft.parallel_slots >= 1) request.parallel_slots = draft.parallel_slots;
-  if (draft.cache_type_k) request.cache_type_k = draft.cache_type_k;
-  if (draft.cache_type_v) request.cache_type_v = draft.cache_type_v;
+
+  // Cache types — always send when explicitly set (never empty string)
+  if (draft.cache_type_k && draft.cache_type_k !== '') request.cache_type_k = draft.cache_type_k;
+  if (draft.cache_type_v && draft.cache_type_v !== '') request.cache_type_v = draft.cache_type_v;
+
   request.gpu_devices = draft.gpu_devices.trim() || 'all';
   request.embeddings = draft.embeddings;
   if (draft.tensor_split_mode === 'auto') {
@@ -246,6 +249,8 @@ export function buildSlotUpdateRequest(draft: SlotFormDraft): RouterSlotUpdateRe
     request.container_name = draft.container_name.trim();
   }
   request.extra_args = extraArgs;
+
+  // Batch sizes — send as number when valid (default values always present in draft)
   if (typeof draft.batch_size === 'number') request.batch_size = draft.batch_size;
   if (typeof draft.ubatch_size === 'number') request.ubatch_size = draft.ubatch_size;
 

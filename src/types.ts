@@ -307,7 +307,7 @@ export interface RouterPreflightResponse {
   tensor_split_entry_count?: number | null;
   effective_gpu_count?: number | null;
   effective_gpu_devices?: string | number[] | null;
-  launch_args_preview?: string | null;
+  launch_args_preview?: string | string[] | null;
   suggested_tensor_splits?: {
      even?: string | null;
      free_vram_weighted_raw?: string | null;
