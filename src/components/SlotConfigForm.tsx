@@ -146,6 +146,22 @@ function normalizePresetContext(value: number | ''): { value: number | ''; custo
   return { value: 65536, custom: '', useCustom: false };
 }
 
+/**
+ * Normalize an optional positive integer from number | string | null | undefined.
+ * Returns undefined for missing/invalid values, number for valid ones.
+ * Handles both native numbers and string-encoded integers (e.g. "8192").
+ */
+function normalizeOptionalPositiveInt(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === '') {
+    return undefined;
+  }
+  const n = typeof value === 'number' ? value : Number(String(value).trim());
+  if (!Number.isInteger(n) || n <= 0) {
+    return undefined;
+  }
+  return n;
+}
+
 export function createDefaultSlotDraft(): SlotFormDraft {
   return {
     slot_id: '',
@@ -212,9 +228,9 @@ export function createSlotDraftFromSlot(
        use_custom_model: false,
        parallel_slots: (() => { const v = firstNumber(slot.parallel_slots); return typeof v === 'number' ? v : 1; })(),
        cache_type_k: (slot.cache_type_k as string) || 'f16',
-       cache_type_v: (slot.cache_type_v as string) || 'f16',
-       batch_size: firstNumber(slot.batch_size) || 8192,
-        ubatch_size: firstNumber(slot.ubatch_size) || 2048,
+        cache_type_v: (slot.cache_type_v as string) || 'f16',
+        batch_size: normalizeOptionalPositiveInt(slot.batch_size) ?? 8192,
+        ubatch_size: normalizeOptionalPositiveInt(slot.ubatch_size) ?? 2048,
      };
    }
 
@@ -233,9 +249,9 @@ export function buildSlotUpdateRequest(draft: SlotFormDraft): RouterSlotUpdateRe
   if (typeof contextSize === 'number') request.context_size = contextSize;
   if (typeof draft.parallel_slots === 'number' && draft.parallel_slots >= 1) request.parallel_slots = draft.parallel_slots;
 
-  // Cache types — always send when explicitly set (never empty string)
-  if (draft.cache_type_k && draft.cache_type_k !== '') request.cache_type_k = draft.cache_type_k;
-  if (draft.cache_type_v && draft.cache_type_v !== '') request.cache_type_v = draft.cache_type_v;
+  // Cache types — always send (draft always has a default value, e.g. "f16")
+  if (draft.cache_type_k) request.cache_type_k = draft.cache_type_k;
+  if (draft.cache_type_v) request.cache_type_v = draft.cache_type_v;
 
   request.gpu_devices = draft.gpu_devices.trim() || 'all';
   request.embeddings = draft.embeddings;
@@ -250,9 +266,11 @@ export function buildSlotUpdateRequest(draft: SlotFormDraft): RouterSlotUpdateRe
   }
   request.extra_args = extraArgs;
 
-  // Batch sizes — send as number when valid (default values always present in draft)
-  if (typeof draft.batch_size === 'number') request.batch_size = draft.batch_size;
-  if (typeof draft.ubatch_size === 'number') request.ubatch_size = draft.ubatch_size;
+  // Batch sizes — normalize from number | string to number; omit if invalid
+  const normalizedBatch = normalizeOptionalPositiveInt(draft.batch_size);
+  if (normalizedBatch !== undefined) request.batch_size = normalizedBatch;
+  const normalizedUbatch = normalizeOptionalPositiveInt(draft.ubatch_size);
+  if (normalizedUbatch !== undefined) request.ubatch_size = normalizedUbatch;
 
   return request;
 }

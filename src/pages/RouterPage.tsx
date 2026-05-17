@@ -308,26 +308,37 @@ const RouterPage: React.FC = () => {
   };
 
   const handleSaveSlot = async (draft: SlotFormDraft) => {
-    if (!editingSlot) return;
-    setSaveLoading(true);
-    try {
-      const request = buildSlotUpdateRequest(draft);
-      const result = await updateRouterSlot(editingSlot.slot_id, request);
-      // Persist tensor split mode record only after successful save
-      saveTensorSplitRecord(
-        editingSlot.slot_id,
-        draft.tensor_split_mode,
-        (typeof request.tensor_split === 'string' ? request.tensor_split : '') ?? '',
-      );
-      showToast(`Slot "${draft.slot_id}" updated`, result.ok ? 'success' : 'info');
-      await refreshAfterAction();
-      setEditingSlot(null);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to update slot', 'error');
-    } finally {
-      setSaveLoading(false);
-    }
-  };
+     if (!editingSlot) return;
+     setSaveLoading(true);
+     try {
+       const request = buildSlotUpdateRequest(draft);
+       const result = await updateRouterSlot(editingSlot.slot_id, request);
+       // Persist tensor split mode record only after successful save
+       saveTensorSplitRecord(
+         editingSlot.slot_id,
+         draft.tensor_split_mode,
+         (typeof request.tensor_split === 'string' ? request.tensor_split : '') ?? '',
+       );
+       showToast(`Slot "${draft.slot_id}" updated`, result.ok ? 'success' : 'info');
+       // Optimistic local update so the slot list reflects new values before refetch
+        // Strip null tensor_split (valid in update request but not in RouterSlot type)
+        const safePatch: Record<string, unknown> = { ...request };
+        if (safePatch.tensor_split === null) delete safePatch.tensor_split;
+        setSlots((prev) =>
+          prev.map((s) =>
+            s.slot_id === editingSlot.slot_id
+              ? { ...s, ...safePatch }
+              : s,
+          ),
+        );
+       await refreshAfterAction();
+       setEditingSlot(null);
+     } catch (err) {
+       showToast(err instanceof Error ? err.message : 'Failed to update slot', 'error');
+     } finally {
+       setSaveLoading(false);
+     }
+   };
 
 
   const runningSlots = slots.filter((slot) => slot.running === true || slot.status === 'running').length;
