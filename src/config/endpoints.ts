@@ -174,9 +174,21 @@ export function setMode(mode: EndpointMode): void {
 
 /**
  * Get the full API path for a service.
+ *
+ * In development mode, returns a relative path so that the Vite dev server
+ * proxy can forward the request to the actual backend (avoiding CORS and
+ * DNS-resolution issues when the backend is on a different host).
+ *
+ * In production, returns the full absolute URL.
  */
 export function apiPath(key: EndpointKey, path: string): string {
-  const base = getEndpoint(key);
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
+
+  // Dev mode: return relative path for Vite proxy
+  if (import.meta.env.DEV) {
+    return `/api/${key}${cleanPath}`;
+  }
+
+  const base = getEndpoint(key);
   return `${base}${cleanPath}`;
 }
